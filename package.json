@@ -4,24 +4,21 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "node server.ts",
-		"build": "npm run build:client && npm run build:server",
-		"build:client": "vite build --outDir dist/client",
-		"build:server": "vite build --ssr src/entry-server.tsx --outDir dist/server",
-		"preview": "NODE_ENV=production node server"
+		"build": "vite build",
+		"deploy": "npm run build && wrangler deploy",
+		"dev": "vite dev",
+		"preview": "npm run build && wrangler dev --local"
 	},
 	"dependencies": {
-		"compression": "^1.8.1",
-		"express": "^5.1.0",
 		"preact": "^10.27.2",
-		"preact-render-to-string": "^6.6.1",
-		"sirv": "^3.0.2"
+		"preact-render-to-string": "^6.6.1"
 	},
 	"devDependencies": {
+		"@cloudflare/vite-plugin": "^1.17.0",
 		"@preact/preset-vite": "^2.10.2",
-		"@types/express": "^5.0.3",
 		"@types/node": "^24.5.1",
 		"typescript": "~5.9.2",
-		"vite": "^7.1.5"
+		"vite": "^7.1.5",
+		"wrangler": "^4.53.0"
 	}
 }

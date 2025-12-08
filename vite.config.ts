@@ -1,13 +1,13 @@
-import { createRequire } from 'module'
-import { defineConfig } from 'vite'
+import { cloudflare } from "@cloudflare/vite-plugin";
 import preact from '@preact/preset-vite'
+import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [
-    preact({
-      babel: {
-        cwd: createRequire(import.meta.url).resolve('@preact/preset-vite'),
-      },
-    }),
+    preact(),
+    cloudflare(),
   ],
+  server: {
+    port: 8080,
+  }
 })
