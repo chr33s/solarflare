@@ -3,7 +3,7 @@ import cloudflareLogo from './assets/cloudflare.svg'
 import preactLogo from './assets/preact.svg'
 import './app.css'
 
-export function App(props: { title?: string }) {
+export function App() {
   const [count, setCount] = useState(0)
 
   return (
@@ -16,7 +16,7 @@ export function App(props: { title?: string }) {
           <img src={cloudflareLogo} class="logo cloudflare" alt="Cloudflare logo" />
         </a>
       </div>
-      <h1>{props.title ?? "No title prop"}</h1>
+      <h1>Preactflare</h1>
       <div class="card">
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}

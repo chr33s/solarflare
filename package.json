@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "npm run build:client && npm run build:server",
-    "build:client": "bun build src/index.html --entry-naming='[dir]/index.[ext]' --outdir=dist/client --target=browser && cp -aR ./public/. dist/client",
+    "build:client": "bun build src/entry-client.tsx --entry-naming='[dir]/index.[ext]' --outdir=dist/client --target=browser && cp -aR ./public/. dist/client",
     "build:server": "bun build src/entry-server.tsx --entry-naming='[dir]/index.[ext]' --outdir=dist/server --packages=external --target=node",
+    "clean": "rm -rf dist",
     "deploy": "bun wrangler deploy",
     "dev": "bun wrangler dev"
   },
