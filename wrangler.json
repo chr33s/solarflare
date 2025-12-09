@@ -1,16 +1,21 @@
 {
-	"$schema": "./node_modules/wrangler/config-schema.json",
-	"compatibility_date": "2025-12-02",
-	"compatibility_flags": [
-		"nodejs_als"
-	],
-	"dev": {
-		"port": 8080
-	},
-	"main": "src/entry-server.tsx",
-	"name": "preactflare",
-	"assets": {
-		"directory": "dist/client",
-		"not_found_handling": "single-page-application"
-	},
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/client",
+    "run_worker_first": true,
+  },
+  "compatibility_date": "2025-12-02",
+  "compatibility_flags": [
+    "nodejs_als"
+  ],
+  "dev": {
+    "port": 8080
+  },
+  "main": "./dist/server/index.js",
+  "name": "preactflare",
+  "vars": {
+    "BUN_VERSION": "1.3.4",
+    "SKIP_DEPENDENCY_INSTALL": 1
+  }
 }

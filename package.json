@@ -1,24 +1,21 @@
 {
-	"name": "preactflare",
-	"private": true,
-	"version": "0.0.0",
-	"type": "module",
-	"scripts": {
-		"build": "vite build",
-		"deploy": "npm run build && wrangler deploy",
-		"dev": "vite dev",
-		"preview": "npm run build && wrangler dev --local"
-	},
-	"dependencies": {
-		"preact": "^10.27.2",
-		"preact-render-to-string": "^6.6.1"
-	},
-	"devDependencies": {
-		"@cloudflare/vite-plugin": "^1.17.0",
-		"@preact/preset-vite": "^2.10.2",
-		"@types/node": "^24.5.1",
-		"typescript": "~5.9.2",
-		"vite": "^7.1.5",
-		"wrangler": "^4.53.0"
-	}
+  "name": "preactflare",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "bun build src/index.html --entry-naming='[dir]/index.[ext]' --outdir=dist/client --target=browser && cp -aR ./public/. dist/client",
+    "build:server": "bun build src/entry-server.tsx --entry-naming='[dir]/index.[ext]' --outdir=dist/server --packages=external --target=node",
+    "deploy": "bun wrangler deploy",
+    "dev": "bun wrangler dev"
+  },
+  "dependencies": {
+    "preact": "^10.27.2",
+    "preact-render-to-string": "^6.6.1"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2",
+    "wrangler": "^4.53.0"
+  }
 }
