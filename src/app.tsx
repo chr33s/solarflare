@@ -3,7 +3,7 @@ import preactLogo from './assets/preact.svg'
 import viteLogo from './assets/vite.svg'
 import './app.css'
 
-export function App() {
+export function App(props: { title?: string }) {
   const [count, setCount] = useState(0)
 
   return (
@@ -16,7 +16,7 @@ export function App() {
           <img src={preactLogo} class="logo preact" alt="Preact logo" />
         </a>
       </div>
-      <h1>Vite + Preact</h1>
+      <h1>{props.title ?? "No title prop"}</h1>
       <div class="card">
         <button onClick={() => setCount((count) => count + 1)}>
           count is {count}

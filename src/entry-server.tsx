@@ -20,6 +20,9 @@ export default {
     const template = await asset.text()
     const [before, after] = template.split(/<div id="app">(?:\$1)?<\/div>/)
 
+    const props = { title: "Preactflare" }
+    const app = renderToReadableStream(<App {...props } />)
+
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       cancel() {
@@ -40,7 +43,9 @@ export default {
             if (done) break
             controller.enqueue(typeof value === 'string' ? encoder.encode(value) : value)
           }
-          controller.enqueue(encoder.encode('</div>' + after))
+          controller.enqueue(encoder.encode('</div>'))
+          controller.enqueue(encoder.encode(`<script>window.__PROPS__=${JSON.stringify(props)}</script>`))
+          controller.enqueue(encoder.encode(after))
           controller.close()
         } catch (error) {
           if (abortController.signal.aborted) {
