@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks'
+import cloudflareLogo from './assets/cloudflare.svg'
 import preactLogo from './assets/preact.svg'
-import viteLogo from './assets/vite.svg'
 import './app.css'
 
 export function App(props: { title?: string }) {
@@ -9,11 +9,11 @@ export function App(props: { title?: string }) {
   return (
     <>
       <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} class="logo" alt="Vite logo" />
-        </a>
         <a href="https://preactjs.com" target="_blank">
           <img src={preactLogo} class="logo preact" alt="Preact logo" />
+        </a>
+        <a href="https://cloudflare.com" target="_blank">
+          <img src={cloudflareLogo} class="logo cloudflare" alt="Cloudflare logo" />
         </a>
       </div>
       <h1>{props.title ?? "No title prop"}</h1>
