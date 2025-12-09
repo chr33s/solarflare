@@ -1,0 +1,18 @@
+{
+  "bun.debugTerminal.enabled": true,
+  "diffEditor.diffAlgorithm": "advanced",
+  "diffEditor.experimental.showMoves": true,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit"
+  },
+  "editor.defaultFormatter": "oven.bun-vscode",
+  "editor.guides.bracketPairs": "active",
+  "files.associations": {
+    ".env*": "properties"
+  },
+  "files.insertFinalNewline": true,
+  "terminal.integrated.suggest.enabled": true,
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
