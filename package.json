@@ -1,18 +1,26 @@
 {
-  "name": "preactflare",
+  "name": "solarflare",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "bin": "./src/framework/build.ts",
+  "exports": {
+    "./client": "./src/framework/client.tsx",
+    "./server": "./src/framework/server.tsx",
+    "./worker": "./src/framework/worker.tsx"
+  },
+  "imports": {
+    "#solarflare/*": "./src/framework/*"
+  },
   "scripts": {
-    "build": "npm run build:client && npm run build:server",
-    "build:client": "bun build src/entry-client.tsx --entry-naming='[dir]/index.[ext]' --outdir=dist/client --target=browser && cp -aR ./public/. dist/client",
-    "build:server": "bun build src/entry-server.tsx --entry-naming='[dir]/index.[ext]' --outdir=dist/server --packages=external --target=node",
+    "build": "bunx solarflare",
     "clean": "rm -rf dist",
     "deploy": "bun wrangler deploy",
     "dev": "bun wrangler dev"
   },
   "dependencies": {
     "preact": "^10.27.2",
+    "preact-custom-element": "^4.6.0",
     "preact-render-to-string": "^6.6.1"
   },
   "devDependencies": {

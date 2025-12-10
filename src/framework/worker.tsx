@@ -1,0 +1,133 @@
+/**
+ * Solarflare Worker
+ * Cloudflare Worker fetch handler factory
+ */
+import { type FunctionComponent } from 'preact'
+import { renderToReadableStream } from 'preact-render-to-string/stream'
+import {
+  createRouter,
+  matchRoute,
+  findLayouts,
+  wrapWithLayouts,
+  renderComponent,
+} from './server'
+// @ts-ignore - Generated at build time
+import modules from '../app/.modules.generated'
+
+/**
+ * Server data loader function type
+ * Returns props to pass to the paired client component
+ */
+type ServerLoader = (
+  request: Request,
+  params: Record<string, string>,
+  env: Env
+) => Record<string, unknown> | Promise<Record<string, unknown>>
+
+const routes = createRouter(modules)
+
+/**
+ * Find paired module (server for client, or client for server)
+ */
+function findPairedModule(path: string): string | null {
+  if (path.includes('.client.')) {
+    const serverPath = path.replace('.client.', '.server.')
+    return serverPath in modules ? serverPath : null
+  }
+  if (path.includes('.server.')) {
+    const clientPath = path.replace('.server.', '.client.')
+    return clientPath in modules ? clientPath : null
+  }
+  return null
+}
+
+/**
+ * Cloudflare Worker fetch handler
+ * Routes are auto-discovered at build time
+ */
+async function worker(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url)
+
+  // Serve static assets first (non-root paths with file extensions)
+  if (url.pathname !== '/' && url.pathname.includes('.')) {
+    try {
+      const asset = await env.ASSETS.fetch(request)
+      if (asset.ok) return asset
+    } catch {
+      // Asset not found, continue to route matching
+    }
+  }
+
+  // Match route - prefer client routes for SSR
+  const match = matchRoute(routes, url)
+
+  if (!match) {
+    // Try serving as static asset before 404
+    try {
+      const asset = await env.ASSETS.fetch(request)
+      if (asset.ok) return asset
+    } catch {
+      // Ignore
+    }
+    return new Response('Not Found', { status: 404 })
+  }
+
+  const { route, params } = match
+
+  // If this is a server-only route (no paired client), return Response directly
+  if (route.type === 'server') {
+    const pairedClientPath = findPairedModule(route.path)
+    if (!pairedClientPath) {
+      // No paired client component - this is an API route
+      const mod = await route.loader()
+      const handler = mod.default as (
+        request: Request,
+        params: Record<string, string>,
+        env: Env
+      ) => Response | Promise<Response>
+      return handler(request, params, env)
+    }
+  }
+
+  // For client routes, check for paired server loader
+  let props: Record<string, unknown> = { ...params }
+
+  if (route.type === 'client') {
+    const pairedServerPath = findPairedModule(route.path)
+    if (pairedServerPath) {
+      // Load data from paired server module
+      const serverMod = await modules[pairedServerPath]()
+      const loader = serverMod.default as ServerLoader
+      const serverProps = await loader(request, params, env)
+      props = { ...params, ...serverProps }
+    }
+  }
+
+  // Load the client component
+  const clientPath =
+    route.type === 'client'
+      ? route.path
+      : route.path.replace('.server.', '.client.')
+  const clientMod = await modules[clientPath]()
+  const Component = clientMod.default as FunctionComponent<any>
+
+  // Render component wrapped in custom element tag
+  let content = renderComponent(Component, route.tag, props)
+
+  // Find and apply layouts
+  const layouts = findLayouts(route.path, modules)
+  if (layouts.length > 0) {
+    content = await wrapWithLayouts(content, layouts)
+  }
+
+  // Stream the response
+  const stream = await renderToReadableStream(content)
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+    },
+  })
+}
+
+export default worker

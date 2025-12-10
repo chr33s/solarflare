@@ -12,6 +12,9 @@
     "module": "preserve",
     "moduleDetection": "force",
     "moduleResolution": "bundler",
+    "paths": {
+      "#solarflare/*": ["./src/framework/*"]
+    },
     "noEmit": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,

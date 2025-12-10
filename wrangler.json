@@ -13,9 +13,10 @@
     "port": 8080
   },
   "main": "./dist/server/index.js",
-  "name": "preactflare",
+  "name": "solarflare",
   "vars": {
     "BUN_VERSION": "1.3.4",
+    "HELLO": "WORLD",
     "SKIP_DEPENDENCY_INSTALL": 1
   }
 }
