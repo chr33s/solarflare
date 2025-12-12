@@ -21,13 +21,13 @@
     "dev": "bun wrangler dev"
   },
   "dependencies": {
-    "preact": "^10.27.2",
+    "preact": "^10.28.0",
     "preact-custom-element": "^4.6.0",
-    "preact-render-to-string": "^6.6.1",
-    "typescript": "~5.9.2"
+    "preact-render-to-string": "^6.6.3",
+    "typescript": "~5.9.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.4",
-    "wrangler": "^4.53.0"
+    "wrangler": "^4.54.0"
   }
 }
