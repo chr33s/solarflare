@@ -13,6 +13,252 @@ const DIST_SERVER = './dist/server'
 const PUBLIC_DIR = './public'
 
 /**
+ * Shared TypeScript program for type checking multiple files
+ */
+function createSharedProgram(files: string[]): ts.Program {
+  return ts.createProgram(files, {
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.ESNext,
+    jsx: ts.JsxEmit.ReactJSX,
+    jsxImportSource: 'preact',
+    strict: true,
+    skipLibCheck: true,
+  })
+}
+
+/**
+ * Validation result for a file
+ */
+interface ValidationResult {
+  file: string
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+/**
+ * Get the default export type info from a source file
+ */
+function getDefaultExportInfo(
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile
+): { type: ts.Type; signatures: readonly ts.Signature[] } | null {
+  const symbol = checker.getSymbolAtLocation(sourceFile)
+  if (!symbol) return null
+
+  const exports = checker.getExportsOfModule(symbol)
+  const defaultExport = exports.find((e) => e.escapedName === 'default')
+  if (!defaultExport) return null
+
+  const type = checker.getTypeOfSymbolAtLocation(defaultExport, sourceFile)
+  const signatures = type.getCallSignatures()
+
+  return { type, signatures }
+}
+
+/**
+ * Validate a server route file
+ * Should export: (request: Request, params: Record<string, string>, env: Env) => Response | Promise<Response> | Record<string, unknown> | Promise<Record<string, unknown>>
+ */
+function validateServerRoute(
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+  file: string
+): ValidationResult {
+  const result: ValidationResult = { file, valid: true, errors: [], warnings: [] }
+
+  const exportInfo = getDefaultExportInfo(checker, sourceFile)
+  if (!exportInfo) {
+    result.valid = false
+    result.errors.push('Missing default export')
+    return result
+  }
+
+  const { signatures } = exportInfo
+  if (signatures.length === 0) {
+    result.valid = false
+    result.errors.push('Default export must be a function')
+    return result
+  }
+
+  const sig = signatures[0]
+  const params = sig.getParameters()
+
+  // Should have at least 1 parameter (request), up to 3 (request, params, env)
+  if (params.length < 1) {
+    result.warnings.push('Server loader should accept (request, params?, env?) parameters')
+  }
+
+  // Check first param is Request-like
+  if (params[0]) {
+    const paramType = checker.getTypeOfSymbolAtLocation(params[0], sourceFile)
+    const typeName = checker.typeToString(paramType)
+    if (!typeName.includes('Request') && typeName !== 'any') {
+      result.warnings.push(`First parameter should be Request, got ${typeName}`)
+    }
+  }
+
+  return result
+}
+
+/**
+ * Validate a client component file
+ * Should export a function component
+ */
+function validateClientComponent(
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+  file: string
+): ValidationResult {
+  const result: ValidationResult = { file, valid: true, errors: [], warnings: [] }
+
+  const exportInfo = getDefaultExportInfo(checker, sourceFile)
+  if (!exportInfo) {
+    result.valid = false
+    result.errors.push('Missing default export')
+    return result
+  }
+
+  const { signatures } = exportInfo
+  if (signatures.length === 0) {
+    result.valid = false
+    result.errors.push('Default export must be a function component')
+    return result
+  }
+
+  // Check return type is JSX-like (VNode, Element, or null)
+  const returnType = signatures[0].getReturnType()
+  const returnTypeName = checker.typeToString(returnType)
+
+  if (
+    !returnTypeName.includes('VNode') &&
+    !returnTypeName.includes('Element') &&
+    !returnTypeName.includes('JSX') &&
+    returnTypeName !== 'null' &&
+    returnTypeName !== 'any'
+  ) {
+    result.warnings.push(`Component should return JSX, got ${returnTypeName}`)
+  }
+
+  return result
+}
+
+/**
+ * Validate a layout file
+ * Should export a function component that accepts { children: VNode }
+ */
+function validateLayout(
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+  file: string
+): ValidationResult {
+  const result: ValidationResult = { file, valid: true, errors: [], warnings: [] }
+
+  const exportInfo = getDefaultExportInfo(checker, sourceFile)
+  if (!exportInfo) {
+    result.valid = false
+    result.errors.push('Missing default export')
+    return result
+  }
+
+  const { signatures } = exportInfo
+  if (signatures.length === 0) {
+    result.valid = false
+    result.errors.push('Default export must be a function component')
+    return result
+  }
+
+  const sig = signatures[0]
+  const params = sig.getParameters()
+
+  if (params.length === 0) {
+    result.warnings.push('Layout should accept { children } prop')
+    return result
+  }
+
+  // Check first param has 'children' property
+  const paramType = checker.getTypeOfSymbolAtLocation(params[0], sourceFile)
+  const childrenProp = paramType.getProperty('children')
+
+  if (!childrenProp) {
+    result.warnings.push('Layout props should include "children"')
+  }
+
+  return result
+}
+
+/**
+ * Validate all route files and report errors/warnings
+ */
+async function validateRoutes(
+  routeFiles: string[],
+  layoutFiles: string[]
+): Promise<boolean> {
+  const allFiles = [
+    ...routeFiles.map((f) => join(APP_DIR, f)),
+    ...layoutFiles.map((f) => join(APP_DIR, f)),
+  ]
+
+  if (allFiles.length === 0) return true
+
+  const program = createSharedProgram(allFiles)
+  const checker = program.getTypeChecker()
+
+  const results: ValidationResult[] = []
+
+  // Validate route files
+  for (const file of routeFiles) {
+    const filePath = join(APP_DIR, file)
+    const sourceFile = program.getSourceFile(filePath)
+    if (!sourceFile) continue
+
+    if (file.includes('.server.')) {
+      results.push(validateServerRoute(checker, sourceFile, file))
+    } else if (file.includes('.client.')) {
+      results.push(validateClientComponent(checker, sourceFile, file))
+    }
+  }
+
+  // Validate layouts
+  for (const file of layoutFiles) {
+    const filePath = join(APP_DIR, file)
+    const sourceFile = program.getSourceFile(filePath)
+    if (!sourceFile) continue
+
+    results.push(validateLayout(checker, sourceFile, file))
+  }
+
+  // Report results
+  let hasErrors = false
+  for (const result of results) {
+    for (const error of result.errors) {
+      console.error(`   ❌ ${result.file}: ${error}`)
+      hasErrors = true
+    }
+    for (const warning of result.warnings) {
+      console.warn(`   ⚠️  ${result.file}: ${warning}`)
+    }
+  }
+
+  return !hasErrors
+}
+
+/**
+ * Convert file path to URL pattern
+ * e.g., "blog/$slug.client.tsx" → "/blog/:slug"
+ */
+function pathToPattern(filePath: string): string {
+  return (
+    '/' +
+    filePath
+      .replace(/\.(client|server)\.tsx$/, '')
+      .replace(/\/index$/, '')
+      .replace(/^index$/, '')
+      .replace(/\$([^/]+)/g, ':$1')
+  )
+}
+
+/**
  * Generate custom element tag from file path
  * e.g., "blog/$slug.client.tsx" → "sf-blog-slug"
  */
@@ -33,37 +279,66 @@ function pathToTag(filePath: string): string {
  * Extract Props property names from a TypeScript file using the type checker
  * Uses Parameters<typeof DefaultExport>[0] to infer props from any function signature
  */
-async function extractPropsFromFile(filePath: string): Promise<string[]> {
-  const program = ts.createProgram([filePath], {
-    target: ts.ScriptTarget.Latest,
-    module: ts.ModuleKind.ESNext,
-    jsx: ts.JsxEmit.ReactJSX,
-    jsxImportSource: 'preact',
-    strict: true,
-  })
-
+function extractPropsFromProgram(
+  program: ts.Program,
+  filePath: string
+): string[] {
   const checker = program.getTypeChecker()
   const sourceFile = program.getSourceFile(filePath)
   if (!sourceFile) return []
 
-  const symbol = checker.getSymbolAtLocation(sourceFile)
-  if (!symbol) return []
+  const exportInfo = getDefaultExportInfo(checker, sourceFile)
+  if (!exportInfo || exportInfo.signatures.length === 0) return []
 
-  const exports = checker.getExportsOfModule(symbol)
-  const defaultExport = exports.find((e) => e.escapedName === 'default')
-  if (!defaultExport) return []
-
-  const type = checker.getTypeOfSymbolAtLocation(defaultExport, sourceFile)
-  const signatures = type.getCallSignatures()
-  if (signatures.length === 0) return []
-
-  const firstParam = signatures[0].getParameters()[0]
+  const firstParam = exportInfo.signatures[0].getParameters()[0]
   if (!firstParam) return []
 
   const paramType = checker.getTypeOfSymbolAtLocation(firstParam, sourceFile)
   const properties = paramType.getProperties()
 
   return properties.map((p) => p.getName())
+}
+
+/**
+ * Extract URL params from a route pattern
+ * e.g., "/blog/:slug" → ["slug"]
+ */
+function extractParamsFromPattern(pattern: string): string[] {
+  const matches = pattern.match(/:(\w+)/g)
+  return matches ? matches.map((m) => m.slice(1)) : []
+}
+
+/**
+ * Generate typed routes file
+ */
+function generateRoutesTypeFile(routeFiles: string[]): string {
+  const clientRoutes = routeFiles.filter((f) => f.includes('.client.'))
+
+  const routeTypes = clientRoutes
+    .map((file) => {
+      const pattern = pathToPattern(file)
+      const params = extractParamsFromPattern(pattern)
+      const paramsType =
+        params.length > 0
+          ? `{ ${params.map((p) => `${p}: string`).join('; ')} }`
+          : 'Record<string, never>'
+      return `  '${pattern}': { params: ${paramsType} }`
+    })
+    .join('\n')
+
+  return `/**
+ * Auto-generated Route Types
+ * Provides type-safe route definitions
+ */
+
+export interface Routes {
+${routeTypes}
+}
+
+export type RoutePath = keyof Routes
+
+export type RouteParams<T extends RoutePath> = Routes[T]['params']
+`
 }
 
 /**
@@ -75,9 +350,12 @@ interface ComponentMeta {
   props: string[]
 }
 
-async function getComponentMeta(file: string): Promise<ComponentMeta> {
+function getComponentMeta(
+  program: ts.Program,
+  file: string
+): ComponentMeta {
   const filePath = join(APP_DIR, file)
-  const props = await extractPropsFromFile(filePath)
+  const props = extractPropsFromProgram(program, filePath)
   const tag = pathToTag(file)
 
   return { file, tag, props }
@@ -128,8 +406,11 @@ async function findClientComponents(): Promise<string[]> {
 /**
  * Generate virtual client entry content with inferred define options
  */
-async function generateClientEntry(clientFiles: string[]): Promise<string> {
-  const metas = await Promise.all(clientFiles.map(getComponentMeta))
+function generateClientEntry(
+  program: ts.Program,
+  clientFiles: string[]
+): string {
+  const metas = clientFiles.map((file) => getComponentMeta(program, file))
 
   const imports = metas
     .map((meta, i) => `import Component${i} from './app/${meta.file}'`)
@@ -182,7 +463,11 @@ async function buildClient() {
   const clientFiles = await findClientComponents()
   console.log(`   Found ${clientFiles.length} client component(s)`)
 
-  const entryContent = await generateClientEntry(clientFiles)
+  // Create shared program for type checking
+  const filePaths = clientFiles.map((f) => join(APP_DIR, f))
+  const program = createSharedProgram(filePaths)
+
+  const entryContent = generateClientEntry(program, clientFiles)
 
   // Write temporary entry file
   const entryPath = './src/.entry-client.generated.tsx'
@@ -232,6 +517,20 @@ async function buildServer() {
   const layoutFiles = await findLayouts()
   console.log(`   Found ${routeFiles.length} route(s) and ${layoutFiles.length} layout(s)`)
 
+  // Validate routes and layouts
+  console.log('🔎 Validating route types...')
+  const valid = await validateRoutes(routeFiles, layoutFiles)
+  if (!valid) {
+    console.error('❌ Route validation failed')
+    process.exit(1)
+  }
+
+  // Generate route types file (persisted for consumption)
+  const routesTypePath = './src/app/.routes.generated.ts'
+  const routesTypeContent = generateRoutesTypeFile(routeFiles)
+  await Bun.write(routesTypePath, routesTypeContent)
+  console.log('   Generated route types')
+
   const modulesContent = generateModulesFile(routeFiles, layoutFiles)
 
   // Write generated modules file (imported by worker.tsx)
@@ -255,7 +554,7 @@ async function buildServer() {
     process.exit(1)
   }
 
-  // Clean up generated file
+  // Clean up generated modules file (route types are kept)
   if (await Bun.file(modulesPath).exists()) {
     await Bun.$`rm ${modulesPath}`
   }

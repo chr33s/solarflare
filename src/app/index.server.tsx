@@ -1,4 +1,4 @@
-export default async function loader(
+export default async function server(
   request: Request,
   params: Record<string, string>,
   env: Env
