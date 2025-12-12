@@ -10,9 +10,12 @@ import {
   findLayouts,
   wrapWithLayouts,
   renderComponent,
+  type ModuleMap,
 } from './server'
 // @ts-ignore - Generated at build time
 import modules from '../app/.modules.generated'
+
+const typedModules = modules as ModuleMap
 
 /**
  * Server data loader function type
@@ -22,7 +25,7 @@ type ServerLoader = (
   request: Request
 ) => Record<string, unknown> | Promise<Record<string, unknown>>
 
-const routes = createRouter(modules)
+const routes = createRouter(typedModules)
 
 /**
  * Find paired module (server for client, or client for server)
@@ -30,11 +33,11 @@ const routes = createRouter(modules)
 function findPairedModule(path: string): string | null {
   if (path.includes('.client.')) {
     const serverPath = path.replace('.client.', '.server.')
-    return serverPath in modules ? serverPath : null
+    return serverPath in typedModules.server ? serverPath : null
   }
   if (path.includes('.server.')) {
     const clientPath = path.replace('.server.', '.client.')
-    return clientPath in modules ? clientPath : null
+    return clientPath in typedModules.client ? clientPath : null
   }
   return null
 }
@@ -85,33 +88,37 @@ async function worker(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // For client routes, check for paired server loader
+  // Determine the server and client paths
+  let serverPath: string | null = null
+  let clientPath: string
+
+  if (route.type === 'server') {
+    serverPath = route.path
+    clientPath = route.path.replace('.server.', '.client.')
+  } else {
+    clientPath = route.path
+    serverPath = findPairedModule(route.path)
+  }
+
+  // Load props from server loader if available
   let props: Record<string, unknown> = { ...params }
 
-  if (route.type === 'client') {
-    const pairedServerPath = findPairedModule(route.path)
-    if (pairedServerPath) {
-      // Load data from paired server module
-      const serverMod = await modules[pairedServerPath]()
-      const loader = serverMod.default as ServerLoader
-      const serverProps = await loader(request)
-      props = { ...params, ...serverProps }
-    }
+  if (serverPath && serverPath in typedModules.server) {
+    const serverMod = await typedModules.server[serverPath]()
+    const loader = serverMod.default as ServerLoader
+    const serverProps = await loader(request)
+    props = { ...params, ...serverProps }
   }
 
   // Load the client component
-  const clientPath =
-    route.type === 'client'
-      ? route.path
-      : route.path.replace('.server.', '.client.')
-  const clientMod = await modules[clientPath]()
+  const clientMod = await typedModules.client[clientPath]()
   const Component = clientMod.default as FunctionComponent<any>
 
   // Render component wrapped in custom element tag
   let content = renderComponent(Component, route.tag, props)
 
   // Find and apply layouts
-  const layouts = findLayouts(route.path, modules)
+  const layouts = findLayouts(route.path, typedModules)
   if (layouts.length > 0) {
     content = await wrapWithLayouts(content, layouts)
   }

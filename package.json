@@ -14,6 +14,7 @@
   },
   "scripts": {
     "build": "bunx solarflare",
+    "check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "deploy": "bun wrangler deploy",
     "dev": "bun wrangler dev"

@@ -1,9 +1,38 @@
 /**
  * Solarflare Server
- * Server utilities: pathToPattern(), pathToTag(), createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
+ * Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
  */
 import { type VNode, h } from 'preact'
 import { type FunctionComponent } from 'preact'
+import { parsePath } from './ast'
+
+/**
+ * Route parameter definition extracted from pattern
+ */
+export interface RouteParamDef {
+  /** Parameter name (e.g., "slug" from ":slug") */
+  name: string
+  /** Whether the parameter is optional */
+  optional: boolean
+  /** Original segment in the pattern */
+  segment: string
+}
+
+/**
+ * Parsed route pattern with type information
+ */
+export interface ParsedPattern {
+  /** Original file path */
+  filePath: string
+  /** URLPattern pathname */
+  pathname: string
+  /** Extracted parameter definitions */
+  params: RouteParamDef[]
+  /** Whether this is a static route (no params) */
+  isStatic: boolean
+  /** Route specificity score for sorting */
+  specificity: number
+}
 
 /**
  * Parse URL parameters from a request URL using URLPattern
@@ -47,11 +76,13 @@ export function parse(request: Request): Record<string, string> {
 let _registeredRoutes: Route[] = []
 
 /**
- * Route definition
+ * Route definition with parsed pattern metadata
  */
 export interface Route {
   /** URLPattern for matching requests */
   pattern: URLPattern
+  /** Parsed pattern with type information */
+  parsedPattern: ParsedPattern
   /** Original file path */
   path: string
   /** Custom element tag name */
@@ -63,133 +94,207 @@ export interface Route {
 }
 
 /**
- * Route match result
+ * Convert file path to URLPattern pathname with parsed metadata
+ * Delegates to parsePath from ast.ts for unified path handling
  */
-export interface RouteMatch {
-  /** Matched route */
-  route: Route
-  /** Extracted URL parameters */
-  params: Record<string, string>
+export function parsePattern(filePath: string): ParsedPattern {
+  const parsed = parsePath(filePath)
+  
+  // Transform params from string[] to RouteParamDef[]
+  const params: RouteParamDef[] = parsed.params.map((name) => ({
+    name,
+    optional: false,
+    segment: `:${name}`,
+  }))
+
+  return {
+    filePath: parsed.original,
+    pathname: parsed.pattern,
+    params,
+    isStatic: params.length === 0,
+    specificity: parsed.specificity,
+  }
 }
 
 /**
- * Layout definition
+ * Structured module map with typed categories
+ */
+export interface ModuleMap {
+  server: Record<string, () => Promise<{ default: unknown }>>
+  client: Record<string, () => Promise<{ default: unknown }>>
+  layout: Record<string, () => Promise<{ default: unknown }>>
+}
+
+/**
+ * Flatten a structured ModuleMap into a flat record
+ */
+export function flattenModules(
+  modules: ModuleMap
+): Record<string, () => Promise<{ default: unknown }>> {
+  return {
+    ...modules.server,
+    ...modules.client,
+    ...modules.layout,
+  }
+}
+
+/**
+ * Create router from structured module map
+ * Filters out _prefixed files, sorts by specificity using parsed pattern metadata
+ */
+export function createRouter(modules: ModuleMap): Route[] {
+  // Combine server and client modules for routing (layouts are handled separately)
+  const routeModules = { ...modules.server, ...modules.client }
+
+  const routes = Object.entries(routeModules)
+    .filter(([path]) => !path.includes('/_'))
+    .map(([path, loader]) => {
+      const parsedPattern = parsePattern(path)
+      return {
+        pattern: new URLPattern({ pathname: parsedPattern.pathname }),
+        parsedPattern,
+        path,
+        tag: parsePath(path).tag,
+        loader,
+        type: path.includes('.server.') ? ('server' as const) : ('client' as const),
+      }
+    })
+    .sort((a, b) => {
+      // Static routes before dynamic routes
+      if (a.parsedPattern.isStatic !== b.parsedPattern.isStatic) {
+        return a.parsedPattern.isStatic ? -1 : 1
+      }
+      // Higher specificity first (more specific routes win)
+      return b.parsedPattern.specificity - a.parsedPattern.specificity
+    })
+
+  // Register routes for parse() function
+  _registeredRoutes = routes
+
+  return routes
+}
+
+/**
+ * Layout definition with hierarchy information
  */
 export interface Layout {
   /** Layout file path */
   path: string
   /** Dynamic layout loader */
   loader: () => Promise<{ default: unknown }>
+  /** Nesting depth (0 = root) */
+  depth: number
+  /** Directory this layout applies to */
+  directory: string
 }
 
 /**
- * Convert file path to URLPattern pathname
- * e.g., "./blog/$slug.client.tsx" → "/blog/:slug"
- * e.g., "./index.client.tsx" → "/"
+ * Layout hierarchy result with validation metadata
  */
-export function pathToPattern(filePath: string): string {
-  return (
-    filePath
-      .replace(/^\.\//, '/')  // ./ -> /
-      .replace(/\.(client|server)\.tsx$/, '')
-      .replace(/\/index$/, '')
-      .replace(/\$([^/]+)/g, ':$1') || '/'
-  )
+export interface LayoutHierarchy {
+  /** Ordered layouts from root to leaf */
+  layouts: Layout[]
+  /** Route path segments */
+  segments: string[]
+  /** Directories checked for layouts */
+  checkedPaths: string[]
 }
 
 /**
- * Generate custom element tag from file path
- * e.g., "./blog/$slug.client.tsx" → "sf-blog-slug"
- * e.g., "./index.client.tsx" → "sf-root"
+ * Find all ancestor layouts for a route path with hierarchy metadata
+ * Returns layouts from root to leaf order with validation info
+ * e.g., "./blog/$slug.server.tsx" → { layouts: [...], segments: ["blog"], ... }
  */
-export function pathToTag(filePath: string): string {
-  return (
-    'sf-' +
-    filePath
-      .replace(/^\.\//, '')  // Remove leading ./
-      .replace(/\.(client|server)\.tsx$/, '')
-      .replace(/\//g, '-')
-      .replace(/\$/g, '')
-      .replace(/^index$/, 'root')
-      .replace(/-index$/, '')
-      .toLowerCase()
-  )
-}
-
-/**
- * Create router from import.meta.glob result
- * Filters out _prefixed files, sorts static before dynamic routes
- */
-export function createRouter(
-  modules: Record<string, () => Promise<{ default: unknown }>>
-): Route[] {
-  const routes = Object.entries(modules)
-    .filter(([path]) => !path.includes('/_'))
-    .map(([path, loader]) => ({
-      pattern: new URLPattern({ pathname: pathToPattern(path) }),
-      path,
-      tag: pathToTag(path),
-      loader,
-      type: path.includes('.server.') ? ('server' as const) : ('client' as const),
-    }))
-    .sort((a, b) => {
-      // Static routes before dynamic routes
-      const aStatic = !a.pattern.pathname.includes(':')
-      const bStatic = !b.pattern.pathname.includes(':')
-      if (aStatic !== bStatic) return aStatic ? -1 : 1
-      // Longer paths first (more specific)
-      return b.path.length - a.path.length
-    })
-  
-  // Register routes for parse() function
-  _registeredRoutes = routes
-  
-  return routes
-}
-
-/**
- * Find all ancestor layouts for a route path
- * Returns layouts from root to leaf order
- * e.g., "./blog/$slug.server.tsx" → ["./_layout.tsx", "./blog/_layout.tsx"]
- */
-export function findLayouts(
+export function findLayoutHierarchy(
   routePath: string,
   modules: Record<string, () => Promise<{ default: unknown }>>
-): Layout[] {
+): LayoutHierarchy {
   const layouts: Layout[] = []
+  const checkedPaths: string[] = []
+
   // Remove leading ./ and get segments (minus the file itself)
   const segments = routePath.replace(/^\.\//, '').split('/').slice(0, -1)
 
   // Check root layout first
   const rootLayout = './_layout.tsx'
+  checkedPaths.push(rootLayout)
   if (rootLayout in modules) {
-    layouts.push({ path: rootLayout, loader: modules[rootLayout] })
+    layouts.push({
+      path: rootLayout,
+      loader: modules[rootLayout],
+      depth: 0,
+      directory: '.',
+    })
   }
 
   // Walk up the path checking for layouts
   let current = '.'
-  for (const segment of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]
     if (!segment) continue
     current += `/${segment}`
     const layoutPath = `${current}/_layout.tsx`
+    checkedPaths.push(layoutPath)
     if (layoutPath in modules) {
-      layouts.push({ path: layoutPath, loader: modules[layoutPath] })
+      layouts.push({
+        path: layoutPath,
+        loader: modules[layoutPath],
+        depth: i + 1,
+        directory: current,
+      })
     }
   }
 
-  return layouts
+  return { layouts, segments, checkedPaths }
 }
 
 /**
- * Match URL against routes using URLPattern
+ * Find all ancestor layouts for a route path using structured module map
+ * Returns layouts from root to leaf order
+ * e.g., "./blog/$slug.server.tsx" → ["./_layout.tsx", "./blog/_layout.tsx"]
+ */
+export function findLayouts(
+  routePath: string,
+  modules: ModuleMap
+): Layout[] {
+  // Use the layout category from the structured module map
+  return findLayoutHierarchy(routePath, modules.layout).layouts
+}
+
+/**
+ * Validated route match with type-safe params
+ */
+export interface RouteMatch {
+  /** Matched route */
+  route: Route
+  /** Extracted URL parameters (validated against pattern definition) */
+  params: Record<string, string>
+  /** Parameter definitions from the route pattern */
+  paramDefs: RouteParamDef[]
+  /** Whether all required params were matched */
+  complete: boolean
+}
+
+/**
+ * Match URL against routes using URLPattern with parameter validation
  */
 export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   for (const route of routes) {
     const result = route.pattern.exec(url)
     if (result) {
+      const params = (result.pathname.groups as Record<string, string>) ?? {}
+      const paramDefs = route.parsedPattern.params
+
+      // Validate that all required params are present
+      const complete = paramDefs
+        .filter((p) => !p.optional)
+        .every((p) => p.name in params && params[p.name] !== undefined)
+
       return {
         route,
-        params: (result.pathname.groups as Record<string, string>) ?? {},
+        params,
+        paramDefs,
+        complete,
       }
     }
   }
