@@ -6,25 +6,27 @@
 
 ```sh
 bun install
+bun link
+bun run clean
 bun run build
 bun run dev
-bun link
 ```
 
 ## Framework Implementation Plan
 
 ### Overview
 
-A file-based routing framework for Preact + Cloudflare Workers using `preact-custom-element` for web component hydration, Bun macros for build-time code generation, `import.meta.glob` for route discovery, and URLPattern for request matching.
+A file-based routing framework for Preact + Cloudflare Workers using `preact-custom-element` for web component hydration, TypeScript Compiler API for build-time code generation, pre-resolved module maps for route discovery, and URLPattern for request matching.
 
 ### Architecture
 
 ```
 src/framework/
-├── client.tsx       # Web component registration, hydration & Bun macros
-├── server.tsx       # Server utilities: parse(), createRouter(), findLayouts()
-├── worker.tsx       # Cloudflare Worker fetch handler factory
-├── cloudflare.ts    # Bun plugin for local CF APIs
+├── ast.ts           # TypeScript Compiler API utilities for path parsing, validation, code generation
+├── build.ts         # Build script: route scanning, validation, client/server bundling
+├── client.tsx       # Web component registration, hydration, hooks (useParams, useData)
+├── server.tsx       # Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
+├── worker.tsx       # Cloudflare Worker fetch handler with SSR and asset injection
 └── solarflare.d.ts  # Type declarations
 ```
 
@@ -32,20 +34,21 @@ src/framework/
 
 ```json
 {
+  "bin": "./src/framework/build.ts",
   "exports": {
     "./client": "./src/framework/client.tsx",
     "./server": "./src/framework/server.tsx",
     "./worker": "./src/framework/worker.tsx"
   },
   "dependencies": {
-    "preact": "^11.0.0-beta.0",
+    "preact": "^10.28.0",
+    "preact-custom-element": "^4.6.0",
     "preact-render-to-string": "^6.6.3",
-    "preact-custom-element": "^4.6.0"
+    "typescript": "~5.9.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.4",
-    "typescript": "~5.9.2",
-    "wrangler": "^4.53.0"
+    "wrangler": "^4.54.0"
   }
 }
 ```
@@ -126,7 +129,8 @@ Request to `/blog/hello` renders nested layouts:
 <html>
   <head>
     <meta charset="utf-8" />
-    <script type="module" src="/index.js"></script>
+    <link rel="stylesheet" href="/index.css">
+    <script type="module" src="/blog.slug.js"></script>
   </head>
   <body>
     <div class="blog-container">
@@ -141,20 +145,40 @@ Request to `/blog/hello` renders nested layouts:
 </html>
 ```
 
-### Bun Macro: Auto Web Component Registration
+### Build Process
+
+The build runs via `bun run build` (which executes `bunx solarflare`):
+
+1. **Scan** — Find all `*.client.tsx`, `*.server.tsx`, and `_layout.tsx` files
+2. **Validate** — Use TypeScript Compiler API to validate module exports
+3. **Generate Modules** — Create `.modules.generated.ts` with pre-resolved imports
+4. **Build Client** — Per-route code splitting, generates chunk manifest
+5. **Build Server** — Bundle for Cloudflare Workers runtime
+6. **Inject Assets** — CSS and JS paths resolved from chunk manifest
+
+#### Generated Files
+
+```
+src/app/
+├── .modules.generated.ts    # Pre-resolved route imports (temp, deleted after build)
+├── .chunks.generated.json   # Chunk manifest for asset injection (temp, deleted after build)
+└── .routes.generated.d.ts   # Type-safe route definitions (persisted)
+```
+
+### Web Component Registration
 
 #### How It Works
 
-The `define` macro runs at **build time** and:
-1. Extracts prop names from the component's TypeScript interface
-2. Generates the custom element tag name from the file path
-3. Outputs the `preact-custom-element` registration code
+The `define` function runs at **runtime** in the browser and:
+1. Parses the tag name from the file path using `parsePath()` from ast.ts
+2. Validates the tag against web component naming rules
+3. Registers the component with `preact-custom-element`
 
 #### Usage
 
 ```tsx
 // src/app/blog/$slug.client.tsx
-import { define } from "solarflare/client" with { type: "macro" };
+import { define } from "solarflare/client";
 
 interface Props {
   slug: string;
@@ -171,268 +195,312 @@ function BlogPost({ slug, title, content }: Props) {
   );
 }
 
-// Macro extracts ["slug", "title", "content"] from Props
-// Generates tag "sf-blog-slug" from file path
+// Props are passed via build-time extraction
+// Tag "sf-blog-slug" is generated from file path
 export default define(BlogPost);
 ```
 
-#### Build Output
+#### Build-Time Props Extraction
 
-The macro transforms the above into:
+The build script uses TypeScript Compiler API to extract props:
 
-```tsx
-import register from "preact-custom-element";
-
-function BlogPost({ slug, title, content }) {
-  return (
-    <article>
-      <h1>{title}</h1>
-      <div>{content}</div>
-    </article>
-  );
+```typescript
+// src/framework/build.ts
+function extractPropsFromProgram(program: ts.Program, filePath: string): string[] {
+  const checker = program.getTypeChecker()
+  const sourceFile = program.getSourceFile(filePath)
+  const exportInfo = getDefaultExportInfo(checker, sourceFile)
+  
+  // Get first parameter type (props)
+  const firstParam = exportInfo.signatures[0].getParameters()[0]
+  const paramType = checker.getTypeOfSymbolAtLocation(firstParam, sourceFile)
+  
+  return paramType.getProperties().map((p) => p.getName())
 }
-
-register(BlogPost, "sf-blog-slug", ["slug", "title", "content"], { shadow: false });
-
-export default BlogPost;
 ```
 
-#### Macro Implementation
+#### Generated Client Entry
+
+Each component gets its own chunk entry:
 
 ```tsx
-// src/framework/client.tsx
-import type { FunctionComponent } from "preact";
+// .entry-blog.slug.generated.tsx (auto-generated, temp file)
+import register from 'preact-custom-element'
+import Component from './app/blog/$slug.client.tsx'
 
-/**
- * Build-time macro that registers a Preact component as a web component
- * Extracts observed attributes from the component's props type
- */
+register(Component, 'sf-blog-slug', ["slug", "title", "content"], { shadow: false })
+```
+
+#### `solarflare/client` (client.tsx)
+
+```tsx
+import { type FunctionComponent, createContext } from 'preact'
+import { useContext } from 'preact/hooks'
+import register from 'preact-custom-element'
+import { parsePath } from './ast'
+
+const ParamsContext = createContext<Record<string, string>>({})
+const DataContext = createContext<unknown>(null)
+
+/** Hook to access current route params */
+export function useParams(): Record<string, string> {
+  return useContext(ParamsContext)
+}
+
+/** Hook to access parsed data attribute */
+export function useData<T>(): T {
+  return useContext(DataContext) as T
+}
+
+export interface TagMeta {
+  tag: string
+  filePath: string
+  segments: string[]
+  paramNames: string[]
+  isRoot: boolean
+  type: 'client' | 'server' | 'unknown'
+}
+
+/** Parse file path into structured tag metadata */
+export function parseTagMeta(path: string): TagMeta {
+  const parsed = parsePath(path)
+  return {
+    tag: parsed.tag,
+    filePath: parsed.original,
+    segments: parsed.segments,
+    paramNames: parsed.params,
+    isRoot: parsed.isIndex,
+    type: parsed.kind === 'client' || parsed.kind === 'server' ? parsed.kind : 'unknown',
+  }
+}
+
+/** Validate a generated tag against web component naming rules */
+export function validateTag(meta: TagMeta): TagValidation
+
+export interface DefineOptions {
+  tag?: string
+  shadow?: boolean
+  observedAttributes?: string[]
+  validate?: boolean
+}
+
+/** Register a Preact component as a web component */
 export function define<P>(
   Component: FunctionComponent<P>,
-  options?: { shadow?: boolean; tag?: string }
+  options?: DefineOptions
 ): FunctionComponent<P> {
-  // This runs at build time via Bun macros
-  // Bun's macro system has access to the AST and can extract prop names
-  
-  const propNames = extractPropNames(Component); // Build-time introspection
-  const tag = options?.tag ?? generateTagName(); // From import.meta.path
-  
-  // Emits: register(Component, tag, propNames, { shadow: false })
-  return Component;
+  if (typeof window !== 'undefined' && typeof HTMLElement !== 'undefined') {
+    const propNames = options?.observedAttributes ?? []
+    const filePath = import.meta.path
+    const meta = parseTagMeta(filePath)
+    const tag = options?.tag ?? meta.tag
+    const shadow = options?.shadow ?? false
+
+    register(Component, tag, propNames, { shadow })
+  }
+  return Component
+}
+```
+
+#### `solarflare/ast` (ast.ts)
+
+```tsx
+import ts from 'typescript'
+
+export type ModuleKind = 'server' | 'client' | 'layout' | 'unknown'
+
+export interface ParsedPath {
+  original: string
+  normalized: string
+  kind: ModuleKind
+  segments: string[]
+  params: string[]
+  isIndex: boolean
+  isPrivate: boolean
+  pattern: string      // URLPattern pathname
+  tag: string          // Custom element tag
+  specificity: number  // Route sorting score
 }
 
-/**
- * Extract prop names from component's TypeScript interface
- * Only available at build time via Bun macro
- */
-function extractPropNames(Component: unknown): string[] {
-  // Bun macro has access to TypeScript types at build time
-  // Returns array of prop names from the Props interface
-}
+/** Determine module kind from file path */
+export function getModuleKind(filePath: string): ModuleKind
 
-/**
- * Generate custom element tag from file path
- * e.g., "app/blog/$slug.client.tsx" → "sf-blog-slug"
- */
-function generateTagName(): string {
-  const path = import.meta.path;
-  return pathToTagName(path);
-}
+/** Parse a file path into structured metadata */
+export function parsePath(filePath: string): ParsedPath
 
-/**
- * Hook to access current route params
- */
-export function useParams(): Record<string, string>;
+/** Create a shared TypeScript program for analyzing multiple files */
+export function createProgram(files: string[]): ts.Program
 
-/**
- * Hook to access parsed data attribute
- */
-export function useData<T>(): T;
+/** Get detailed information about a module's default export */
+export function getDefaultExportInfo(checker: ts.TypeChecker, sourceFile: ts.SourceFile): ExportInfo | null
+
+/** Validate a module against expected patterns */
+export function validateModule(program: ts.Program, filePath: string, baseDir?: string): ValidationResult
+
+/** Find paired modules for a given path (client/server pairs, layouts) */
+export function findPairedModules(filePath: string, availableModules: string[]): PairedModules
+
+/** Generate a complete type-safe modules file */
+export function generateTypedModulesFile(entries: ModuleEntry[]): { content: string; errors: string[] }
 ```
 
 #### `solarflare/server` (server.tsx)
 
 ```tsx
-/**
- * Cloudflare Server handler
- */
-/**
- * Convert file path to URLPattern pathname
- * e.g., "./app/blog/$slug.client.tsx" → "/blog/:slug"
- */
-function pathToPattern(filePath: string): string {
-  return filePath
-    .replace(/^\.\/app/, '')
-    .replace(/\.(client|server)\.tsx$/, '')
-    .replace(/\/index$/, '')
-    .replace(/\$([^/]+)/g, ':$1')
-    || '/'
+import { type VNode, h } from 'preact'
+import { parsePath } from './ast'
+
+export const ASSETS_MARKER = '<!--SOLARFLARE_ASSETS-->'
+
+/** Assets placeholder - place in root layout for CSS/JS injection */
+export function Assets(): VNode<any>
+
+export interface Route {
+  pattern: URLPattern
+  parsedPattern: ParsedPattern
+  path: string
+  tag: string
+  loader: () => Promise<{ default: unknown }>
+  type: 'client' | 'server'
 }
 
-/**
- * Generate custom element tag from file path
- * e.g., "./app/blog/$slug.client.tsx" → "sf-blog-slug"
- */
-function pathToTag(filePath: string): string {
-  return 'sf-' + filePath
-    .replace(/^\.\/app\//, '')
-    .replace(/\.(client|server)\.tsx$/, '')
-    .replace(/\//g, '-')
-    .replace(/\$/g, '')
-    .replace(/index$/, 'root')
-    .toLowerCase()
+export interface ParsedPattern {
+  filePath: string
+  pathname: string
+  params: RouteParamDef[]
+  isStatic: boolean
+  specificity: number
 }
 
-/**
- * Create router from import.meta.glob result
- * Filters out _prefixed files, sorts static before dynamic routes
- */
-function createRouter(
-  modules: Record<string, () => Promise<{ default: unknown }>>
-): Route[] {
-  return Object.entries(modules)
-    .filter(([path]) => !path.includes('/_'))
-    .map(([path, loader]) => ({
-      pattern: new URLPattern({ pathname: pathToPattern(path) }),
-      path,
-      tag: pathToTag(path),
-      loader,
-      type: path.includes('.server.') ? 'server' : 'client',
-    }))
-    .sort((a, b) => {
-      const aStatic = !a.pattern.pathname.includes(':')
-      const bStatic = !b.pattern.pathname.includes(':')
-      if (aStatic !== bStatic) return aStatic ? -1 : 1
-      return b.path.length - a.path.length
-    })
+/** Convert file path to URLPattern pathname with parsed metadata */
+export function parsePattern(filePath: string): ParsedPattern
+
+export interface ModuleMap {
+  server: Record<string, () => Promise<{ default: unknown }>>
+  client: Record<string, () => Promise<{ default: unknown }>>
+  layout: Record<string, () => Promise<{ default: unknown }>>
 }
 
-/**
- * Find all ancestor layouts for a route path
- * Returns layouts from root to leaf order
- * e.g., "./app/blog/$slug.server.tsx" → ["./app/_layout.tsx", "./app/blog/_layout.tsx"]
- */
-function findLayouts(
-  routePath: string,
-  modules: Record<string, () => Promise<{ default: unknown }>>
-): Layout[] {
-  const layouts: Layout[] = []
-  const segments = routePath.replace(/^\.\/app/, '').split('/').slice(0, -1)
-  
-  // Check root layout first
-  const rootLayout = './app/_layout.tsx'
-  if (rootLayout in modules) {
-    layouts.push({ path: rootLayout, loader: modules[rootLayout] })
-  }
-  
-  // Walk up the path checking for layouts
-  let current = './app'
-  for (const segment of segments) {
-    if (!segment) continue
-    current += `/${segment}`
-    const layoutPath = `${current}/_layout.tsx`
-    if (layoutPath in modules) {
-      layouts.push({ path: layoutPath, loader: modules[layoutPath] })
-    }
-  }
-  
-  return layouts
+/** Create router from structured module map */
+export function createRouter(modules: ModuleMap): Route[]
+
+export interface Layout {
+  path: string
+  loader: () => Promise<{ default: unknown }>
+  depth: number
+  directory: string
 }
 
-/**
- * Match URL against routes using URLPattern
- */
-function matchRoute(routes: Route[], url: URL): RouteMatch | null {
-  for (const route of routes) {
-    const result = route.pattern.exec(url)
-    if (result) {
-      return {
-        route,
-        params: result.pathname.groups as Record<string, string>,
-      }
-    }
-  }
-  return null
+/** Find all ancestor layouts for a route path */
+export function findLayouts(routePath: string, modules: ModuleMap): Layout[]
+
+export interface RouteMatch {
+  route: Route
+  params: Record<string, string>
+  paramDefs: RouteParamDef[]
+  complete: boolean
 }
 
-/**
- * Wrap content in nested layouts (innermost first)
- */
-async function wrapWithLayouts(
-  content: VNode,
-  layouts: Layout[]
-): Promise<VNode> {
-  let wrapped = content
-  
-  // Apply layouts from leaf to root (reverse order)
-  for (let i = layouts.length - 1; i >= 0; i--) {
-    const { loader } = layouts[i]
-    const { default: Layout } = await loader()
-    wrapped = <Layout>{wrapped}</Layout>
-  }
-  
-  return wrapped
-}
+/** Match URL against routes using URLPattern */
+export function matchRoute(routes: Route[], url: URL): RouteMatch | null
+
+/** Wrap content in nested layouts (innermost first) */
+export async function wrapWithLayouts(content: VNode, layouts: Layout[]): Promise<VNode>
+
+/** Generate asset HTML tags for injection */
+export function generateAssetTags(script?: string, styles?: string[]): string
+
+/** Render a component with its tag wrapper for hydration */
+export function renderComponent(Component: FunctionComponent, tag: string, props: Record<string, unknown>): VNode
 ```
 
 #### `solarflare/worker` (worker.tsx)
 
 ```tsx
-/**
- * Cloudflare Worker fetch handler
- * Discovers routes via import.meta.glob and handles SSR
- */
-import { h } from 'preact'
-import { renderToReadableStream } from 'preact-render-to-string/stream'
-import { createRouter, matchRoute } from './server'
+import { type FunctionComponent } from 'preact'
+import { renderToString } from 'preact-render-to-string'
+import {
+  createRouter,
+  matchRoute,
+  findLayouts,
+  wrapWithLayouts,
+  renderComponent,
+  generateAssetTags,
+  ASSETS_MARKER,
+  type ModuleMap,
+} from './server'
+// Generated at build time
+import modules from '../app/.modules.generated'
+import chunkManifest from '../app/.chunks.generated.json'
 
-/**
- * Factory function that creates a Cloudflare Worker fetch handler
- * @param path - Glob pattern for route discovery (e.g., './*')
- */
-export default function worker(path: string) {
-  const modules = import.meta.glob(path)
-  const routes = createRouter(modules)
-
-  return async (request: Request, env: Env) => {
-    const url = new URL(request.url)
-
-    // Serve static assets first (non-root paths)
-    if (url.pathname !== '/') {
-      const asset = await env.ASSETS.fetch(request.url)
-      if (asset.ok) return asset
-    }
-
-    const match = matchRoute(routes, url)
-    if (match) {
-      const module = await match.route.loader()
-
-      // Server routes return Response directly
-      if (match.route.type === 'server') {
-        return (module.default as Function)(request, match.params, env)
-      }
-
-      // Client routes get SSR + hydration via custom elements
-      const Component = module.default as preact.FunctionComponent
-      const customElement = h(match.route.tag, match.params, h(Component, match.params))
-
-      const stream = renderToReadableStream(
-        <html>
-          <head>
-            <script type="module" src="/index.js"></script>
-          </head>
-          <body>{customElement}</body>
-        </html>
-      )
-
-      return new Response(stream, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      })
-    }
-
-    return new Response('Not Found', { status: 404 })
-  }
+interface ChunkManifest {
+  chunks: Record<string, string>    // pattern -> chunk filename
+  tags: Record<string, string>      // tag -> chunk filename
+  styles: Record<string, string[]>  // pattern -> CSS filenames
 }
+
+const routes = createRouter(modules as ModuleMap)
+
+/** Get the script path for a route from the chunk manifest */
+function getScriptPath(tag: string): string | undefined
+
+/** Get stylesheets for a route pattern from the chunk manifest */
+function getStylesheets(pattern: string): string[]
+
+/** Find paired module (server for client, or client for server) */
+function findPairedModule(path: string): string | null
+
+/** Cloudflare Worker fetch handler */
+async function worker(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url)
+
+  // Serve static assets first
+  if (url.pathname !== '/' && url.pathname.includes('.')) {
+    const asset = await env.ASSETS.fetch(request)
+    if (asset.ok) return asset
+  }
+
+  const match = matchRoute(routes, url)
+  if (!match) return new Response('Not Found', { status: 404 })
+
+  const { route, params } = match
+
+  // Server-only routes (no paired client) return Response directly
+  if (route.type === 'server' && !findPairedModule(route.path)) {
+    const mod = await route.loader()
+    return (mod.default as Function)(request)
+  }
+
+  // Load props from server loader if available
+  let props: Record<string, unknown> = { ...params }
+  const serverPath = findPairedModule(route.path)
+  if (serverPath) {
+    const serverMod = await modules.server[serverPath]()
+    props = { ...params, ...(await serverMod.default(request)) }
+  }
+
+  // Load and render client component
+  const clientMod = await modules.client[route.path]()
+  const Component = clientMod.default as FunctionComponent
+  let content = renderComponent(Component, route.tag, props)
+
+  // Apply layouts
+  const layouts = findLayouts(route.path, modules)
+  if (layouts.length > 0) {
+    content = await wrapWithLayouts(content, layouts)
+  }
+
+  // Render to HTML and inject assets
+  let html = renderToString(content)
+  const assetTags = generateAssetTags(getScriptPath(route.tag), getStylesheets(route.parsedPattern.pathname))
+  html = html.replace(`<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`, assetTags)
+
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  })
+}
+
+export default worker
 ```
 
 ##### Entry Server Integration
@@ -441,30 +509,87 @@ export default function worker(path: string) {
 // src/app/index.ts
 import worker from 'solarflare/worker'
 
-export default {
-  fetch: worker('./*')
-}
+export default { fetch: worker }
 ```
 
 ### Types
 
 ```tsx
+/** Module kind based on file naming convention */
+type ModuleKind = 'server' | 'client' | 'layout' | 'unknown'
+
+/** Parsed path information with AST-validated metadata */
+interface ParsedPath {
+  original: string
+  normalized: string
+  kind: ModuleKind
+  segments: string[]
+  params: string[]
+  isIndex: boolean
+  isPrivate: boolean
+  pattern: string
+  tag: string
+  specificity: number
+}
+
+/** Route definition with parsed pattern metadata */
 interface Route {
-  pattern: URLPattern;
-  path: string;
-  tag: string;
-  loader: () => Promise<{ default: unknown }>;
-  type: "client" | "server";
+  pattern: URLPattern
+  parsedPattern: ParsedPattern
+  path: string
+  tag: string
+  loader: () => Promise<{ default: unknown }>
+  type: 'client' | 'server'
 }
 
+/** Validated route match with type-safe params */
 interface RouteMatch {
-  route: Route;
-  params: Record<string, string>;
+  route: Route
+  params: Record<string, string>
+  paramDefs: RouteParamDef[]
+  complete: boolean
 }
 
+/** Layout definition with hierarchy information */
 interface Layout {
-  path: string;
-  loader: () => Promise<{ default: unknown }>;
+  path: string
+  loader: () => Promise<{ default: unknown }>
+  depth: number
+  directory: string
+}
+
+/** Structured module map with typed categories */
+interface ModuleMap {
+  server: Record<string, () => Promise<{ default: unknown }>>
+  client: Record<string, () => Promise<{ default: unknown }>>
+  layout: Record<string, () => Promise<{ default: unknown }>>
+}
+
+/** Chunk manifest mapping routes to their JS chunks and CSS */
+interface ChunkManifest {
+  chunks: Record<string, string>    // pattern -> chunk filename
+  tags: Record<string, string>      // tag -> chunk filename
+  styles: Record<string, string[]>  // pattern -> CSS filenames
+}
+
+/** Tag metadata from file path */
+interface TagMeta {
+  tag: string
+  filePath: string
+  segments: string[]
+  paramNames: string[]
+  isRoot: boolean
+  type: 'client' | 'server' | 'unknown'
+}
+
+/** Validation result for modules */
+interface ValidationResult {
+  file: string
+  kind: ModuleKind
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+  exportInfo: ExportInfo | null
 }
 ```
 
@@ -475,7 +600,8 @@ Server renders:
 <!DOCTYPE html>
 <html>
 <head>
-  <script type="module" src="/index.js"></script>
+  <link rel="stylesheet" href="/index.css">
+  <script type="module" src="/blog.slug.js"></script>
 </head>
 <body>
   <sf-blog-slug slug="hello" title="Hello World" content="...">
@@ -488,17 +614,21 @@ Server renders:
 
 ### Implementation Steps
 
-1. **client.tsx** — `define()` macro with prop extraction, tag generation, runtime fallback, hooks
-2. **server.tsx** — `parse()`, `matchRoute()`, `findLayouts()`, `wrapWithLayouts()`, `renderComponent()`
-3. **worker.tsx** — Fetch handler with SSR streaming, layout wrapping
+1. **ast.ts** — `parsePath()`, `createProgram()`, `validateModule()`, `generateTypedModulesFile()`
+2. **build.ts** — Route scanning, validation, client/server bundling, chunk manifest generation
+3. **client.tsx** — `define()` with tag validation, `useParams()`, `useData()` hooks
+4. **server.tsx** — `createRouter()`, `matchRoute()`, `findLayouts()`, `wrapWithLayouts()`, `renderComponent()`, `Assets`
+5. **worker.tsx** — Fetch handler with SSR, asset injection from chunk manifest
 
 ### Benefits
 
-- **Zero config** — Props auto-extracted from TypeScript types
-- **Type-safe** — Full TypeScript support for component props
-- **Build-time** — No runtime overhead for registration logic
+- **Zero config** — Props auto-extracted from TypeScript types via Compiler API
+- **Type-safe** — Full TypeScript support for component props and route params
+- **Build-time validation** — Module exports validated against expected signatures
+- **Per-route code splitting** — Each client component gets its own chunk
 - **DX** — Just export `define(Component)`, everything else is automatic
 - **Nested layouts** — Automatic layout discovery and nesting
+- **Asset injection** — CSS and JS paths resolved from chunk manifest
 
 ### Documentation
 
