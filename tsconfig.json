@@ -13,6 +13,7 @@
     "moduleDetection": "force",
     "moduleResolution": "bundler",
     "paths": {
+      "#app/*": ["./src/app/*"],
       "#solarflare/*": ["./src/framework/*"]
     },
     "noEmit": true,

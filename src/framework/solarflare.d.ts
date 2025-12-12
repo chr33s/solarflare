@@ -298,12 +298,37 @@ declare module 'solarflare/server' {
   export function matchRoute(routes: Route[], url: URL): RouteMatch | null;
 
   /**
+   * Marker for asset injection - will be replaced with actual script/style tags
+   */
+  export const ASSETS_MARKER: string;
+
+  /**
+   * Assets placeholder component
+   * Place this in your root layout's <head> to inject route-specific CSS and scripts
+   */
+  export function Assets(): VNode<any>;
+
+  /**
+   * Layout props - just children, assets are injected separately via <Assets />
+   */
+  export interface LayoutProps {
+    children: VNode<any>;
+  }
+
+  /**
    * Wrap content in nested layouts
+   * @param content - The content to wrap
+   * @param layouts - The layouts to apply
    */
   export function wrapWithLayouts(
     content: VNode<any>,
     layouts: Layout[]
   ): Promise<VNode<any>>;
+
+  /**
+   * Generate asset HTML tags for injection
+   */
+  export function generateAssetTags(script?: string, styles?: string[]): string;
 
   /**
    * Render a component with its tag wrapper for hydration

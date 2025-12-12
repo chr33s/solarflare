@@ -126,6 +126,22 @@ interface ComponentMeta {
   tag: string
   props: string[]
   parsed: ReturnType<typeof parsePath>
+  /** Chunk filename for this component (e.g., "blog.$slug.js") */
+  chunk: string
+}
+
+/**
+ * Generate chunk filename from file path
+ * e.g., "blog/$slug.client.tsx" → "blog.slug.js"
+ * Note: $ is removed to avoid URL encoding issues
+ */
+function getChunkName(file: string): string {
+  return file
+    .replace(/\.client\.tsx?$/, '')
+    .replace(/\//g, '.')
+    .replace(/\$/g, '')  // Remove $ to avoid URL issues
+    .replace(/^index$/, 'index')
+    + '.js'
 }
 
 function getComponentMeta(
@@ -135,8 +151,9 @@ function getComponentMeta(
   const filePath = join(APP_DIR, file)
   const props = extractPropsFromProgram(program, filePath)
   const parsed = parsePath(file)
+  const chunk = getChunkName(file)
 
-  return { file, tag: parsed.tag, props, parsed }
+  return { file, tag: parsed.tag, props, parsed, chunk }
 }
 
 /**
@@ -175,33 +192,39 @@ async function findClientComponents(): Promise<string[]> {
 }
 
 /**
- * Generate virtual client entry content with inferred define options
+ * Extract CSS import paths from a TypeScript/TSX file
  */
-function generateClientEntry(
-  program: ts.Program,
-  clientFiles: string[]
+async function extractCssImports(filePath: string): Promise<string[]> {
+  const content = await Bun.file(filePath).text()
+  const cssImports: string[] = []
+  
+  // Match import statements for .css files
+  const importRegex = /import\s+['"](.+\.css)['"]|import\s+['"](.+\.css)['"]\s*;/g
+  let match
+  while ((match = importRegex.exec(content)) !== null) {
+    const cssPath = match[1] || match[2]
+    if (cssPath) {
+      cssImports.push(cssPath)
+    }
+  }
+  
+  return cssImports
+}
+
+/**
+ * Generate virtual client entry for a single component (for chunked builds)
+ */
+function generateChunkedClientEntry(
+  meta: ComponentMeta
 ): string {
-  const metas = clientFiles.map((file) => getComponentMeta(program, file))
-
-  const imports = metas
-    .map((meta, i) => `import Component${i} from './app/${meta.file}'`)
-    .join('\n')
-
-  const registrations = metas
-    .map(
-      (meta, i) =>
-        `register(Component${i}, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false })`
-    )
-    .join('\n')
-
   return `/**
- * Auto-generated Client Entry Point
- * Registers all client components as web components with inferred options
+ * Auto-generated Client Chunk: ${meta.chunk}
+ * Registers ${meta.tag} web component
  */
 import register from 'preact-custom-element'
-${imports}
+import Component from './app/${meta.file}'
 
-${registrations}
+register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false })
 `
 }
 
@@ -228,7 +251,16 @@ function generateModulesFile(
 }
 
 /**
- * Build the client bundle
+ * Chunk manifest mapping routes to their JS chunks and CSS
+ */
+interface ChunkManifest {
+  chunks: Record<string, string>    // pattern -> chunk filename
+  tags: Record<string, string>      // tag -> chunk filename
+  styles: Record<string, string[]>  // pattern -> CSS filenames
+}
+
+/**
+ * Build the client bundle with per-route code splitting
  */
 async function buildClient() {
   console.log('🔍 Scanning for client components...')
@@ -239,18 +271,27 @@ async function buildClient() {
   const filePaths = clientFiles.map((f) => join(APP_DIR, f))
   const program = createProgram(filePaths)
 
-  const entryContent = generateClientEntry(program, clientFiles)
+  // Get metadata for all components
+  const metas = clientFiles.map((file) => getComponentMeta(program, file))
 
-  // Write temporary entry file
-  const entryPath = './src/.entry-client.generated.tsx'
-  await Bun.write(entryPath, entryContent)
+  // Generate individual entry files for each component
+  const entryPaths: string[] = []
+  const entryToMeta: Record<string, ComponentMeta> = {}
 
-  console.log('📦 Building client bundle...')
+  for (const meta of metas) {
+    const entryContent = generateChunkedClientEntry(meta)
+    const entryPath = `./src/.entry-${meta.chunk.replace('.js', '')}.generated.tsx`
+    await Bun.write(entryPath, entryContent)
+    entryPaths.push(entryPath)
+    entryToMeta[entryPath] = meta
+  }
+
+  console.log('📦 Building client chunks...')
   const result = await Bun.build({
-    entrypoints: [entryPath],
+    entrypoints: entryPaths,
     outdir: DIST_CLIENT,
     target: 'browser',
-    naming: '[dir]/index.[ext]',
+    splitting: true,
     minify: process.env.NODE_ENV === 'production',
   })
 
@@ -262,6 +303,118 @@ async function buildClient() {
     process.exit(1)
   }
 
+  // Build manifest mapping routes to their chunks
+  const manifest: ChunkManifest = { chunks: {}, tags: {}, styles: {} }
+
+  // Map entry paths to their output chunk names
+  // Bun outputs entries as .entry-{name}.js when using splitting
+  for (const output of result.outputs) {
+    const outputPath = output.path
+    const outputName = outputPath.split('/').pop() || ''
+
+    // Skip non-JS outputs (CSS, etc.) and shared chunks
+    if (!outputName.endsWith('.js') || outputName.startsWith('chunk-')) {
+      continue
+    }
+
+    // Match output to our entry files
+    for (const [entryPath, meta] of Object.entries(entryToMeta)) {
+      // Extract the base name from entry path: .entry-index.generated.tsx -> index
+      const entryBase = entryPath
+        .split('/')
+        .pop()!
+        .replace('.generated.tsx', '')
+        .replace('.entry-', '')
+
+      // Check if this output corresponds to this entry
+      // Bun names the output based on the entry file name
+      if (outputName.includes(entryBase) || outputName === `.entry-${entryBase}.js`) {
+        // Rename to the desired chunk name
+        const targetPath = join(DIST_CLIENT, meta.chunk)
+        if (outputPath !== targetPath) {
+          await Bun.write(targetPath, Bun.file(outputPath))
+          await unlink(outputPath)
+        }
+        manifest.chunks[meta.parsed.pattern] = `/${meta.chunk}`
+        manifest.tags[meta.tag] = `/${meta.chunk}`
+        break
+      }
+    }
+  }
+
+  // Handle CSS outputs - rename them to match route names
+  for (const output of result.outputs) {
+    const outputPath = output.path
+    const outputName = outputPath.split('/').pop() || ''
+
+    // Handle CSS files generated from imports
+    if (outputName.endsWith('.css') && outputName.startsWith('.entry-')) {
+      // Extract the route name and rename to a clean CSS name
+      const baseName = outputName.replace('.entry-', '').replace('.generated.css', '')
+      const targetPath = join(DIST_CLIENT, `${baseName}.css`)
+      await Bun.write(targetPath, Bun.file(outputPath))
+      await unlink(outputPath)
+    }
+  }
+
+  // Scan layouts for CSS imports and copy them to dist
+  const layoutFiles = await findLayouts()
+  const layoutCssMap: Record<string, string[]> = {}  // layout directory -> CSS files
+
+  for (const layoutFile of layoutFiles) {
+    const layoutPath = join(APP_DIR, layoutFile)
+    const cssImports = await extractCssImports(layoutPath)
+    
+    if (cssImports.length > 0) {
+      const cssOutputPaths: string[] = []
+      const layoutDir = layoutFile.split('/').slice(0, -1).join('/')
+      
+      for (const cssImport of cssImports) {
+        // Resolve CSS path relative to layout file
+        const cssSourcePath = join(APP_DIR, layoutDir, cssImport)
+        
+        // Generate output filename: retain the imported CSS filename
+        const cssFileName = cssImport.replace('./', '')
+        const cssOutputName = cssFileName
+        
+        // Copy CSS to dist
+        if (await Bun.file(cssSourcePath).exists()) {
+          const destPath = join(DIST_CLIENT, cssOutputName)
+          await Bun.write(destPath, Bun.file(cssSourcePath))
+          cssOutputPaths.push(`/${cssOutputName}`)
+        }
+      }
+      
+      if (cssOutputPaths.length > 0) {
+        // Store by layout directory pattern (e.g., "/blog" or "/")
+        const layoutPattern = layoutDir ? `/${layoutDir}` : '/'
+        layoutCssMap[layoutPattern] = cssOutputPaths
+      }
+    }
+  }
+
+  // Add layout CSS to manifest based on route patterns
+  for (const meta of metas) {
+    const routeStyles: string[] = []
+    
+    // Check which layouts apply to this route and collect their CSS
+    for (const [layoutPattern, cssFiles] of Object.entries(layoutCssMap)) {
+      // A layout applies if the route pattern starts with the layout's directory
+      if (layoutPattern === '/' || meta.parsed.pattern.startsWith(layoutPattern)) {
+        routeStyles.push(...cssFiles)
+      }
+    }
+    
+    if (routeStyles.length > 0) {
+      manifest.styles[meta.parsed.pattern] = routeStyles
+    }
+  }
+
+  // Write chunk manifest for the server
+  const manifestPath = './src/app/.chunks.generated.json'
+  await Bun.write(manifestPath, JSON.stringify(manifest, null, 2))
+  console.log(`   Generated ${metas.length} chunk(s)`)
+
   // Copy public assets if directory exists
   if (await exists(PUBLIC_DIR)) {
     const publicFiles = await scanFiles('**/*', PUBLIC_DIR)
@@ -272,9 +425,11 @@ async function buildClient() {
     }
   }
 
-  // Clean up temporary file
-  if (await Bun.file(entryPath).exists()) {
-    await unlink(entryPath)
+  // Clean up temporary entry files
+  for (const entryPath of entryPaths) {
+    if (await Bun.file(entryPath).exists()) {
+      await unlink(entryPath)
+    }
   }
 
   console.log('✅ Client build complete')
@@ -349,9 +504,12 @@ async function buildServer() {
     process.exit(1)
   }
 
-  // Clean up generated modules file (route types are kept)
-  if (await Bun.file(modulesPath).exists()) {
-    await unlink(modulesPath)
+  // Clean up generated files (route types are kept)
+  const generatedFiles = [modulesPath, './src/app/.chunks.generated.json']
+  for (const file of generatedFiles) {
+    if (await Bun.file(file).exists()) {
+      await unlink(file)
+    }
   }
 
   console.log('✅ Server build complete')

@@ -7,6 +7,21 @@ import { type FunctionComponent } from 'preact'
 import { parsePath } from './ast'
 
 /**
+ * Marker for asset injection - will be replaced with actual script/style tags
+ */
+export const ASSETS_MARKER = '<!--SOLARFLARE_ASSETS-->'
+
+/**
+ * Assets placeholder component
+ * Place this in your root layout's <head> to inject route-specific CSS
+ * and at the end of <body> for the script
+ */
+export function Assets(): VNode<any> {
+  // Render a special comment marker that will be replaced with actual assets
+  return h('solarflare-assets', { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } })
+}
+
+/**
  * Route parameter definition extracted from pattern
  */
 export interface RouteParamDef {
@@ -302,8 +317,17 @@ export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
 }
 
 /**
+ * Layout props - just children, assets are injected separately
+ */
+export interface LayoutProps {
+  children: VNode<any>
+}
+
+/**
  * Wrap content in nested layouts (innermost first)
  * Layouts are applied from root to leaf
+ * @param content - The content to wrap
+ * @param layouts - The layouts to apply
  */
 export async function wrapWithLayouts(
   content: VNode<any>,
@@ -315,11 +339,32 @@ export async function wrapWithLayouts(
   for (let i = layouts.length - 1; i >= 0; i--) {
     const { loader } = layouts[i]
     const mod = await loader()
-    const Layout = mod.default as FunctionComponent<{ children: VNode<any> }>
+    const Layout = mod.default as FunctionComponent<LayoutProps>
     wrapped = h(Layout, { children: wrapped })
   }
 
   return wrapped
+}
+
+/**
+ * Generate asset HTML tags for injection
+ */
+export function generateAssetTags(script?: string, styles?: string[]): string {
+  let html = ''
+  
+  // Add stylesheet links
+  if (styles && styles.length > 0) {
+    for (const href of styles) {
+      html += `<link rel="stylesheet" href="${href}">`
+    }
+  }
+  
+  // Add script tag
+  if (script) {
+    html += `<script type="module" src="${script}"></script>`
+  }
+  
+  return html
 }
 
 /**

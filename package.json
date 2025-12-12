@@ -10,6 +10,7 @@
     "./worker": "./src/framework/worker.tsx"
   },
   "imports": {
+    "#app/*": "./src/app/*",
     "#solarflare/*": "./src/framework/*"
   },
   "scripts": {

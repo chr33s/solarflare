@@ -3,19 +3,48 @@
  * Cloudflare Worker fetch handler factory
  */
 import { type FunctionComponent } from 'preact'
-import { renderToReadableStream } from 'preact-render-to-string/stream'
+import { renderToString } from 'preact-render-to-string'
 import {
   createRouter,
   matchRoute,
   findLayouts,
   wrapWithLayouts,
   renderComponent,
+  generateAssetTags,
+  ASSETS_MARKER,
   type ModuleMap,
 } from './server'
 // @ts-ignore - Generated at build time
 import modules from '../app/.modules.generated'
+// @ts-ignore - Generated at build time
+import chunkManifest from '../app/.chunks.generated.json'
 
 const typedModules = modules as ModuleMap
+
+/**
+ * Chunk manifest type
+ */
+interface ChunkManifest {
+  chunks: Record<string, string>    // pattern -> chunk filename
+  tags: Record<string, string>      // tag -> chunk filename
+  styles: Record<string, string[]>  // pattern -> CSS filenames
+}
+
+const manifest = chunkManifest as ChunkManifest
+
+/**
+ * Get the script path for a route from the chunk manifest
+ */
+function getScriptPath(tag: string): string | undefined {
+  return manifest.tags[tag]
+}
+
+/**
+ * Get stylesheets for a route pattern from the chunk manifest
+ */
+function getStylesheets(pattern: string): string[] {
+  return manifest.styles[pattern] ?? []
+}
 
 /**
  * Server data loader function type
@@ -123,10 +152,18 @@ async function worker(request: Request, env: Env): Promise<Response> {
     content = await wrapWithLayouts(content, layouts)
   }
 
-  // Stream the response
-  const stream = await renderToReadableStream(content)
+  // Render to HTML string
+  let html = renderToString(content)
 
-  return new Response(stream, {
+  // Get the script and styles for this route's chunk
+  const scriptPath = getScriptPath(route.tag)
+  const stylesheets = getStylesheets(route.parsedPattern.pathname)
+
+  // Generate asset tags and inject them by replacing the marker
+  const assetTags = generateAssetTags(scriptPath, stylesheets)
+  html = html.replace(`<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`, assetTags)
+
+  return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
     },
