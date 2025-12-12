@@ -1,8 +1,4 @@
-interface Props {
-  slug: string
-}
-
-export default function BlogPost({ slug }: Props) {
+export default function BlogPost({ slug }: { slug: string }) {
   return (
     <article>
       <h1>Blog: {slug}</h1>

@@ -5,6 +5,7 @@
  */
 import { Glob } from 'bun'
 import { join } from 'path'
+import ts from 'typescript'
 
 const APP_DIR = './src/app'
 const DIST_CLIENT = './dist/client'
@@ -29,32 +30,40 @@ function pathToTag(filePath: string): string {
 }
 
 /**
- * Extract Props interface property names from a TypeScript file
+ * Extract Props property names from a TypeScript file using the type checker
+ * Uses Parameters<typeof DefaultExport>[0] to infer props from any function signature
  */
 async function extractPropsFromFile(filePath: string): Promise<string[]> {
-  const content = await Bun.file(filePath).text()
+  const program = ts.createProgram([filePath], {
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.ESNext,
+    jsx: ts.JsxEmit.ReactJSX,
+    jsxImportSource: 'preact',
+    strict: true,
+  })
 
-  // Match interface Props { ... } or type Props = { ... }
-  const propsMatch = content.match(
-    /(?:interface|type)\s+Props\s*(?:=\s*)?\{([^}]+)\}/
-  )
+  const checker = program.getTypeChecker()
+  const sourceFile = program.getSourceFile(filePath)
+  if (!sourceFile) return []
 
-  if (!propsMatch) return []
+  const symbol = checker.getSymbolAtLocation(sourceFile)
+  if (!symbol) return []
 
-  const propsBody = propsMatch[1]
+  const exports = checker.getExportsOfModule(symbol)
+  const defaultExport = exports.find((e) => e.escapedName === 'default')
+  if (!defaultExport) return []
 
-  // Extract property names (handles "name: type" and "name?: type")
-  const propNames = propsBody
-    .split(/[;\n]/)
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('//'))
-    .map((line) => {
-      const match = line.match(/^(\w+)\??:/)
-      return match ? match[1] : null
-    })
-    .filter(Boolean) as string[]
+  const type = checker.getTypeOfSymbolAtLocation(defaultExport, sourceFile)
+  const signatures = type.getCallSignatures()
+  if (signatures.length === 0) return []
 
-  return propNames
+  const firstParam = signatures[0].getParameters()[0]
+  if (!firstParam) return []
+
+  const paramType = checker.getTypeOfSymbolAtLocation(firstParam, sourceFile)
+  const properties = paramType.getProperties()
+
+  return properties.map((p) => p.getName())
 }
 
 /**

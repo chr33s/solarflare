@@ -47,26 +47,6 @@ function pathToTagName(path: string): string {
   )
 }
 
-/**
- * Extract prop names from component function parameters
- * This is a runtime fallback - the macro version extracts from TypeScript types
- */
-function extractPropNames(Component: FunctionComponent<any>): string[] {
-  // Try to get from component's displayName or name
-  const fnStr = Component.toString()
-  
-  // Match destructured props pattern: function({ prop1, prop2 }) or ({ prop1, prop2 }) =>
-  const destructuredMatch = fnStr.match(/^(?:function\s*\w*\s*)?\(\s*\{\s*([^}]+)\s*\}/)
-  if (destructuredMatch) {
-    return destructuredMatch[1]
-      .split(',')
-      .map(s => s.trim().split(/[=:]/)[0].trim())
-      .filter(Boolean)
-  }
-  
-  return []
-}
-
 export interface DefineOptions {
   /** Custom element tag name. Defaults to generated from file path */
   tag?: string
@@ -102,9 +82,7 @@ export function define<P extends Record<string, any>>(
 ): FunctionComponent<P> {
   // Only register custom elements in the browser
   if (typeof window !== 'undefined' && typeof HTMLElement !== 'undefined') {
-    // At build time, Bun macros have access to the AST and can extract prop names
-    // At runtime, we fall back to parsing the function string
-    const propNames = options?.observedAttributes ?? extractPropNames(Component)
+    const propNames = options?.observedAttributes ?? []
     const tag = options?.tag ?? pathToTagName(import.meta.path)
     const shadow = options?.shadow ?? false
 

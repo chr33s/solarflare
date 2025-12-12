@@ -2,11 +2,7 @@ import { useState } from 'preact/hooks'
 import logo from './logo.svg'
 import './index.css'
 
-interface Props {
-  hello: string;
-}
-
-export default function Index({ hello }: Props) {
+export default function Index({ hello }: { hello: string }) {
   const [count, setCount] = useState(0)
 
   return (
