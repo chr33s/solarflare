@@ -19,9 +19,7 @@ import modules from '../app/.modules.generated'
  * Returns props to pass to the paired client component
  */
 type ServerLoader = (
-  request: Request,
-  params: Record<string, string>,
-  env: Env
+  request: Request
 ) => Record<string, unknown> | Promise<Record<string, unknown>>
 
 const routes = createRouter(modules)
@@ -81,11 +79,9 @@ async function worker(request: Request, env: Env): Promise<Response> {
       // No paired client component - this is an API route
       const mod = await route.loader()
       const handler = mod.default as (
-        request: Request,
-        params: Record<string, string>,
-        env: Env
+        request: Request
       ) => Response | Promise<Response>
-      return handler(request, params, env)
+      return handler(request)
     }
   }
 
@@ -98,7 +94,7 @@ async function worker(request: Request, env: Env): Promise<Response> {
       // Load data from paired server module
       const serverMod = await modules[pairedServerPath]()
       const loader = serverMod.default as ServerLoader
-      const serverProps = await loader(request, params, env)
+      const serverProps = await loader(request)
       props = { ...params, ...serverProps }
     }
   }

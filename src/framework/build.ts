@@ -544,6 +544,7 @@ async function buildServer() {
     target: 'bun',
     naming: '[dir]/index.[ext]',
     minify: process.env.NODE_ENV === 'production',
+    external: ['cloudflare:workers'],
   })
 
   if (!result.success) {

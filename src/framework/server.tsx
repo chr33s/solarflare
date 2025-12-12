@@ -7,13 +7,44 @@ import { type FunctionComponent } from 'preact'
 
 /**
  * Parse URL parameters from a request URL using URLPattern
- * @deprecated Use the params passed to server handlers instead
+ * Matches against registered routes to extract dynamic segments
  */
-export function parse(_request: Request): Record<string, string> {
-  // This is a placeholder - actual parsing happens in matchRoute
-  // Server handlers receive params directly from the worker
-  return {}
+export function parse(request: Request): Record<string, string> {
+  const url = new URL(request.url)
+  
+  // Common route patterns - this will be populated by createRouter
+  // For now, extract params by matching common patterns
+  const pathname = url.pathname
+  
+  // Try to match dynamic segments like :slug, :id, etc.
+  const params: Record<string, string> = {}
+  
+  // Extract path segments and look for dynamic values
+  const segments = pathname.split('/').filter(Boolean)
+  
+  // Store the segments for potential dynamic matching
+  // The actual pattern matching will happen when routes are registered
+  if (segments.length > 0) {
+    // Check if there's a route pattern that matches
+    for (const route of _registeredRoutes) {
+      const result = route.pattern.exec(url)
+      if (result) {
+        const groups = result.pathname.groups
+        for (const [key, value] of Object.entries(groups)) {
+          if (value !== undefined) {
+            params[key] = value
+          }
+        }
+        break
+      }
+    }
+  }
+  
+  return params
 }
+
+// Internal route registry for parse() function
+let _registeredRoutes: Route[] = []
 
 /**
  * Route definition
@@ -92,7 +123,7 @@ export function pathToTag(filePath: string): string {
 export function createRouter(
   modules: Record<string, () => Promise<{ default: unknown }>>
 ): Route[] {
-  return Object.entries(modules)
+  const routes = Object.entries(modules)
     .filter(([path]) => !path.includes('/_'))
     .map(([path, loader]) => ({
       pattern: new URLPattern({ pathname: pathToPattern(path) }),
@@ -109,6 +140,11 @@ export function createRouter(
       // Longer paths first (more specific)
       return b.path.length - a.path.length
     })
+  
+  // Register routes for parse() function
+  _registeredRoutes = routes
+  
+  return routes
 }
 
 /**
