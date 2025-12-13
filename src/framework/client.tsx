@@ -5,7 +5,7 @@
 import { type FunctionComponent, createContext } from 'preact'
 import { useContext } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { parsePath } from './ast'
+import { parsePath } from './paths'
 
 /**
  * Context for current route params
