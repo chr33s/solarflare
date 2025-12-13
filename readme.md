@@ -25,6 +25,7 @@ src/framework/
 ├── ast.ts           # TypeScript Compiler API utilities for path parsing, validation, code generation
 ├── build.ts         # Build script: route scanning, validation, client/server bundling
 ├── client.tsx       # Web component registration, hydration, hooks (useParams, useData)
+├── route-tree.ts    # Optimized route tree for O(path_length) URL matching
 ├── server.tsx       # Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
 ├── worker.tsx       # Cloudflare Worker fetch handler with SSR and asset injection
 └── solarflare.d.ts  # Type declarations
@@ -414,6 +415,87 @@ export function generateAssetTags(script?: string, styles?: string[]): string
 export function renderComponent(Component: FunctionComponent, tag: string, props: Record<string, unknown>): VNode
 ```
 
+#### `solarflare/route-tree` (route-tree.ts)
+
+Optimized route lookups using a hierarchical tree structure. Reduces sequential matching of all URL patterns by narrowing the search space as we traverse, achieving O(path_length) lookups instead of O(num_routes).
+
+```tsx
+import type { Route, RouteMatch, RouteParamDef } from './server'
+
+/**
+ * Route tree node representing part of the route hierarchy
+ * Each node manages static, parameterized, and wildcard routes separately
+ */
+export interface RouteNode {
+  /** Static segment children (e.g., `/users`, `/posts`) */
+  static: Map<string, RouteNode>
+  /** Parameterized segment child (e.g., `/:id`) */
+  parameterized: RouteNode | null
+  /** Parameter name for parameterized nodes */
+  paramName: string | null
+  /** Wildcard segment child (e.g., `/*`) */
+  wildcard: RouteNode | null
+  /** Routes that terminate at this node */
+  routes: Route[]
+}
+
+/**
+ * Match result from tree traversal
+ */
+export interface TreeMatch {
+  /** The matched route */
+  route: Route
+  /** Extracted URL parameters */
+  params: Record<string, string>
+  /** Matched path segments */
+  matchedSegments: string[]
+}
+
+/**
+ * Optimized Route Tree for fast URL matching
+ *
+ * Routes are organized hierarchically:
+ * - Static segments are checked first (fastest)
+ * - Parameterized segments (:id) are checked second
+ * - Wildcard segments (*) are checked last
+ */
+export class RouteTree {
+  /** Root node of the tree */
+  readonly root: RouteNode
+
+  /** Add a route to the tree */
+  addRoute(route: Route): void
+
+  /** Add multiple routes to the tree */
+  addRoutes(routes: Route[]): void
+
+  /** Match a URL against the route tree */
+  match(url: URL): TreeMatch | null
+
+  /** Clear the match cache */
+  clearCache(): void
+
+  /** Get all routes in the tree (for compatibility) */
+  getRoutes(): Route[]
+
+  /** Get tree statistics for debugging */
+  getStats(): {
+    totalRoutes: number
+    cacheSize: number
+    treeDepth: number
+    staticNodes: number
+    paramNodes: number
+    wildcardNodes: number
+  }
+}
+
+/** Create a route tree from an array of routes */
+export function createRouteTree(routes: Route[]): RouteTree
+
+/** Match a URL against the route tree and return a RouteMatch (compatible with matchRoute API) */
+export function matchRouteFromTree(tree: RouteTree, url: URL): RouteMatch | null
+```
+
 #### `solarflare/worker` (worker.tsx)
 
 ```tsx
@@ -591,6 +673,22 @@ interface ValidationResult {
   warnings: string[]
   exportInfo: ExportInfo | null
 }
+
+/** Route tree node for hierarchical URL matching */
+interface RouteNode {
+  static: Map<string, RouteNode>      // Static segment children
+  parameterized: RouteNode | null     // Parameterized segment child (:id)
+  paramName: string | null            // Parameter name for parameterized nodes
+  wildcard: RouteNode | null          // Wildcard segment child (*)
+  routes: Route[]                     // Routes terminating at this node
+}
+
+/** Match result from route tree traversal */
+interface TreeMatch {
+  route: Route                        // The matched route
+  params: Record<string, string>      // Extracted URL parameters
+  matchedSegments: string[]           // Matched path segments
+}
 ```
 
 ### SSR Output Example
@@ -616,9 +714,10 @@ Server renders:
 
 1. **ast.ts** — `parsePath()`, `createProgram()`, `validateModule()`, `generateTypedModulesFile()`
 2. **build.ts** — Route scanning, validation, client/server bundling, chunk manifest generation
-3. **client.tsx** — `define()` with tag validation, `useParams()`, `useData()` hooks
-4. **server.tsx** — `createRouter()`, `matchRoute()`, `findLayouts()`, `wrapWithLayouts()`, `renderComponent()`, `Assets`
-5. **worker.tsx** — Fetch handler with SSR, asset injection from chunk manifest
+3. **route-tree.ts** — `RouteTree` class, `createRouteTree()`, `matchRouteFromTree()` for O(path_length) lookups
+4. **client.tsx** — `define()` with tag validation, `useParams()`, `useData()` hooks
+5. **server.tsx** — `createRouter()`, `matchRoute()`, `findLayouts()`, `wrapWithLayouts()`, `renderComponent()`, `Assets`
+6. **worker.tsx** — Fetch handler with SSR, asset injection from chunk manifest
 
 ### Benefits
 
@@ -626,6 +725,7 @@ Server renders:
 - **Type-safe** — Full TypeScript support for component props and route params
 - **Build-time validation** — Module exports validated against expected signatures
 - **Per-route code splitting** — Each client component gets its own chunk
+- **Fast routing** — O(path_length) lookups via hierarchical route tree with LRU caching
 - **DX** — Just export `define(Component)`, everything else is automatic
 - **Nested layouts** — Automatic layout discovery and nesting
 - **Asset injection** — CSS and JS paths resolved from chunk manifest

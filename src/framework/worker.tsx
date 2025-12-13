@@ -54,7 +54,8 @@ type ServerLoader = (
   request: Request
 ) => Record<string, unknown> | Promise<Record<string, unknown>>
 
-const routes = createRouter(typedModules)
+// Create router with optimized route tree
+const router = createRouter(typedModules)
 
 /**
  * Find paired module (server for client, or client for server)
@@ -88,8 +89,8 @@ async function worker(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // Match route - prefer client routes for SSR
-  const match = matchRoute(routes, url)
+  // Match route using optimized route tree - prefers client routes for SSR
+  const match = matchRoute(router, url)
 
   if (!match) {
     // Try serving as static asset before 404

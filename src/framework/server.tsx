@@ -5,6 +5,10 @@
 import { type VNode, h } from 'preact'
 import { type FunctionComponent } from 'preact'
 import { parsePath } from './ast'
+import { RouteTree, createRouteTree, matchRouteFromTree } from './route-tree'
+
+// Re-export route tree utilities
+export { RouteTree, createRouteTree, matchRouteFromTree, type TreeMatch } from './route-tree'
 
 /**
  * Marker for asset injection - will be replaced with actual script/style tags
@@ -154,10 +158,21 @@ export function flattenModules(
 }
 
 /**
+ * Router result with both array and tree representations
+ */
+export interface Router {
+  /** Flat array of routes (for compatibility) */
+  routes: Route[]
+  /** Optimized route tree for fast lookups */
+  tree: RouteTree
+}
+
+/**
  * Create router from structured module map
+ * Returns both a flat route array and an optimized route tree
  * Filters out _prefixed files, sorts by specificity using parsed pattern metadata
  */
-export function createRouter(modules: ModuleMap): Route[] {
+export function createRouter(modules: ModuleMap): Router {
   // Combine server and client modules for routing (layouts are handled separately)
   const routeModules = { ...modules.server, ...modules.client }
 
@@ -186,7 +201,10 @@ export function createRouter(modules: ModuleMap): Route[] {
   // Register routes for parse() function
   _registeredRoutes = routes
 
-  return routes
+  // Create optimized route tree
+  const tree = createRouteTree(routes)
+
+  return { routes, tree }
 }
 
 /**
@@ -291,9 +309,17 @@ export interface RouteMatch {
 }
 
 /**
- * Match URL against routes using URLPattern with parameter validation
+ * Match URL against routes using optimized route tree or URLPattern fallback
+ * Accepts either a Router object (with tree) or a legacy Route[] array
  */
-export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
+export function matchRoute(router: Router | Route[], url: URL): RouteMatch | null {
+  // Use route tree if available (Router object)
+  if ('tree' in router && router.tree) {
+    return matchRouteFromTree(router.tree, url)
+  }
+
+  // Legacy path: linear search through routes array
+  const routes = Array.isArray(router) ? router : router.routes
   for (const route of routes) {
     const result = route.pattern.exec(url)
     if (result) {
