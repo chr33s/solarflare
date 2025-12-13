@@ -213,31 +213,54 @@ async function extractCssImports(filePath: string): Promise<string[]> {
 
 /**
  * Generate virtual client entry for a single component (for chunked builds)
- * Includes router initialization for SPA navigation
+ * Includes router initialization for SPA navigation with RouterProvider
  */
 function generateChunkedClientEntry(
   meta: ComponentMeta
 ): string {
   return `/**
  * Auto-generated Client Chunk: ${meta.chunk}
- * Registers ${meta.tag} web component
+ * Registers ${meta.tag} web component with RouterProvider
  */
+import { h } from 'preact'
+import { useState, useEffect } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { createRouter } from './framework/client'
-import Component from './app/${meta.file}'
+import { createRouter, RouterProvider } from './framework/client'
+import BaseComponent from './app/${meta.file}'
+
+// Wrapped component with RouterProvider - handles async router init
+function Component(props) {
+  const [router, setRouter] = useState(null)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    // Use existing router if available
+    if (window.__SF_ROUTER__) {
+      setRouter(window.__SF_ROUTER__)
+      return
+    }
+
+    // Load manifest and create router
+    fetch('/routes.json')
+      .then(res => res.json())
+      .then(manifest => {
+        if (!window.__SF_ROUTER__) {
+          window.__SF_ROUTER__ = createRouter(manifest).start()
+        }
+        setRouter(window.__SF_ROUTER__)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Render without router context until ready (SSR content visible)
+  if (!router) return h(BaseComponent, props)
+  
+  return h(RouterProvider, { router }, h(BaseComponent, props))
+}
 
 // Register web component
 register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false })
-
-// Initialize router (idempotent - only starts once)
-if (typeof window !== 'undefined' && !window.__SF_ROUTER__) {
-  fetch('/routes.json')
-    .then(res => res.json())
-    .then(manifest => {
-      window.__SF_ROUTER__ = createRouter(manifest).start()
-    })
-    .catch(() => {})
-}
 `
 }
 

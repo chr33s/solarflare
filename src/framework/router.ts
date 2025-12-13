@@ -317,10 +317,12 @@ export class Router {
       this.#setupLegacyNavigation()
     }
 
-    // Handle initial route
+    // Set initial route match (don't fetch - page is already SSR'd)
     const url = new URL(location.href)
     const match = this.match(url)
-    this.#executeNavigation(url, match, { skipTransition: true })
+    if (match) {
+      this.current.value = match
+    }
 
     this.#started = true
     return this
@@ -422,38 +424,46 @@ export function createRouter(manifest: RoutesManifest, config?: RouterConfig): R
 /** Router context */
 export const RouterContext = createContext<Router | null>(null)
 
-/** Hook to access the router instance */
-export function useRouter(): Router {
-  const router = useContext(RouterContext)
-  if (!router) {
-    throw new Error('useRouter must be used within a RouterProvider')
-  }
-  return router
+/** Hook to access the router instance (may be null during SSR or before init) */
+export function useRouter(): Router | null {
+  return useContext(RouterContext)
 }
 
 /**
  * Hook to get current route match (reactive via signals)
- * Components using this will re-render when route changes
+ * Returns null if router is not available
  */
 export function useRoute(): RouteMatch | null {
   const router = useRouter()
-  return router.current.value
+  return router?.current.value ?? null
 }
 
 /**
  * Hook to get current route params (reactive via signals)
- * Components using this will re-render when params change
+ * Returns empty object if router is not available
  */
 export function useParams(): Record<string, string> {
   const router = useRouter()
-  return router.params.value
+  return router?.params.value ?? {}
 }
 
 /** Hook for programmatic navigation */
 export function useNavigate(): (to: string | URL, options?: NavigateOptions) => Promise<void> {
   const router = useRouter()
   return useCallback(
-    (to: string | URL, options?: NavigateOptions) => router.navigate(to, options),
+    (to: string | URL, options?: NavigateOptions) => {
+      if (router) {
+        return router.navigate(to, options)
+      }
+      // Fallback to regular navigation if no router
+      const url = typeof to === 'string' ? to : to.href
+      if (options?.replace) {
+        location.replace(url)
+      } else {
+        location.href = url
+      }
+      return Promise.resolve()
+    },
     [router]
   )
 }
@@ -461,8 +471,13 @@ export function useNavigate(): (to: string | URL, options?: NavigateOptions) => 
 /** Hook to check if a path matches the current route */
 export function useIsActive(path: string, exact = false): boolean {
   const router = useRouter()
-  const match = router.current.value
-  if (!match) return false
+  const match = router?.current.value
+  if (!match) {
+    // Fallback to checking current location
+    if (typeof location === 'undefined') return false
+    const currentPath = location.pathname
+    return exact ? currentPath === path : currentPath.startsWith(path)
+  }
 
   const currentPath = match.url.pathname
   return exact ? currentPath === path : currentPath.startsWith(path)
@@ -517,7 +532,13 @@ export const Link: FunctionComponent<LinkProps> = ({
     if (event.button !== 0) return // Only left clicks
 
     event.preventDefault()
-    router.navigate(to, options)
+    
+    if (router) {
+      router.navigate(to, options)
+    } else {
+      // Fallback to regular navigation
+      location.href = to
+    }
   }
 
   const classes = [className, isActive && activeClass].filter(Boolean).join(' ') || undefined
