@@ -85,6 +85,8 @@ export interface RouterConfig {
   onNotFound?: (url: URL) => void
   /** Called after navigation completes */
   onNavigate?: (match: RouteMatch) => void
+  /** Called when navigation fails with an error */
+  onError?: (error: Error, url: URL) => void
 }
 
 // ============================================================================
@@ -132,6 +134,9 @@ export class Router {
       scrollBehavior: config.scrollBehavior ?? 'auto',
       onNotFound: config.onNotFound ?? (() => {}),
       onNavigate: config.onNavigate ?? (() => {}),
+      onError: config.onError ?? ((error, url) => {
+        console.error(`[solarflare] Navigation error for ${url.href}:`, error)
+      }),
     }
 
     this.params = computed(() => this.current.value?.params ?? {})
@@ -157,6 +162,24 @@ export class Router {
       const bStatic = (b.entry.pattern.match(/[^:*]+/g) || []).join('').length
       return bStatic - aStatic
     })
+  }
+
+  /** Handle navigation errors */
+  #handleError(error: Error, url: URL): void {
+    this.#config.onError(error, url)
+    
+    // Render error UI in #app
+    const app = document.querySelector('#app')
+    if (app) {
+      app.innerHTML = `
+        <div class="error-page">
+          <h1>Something went wrong</h1>
+          <p>${error.message}</p>
+          <p class="error-url">Failed to load: ${url.pathname}</p>
+          <a href="/">Go home</a>
+        </div>
+      `
+    }
   }
 
   /** Match a URL against routes */
@@ -196,20 +219,28 @@ export class Router {
     options: NavigateOptions
   ): Promise<void> {
     const doTransition = async () => {
-      if (match) {
-        await this.#loadRoute(match, url)
-        this.current.value = match
-        this.#config.onNavigate(match)
-      } else {
-        this.current.value = null
-        this.#config.onNotFound(url)
+      try {
+        if (match) {
+          await this.#loadRoute(match, url)
+          this.current.value = match
+          this.#config.onNavigate(match)
+        } else {
+          this.current.value = null
+          this.#config.onNotFound(url)
+        }
+        this.#handleScroll(url)
+      } catch (error) {
+        this.#handleError(error instanceof Error ? error : new Error(String(error)), url)
       }
-      this.#handleScroll(url)
     }
 
     // Use View Transitions if enabled
     if (this.#config.viewTransitions && supportsViewTransitions() && !options.skipTransition) {
-      await (document as any).startViewTransition(doTransition).finished
+      try {
+        await (document as any).startViewTransition(doTransition).finished
+      } catch (error) {
+        this.#handleError(error instanceof Error ? error : new Error(String(error)), url)
+      }
     } else {
       await doTransition()
     }

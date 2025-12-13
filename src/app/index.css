@@ -21,3 +21,40 @@ nav a:hover {
 nav a.active {
   font-weight: bold;
 }
+
+.error-page {
+  padding: 2rem;
+  text-align: center;
+}
+
+.error-page h1 {
+  color: #c00;
+  margin-bottom: 1rem;
+}
+
+.error-page p {
+  margin-bottom: 0.5rem;
+}
+
+.error-page .error-url {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.error-page a,
+.error-page button {
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #333;
+  color: white;
+  text-decoration: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.error-page a:hover,
+.error-page button:hover {
+  background: #555;
+}
