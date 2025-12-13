@@ -1,12 +1,10 @@
 /**
  * Solarflare Client Router
- * SPA navigation using native URLPattern, Navigation API, and View Transitions
- * Optimized for build-time routes with Preact integration
+ * Lean SPA navigation using native URLPattern, Navigation API, and View Transitions
+ * Uses signals-core for reactive state without Preact dependency
  */
 
-import { createContext, h, type FunctionComponent, type VNode } from 'preact'
-import { useContext, useEffect, useCallback } from 'preact/hooks'
-import { signal, computed, type ReadonlySignal } from '@preact/signals'
+import { signal, computed, effect, type ReadonlySignal } from '@preact/signals-core'
 
 // ============================================================================
 // Types
@@ -89,6 +87,11 @@ export interface RouterConfig {
   onError?: (error: Error, url: URL) => void
 }
 
+/**
+ * Subscription callback for route changes
+ */
+export type RouteSubscriber = (match: RouteMatch | null) => void
+
 // ============================================================================
 // Feature Detection
 // ============================================================================
@@ -114,18 +117,22 @@ export function supportsNavigation(): boolean {
  * - URLPattern for route matching
  * - Navigation API for intercepting navigation
  * - View Transitions API for smooth page transitions
- * - Preact Signals for reactive state
+ * - Signals for reactive state (framework-agnostic)
  */
 export class Router {
   #routes: Route[] = []
   #config: Required<RouterConfig>
   #started = false
+  #cleanupFns: (() => void)[] = []
 
-  /** Reactive current match - components re-render when this changes */
+  /** Reactive current match */
   readonly current = signal<RouteMatch | null>(null)
 
   /** Reactive params derived from current match */
   readonly params: ReadonlySignal<Record<string, string>>
+
+  /** Reactive pathname for easy access */
+  readonly pathname: ReadonlySignal<string>
 
   constructor(manifest: RoutesManifest, config: RouterConfig = {}) {
     this.#config = {
@@ -140,6 +147,7 @@ export class Router {
     }
 
     this.params = computed(() => this.current.value?.params ?? {})
+    this.pathname = computed(() => this.current.value?.url.pathname ?? '')
     this.#loadManifest(manifest)
   }
 
@@ -167,7 +175,7 @@ export class Router {
   /** Handle navigation errors */
   #handleError(error: Error, url: URL): void {
     this.#config.onError(error, url)
-    
+
     // Render error UI in #app
     const app = document.querySelector('#app')
     if (app) {
@@ -252,9 +260,9 @@ export class Router {
 
     // Fetch the new page HTML from the server
     const response = await fetch(url.href, {
-      headers: { 'Accept': 'text/html' }
+      headers: { Accept: 'text/html' },
     })
-    
+
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url.href}: ${response.status}`)
     }
@@ -271,21 +279,23 @@ export class Router {
       currentContent.innerHTML = newContent.innerHTML
     }
 
-    // Load any new CSS
+    // Load any new CSS (ensure absolute URL)
     if (entry.styles?.length) {
       for (const href of entry.styles) {
-        if (!document.querySelector(`link[href="${href}"]`)) {
+        const absoluteHref = new URL(href, location.origin).href
+        if (!document.querySelector(`link[href="${absoluteHref}"], link[href="${href}"]`)) {
           const link = document.createElement('link')
           link.rel = 'stylesheet'
-          link.href = href
+          link.href = absoluteHref
           document.head.appendChild(link)
         }
       }
     }
 
-    // Load JS chunk for web component registration
+    // Load JS chunk for web component registration (ensure absolute URL)
     if (entry.chunk) {
-      await import(entry.chunk)
+      const absoluteChunk = new URL(entry.chunk, location.origin).href
+      await import(/* @vite-ignore */ absoluteChunk)
     }
   }
 
@@ -328,8 +338,12 @@ export class Router {
     return this
   }
 
-  /** Stop the router */
+  /** Stop the router and cleanup listeners */
   stop(): this {
+    for (const cleanup of this.#cleanupFns) {
+      cleanup()
+    }
+    this.#cleanupFns = []
     this.#started = false
     return this
   }
@@ -337,7 +351,7 @@ export class Router {
   /** Setup Navigation API interception */
   #setupNavigationAPI(): void {
     const nav = (window as any).navigation
-    nav.addEventListener('navigate', (event: any) => {
+    const handler = (event: any) => {
       if (!event.canIntercept || event.downloadRequest) return
 
       const url = new URL(event.destination.url)
@@ -350,18 +364,21 @@ export class Router {
         scroll: 'manual',
         handler: () => this.#executeNavigation(url, match, {}),
       })
-    })
+    }
+
+    nav.addEventListener('navigate', handler)
+    this.#cleanupFns.push(() => nav.removeEventListener('navigate', handler))
   }
 
   /** Setup legacy popstate/click handlers */
   #setupLegacyNavigation(): void {
-    addEventListener('popstate', () => {
+    const popstateHandler = () => {
       const url = new URL(location.href)
       const match = this.match(url)
       this.#executeNavigation(url, match, { skipTransition: true })
-    })
+    }
 
-    document.addEventListener('click', (event) => {
+    const clickHandler = (event: MouseEvent) => {
       const link = (event.target as Element).closest('a')
       if (!link) return
 
@@ -379,18 +396,68 @@ export class Router {
       } catch {
         // Invalid URL, let browser handle it
       }
+    }
+
+    addEventListener('popstate', popstateHandler)
+    document.addEventListener('click', clickHandler)
+
+    this.#cleanupFns.push(
+      () => removeEventListener('popstate', popstateHandler),
+      () => document.removeEventListener('click', clickHandler)
+    )
+  }
+
+  // ============================================================================
+  // Subscription API (for non-signal consumers)
+  // ============================================================================
+
+  /**
+   * Subscribe to route changes
+   * Returns an unsubscribe function
+   */
+  subscribe(callback: RouteSubscriber): () => void {
+    return effect(() => {
+      callback(this.current.value)
     })
   }
 
-  // Navigation helpers
+  // ============================================================================
+  // Navigation Helpers
+  // ============================================================================
+
   back(): void {
     history.back()
   }
+
   forward(): void {
     history.forward()
   }
+
   go(delta: number): void {
     history.go(delta)
+  }
+
+  /** Check if a path matches the current route */
+  isActive(path: string, exact = false): boolean {
+    const match = this.current.value
+    if (!match) {
+      if (typeof location === 'undefined') return false
+      const currentPath = location.pathname
+      return exact ? currentPath === path : currentPath.startsWith(path)
+    }
+
+    const currentPath = match.url.pathname
+    return exact ? currentPath === path : currentPath.startsWith(path)
+  }
+
+  /** Reactive isActive check (returns a computed signal) */
+  isActiveSignal(path: string, exact = false): ReadonlySignal<boolean> {
+    return computed(() => {
+      const match = this.current.value
+      if (!match) return false
+      const currentPath = match.url.pathname
+      return exact ? currentPath === path : currentPath.startsWith(path)
+    })
   }
 }
 
@@ -418,174 +485,162 @@ export function createRouter(manifest: RoutesManifest, config?: RouterConfig): R
 }
 
 // ============================================================================
-// Preact Context & Hooks
+// Global Router Instance (optional singleton pattern)
 // ============================================================================
 
-/** Router context */
-export const RouterContext = createContext<Router | null>(null)
+let globalRouter: Router | null = null
 
-/** Hook to access the router instance (may be null during SSR or before init) */
-export function useRouter(): Router | null {
-  return useContext(RouterContext)
+/**
+ * Get the global router instance
+ * Throws if router hasn't been initialized
+ */
+export function getRouter(): Router {
+  if (!globalRouter) {
+    throw new Error('[solarflare] Router not initialized. Call initRouter() first.')
+  }
+  return globalRouter
 }
 
 /**
- * Hook to get current route match (reactive via signals)
- * Returns null if router is not available
+ * Initialize the global router instance
+ * Returns the router for chaining
  */
-export function useRoute(): RouteMatch | null {
-  const router = useRouter()
-  return router?.current.value ?? null
+export function initRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
+  globalRouter = createRouter(manifest, config)
+  return globalRouter
+}
+
+// ============================================================================
+// Convenience Functions (use global router)
+// ============================================================================
+
+/**
+ * Navigate using the global router
+ * @example navigate('/blog/my-post')
+ */
+export function navigate(to: string | URL, options?: NavigateOptions): Promise<void> {
+  return getRouter().navigate(to, options)
 }
 
 /**
- * Hook to get current route params (reactive via signals)
- * Returns empty object if router is not available
+ * Check if path is active using global router
  */
-export function useParams(): Record<string, string> {
-  const router = useRouter()
-  return router?.params.value ?? {}
+export function isActive(path: string, exact = false): boolean {
+  return getRouter().isActive(path, exact)
 }
 
-/** Hook for programmatic navigation */
-export function useNavigate(): (to: string | URL, options?: NavigateOptions) => Promise<void> {
-  const router = useRouter()
-  return useCallback(
-    (to: string | URL, options?: NavigateOptions) => {
-      if (router) {
-        return router.navigate(to, options)
-      }
-      // Fallback to regular navigation if no router
-      const url = typeof to === 'string' ? to : to.href
-      if (options?.replace) {
-        location.replace(url)
-      } else {
-        location.href = url
-      }
-      return Promise.resolve()
-    },
-    [router]
-  )
-}
+// ============================================================================
+// Link Enhancement (vanilla DOM)
+// ============================================================================
 
-/** Hook to check if a path matches the current route */
-export function useIsActive(path: string, exact = false): boolean {
-  const router = useRouter()
-  const match = router?.current.value
-  if (!match) {
-    // Fallback to checking current location
-    if (typeof location === 'undefined') return false
-    const currentPath = location.pathname
-    return exact ? currentPath === path : currentPath.startsWith(path)
+/**
+ * Enhance existing anchor elements with SPA navigation
+ * Call this after dynamic content is added to the page
+ *
+ * @example
+ * ```ts
+ * // Enhance all links in a container
+ * enhanceLinks(document.querySelector('.dynamic-content'))
+ *
+ * // Or enhance specific links
+ * enhanceLinks(document.querySelectorAll('a[data-spa]'))
+ * ```
+ */
+export function enhanceLinks(
+  target: Element | NodeListOf<Element> | null,
+  router?: Router
+): void {
+  if (!target) return
+
+  const r = router ?? globalRouter
+  if (!r) {
+    console.warn('[solarflare] Cannot enhance links: router not initialized')
+    return
   }
 
-  const currentPath = match.url.pathname
-  return exact ? currentPath === path : currentPath.startsWith(path)
+  const elements = 'forEach' in target ? target : [target]
+
+  elements.forEach((el) => {
+    const links = el.tagName === 'A' ? [el as HTMLAnchorElement] : el.querySelectorAll('a')
+
+    links.forEach((link) => {
+      // Skip already enhanced or external links
+      if (link.dataset.spaEnhanced) return
+      if (link.target && link.target !== '_self') return
+
+      const href = link.getAttribute('href')
+      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:'))
+        return
+
+      try {
+        const url = new URL(href, location.origin)
+        if (url.origin !== location.origin) return
+
+        link.dataset.spaEnhanced = 'true'
+
+        link.addEventListener('click', (event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+          if (event.button !== 0) return
+
+          event.preventDefault()
+          r.navigate(url)
+        })
+      } catch {
+        // Invalid URL, skip
+      }
+    })
+  })
 }
 
 // ============================================================================
-// Preact Components
+// Active Link Styling (vanilla DOM)
 // ============================================================================
 
-/** Link component props */
-export interface LinkProps {
-  /** Target URL */
-  to: string
-  /** Navigation options */
-  options?: NavigateOptions
-  /** Link children */
-  children?: VNode | VNode[] | string
-  /** Additional class names */
-  class?: string
-  /** Active class name when link matches current route */
+/**
+ * Update active state classes on links reactively
+ * Returns cleanup function
+ *
+ * @example
+ * ```ts
+ * // Add 'active' class to current route links
+ * const cleanup = trackActiveLinks({
+ *   selector: 'nav a',
+ *   activeClass: 'active',
+ *   exact: false
+ * })
+ * ```
+ */
+export function trackActiveLinks(options: {
+  selector: string
   activeClass?: string
-  /** Whether to match exactly */
   exact?: boolean
-  /** Additional HTML attributes */
-  [key: string]: unknown
-}
+  router?: Router
+}): () => void {
+  const { selector, activeClass = 'active', exact = false, router } = options
 
-/**
- * Link component for SPA navigation with view transitions
- *
- * @example
- * ```tsx
- * <Link to="/blog/my-post">Read Post</Link>
- * <Link to="/about" activeClass="active" exact>About</Link>
- * ```
- */
-export const Link: FunctionComponent<LinkProps> = ({
-  to,
-  options,
-  children,
-  class: className,
-  activeClass,
-  exact = false,
-  ...rest
-}) => {
-  const router = useRouter()
-  const isActive = useIsActive(to, exact)
-
-  const handleClick = (event: MouseEvent) => {
-    // Don't intercept modified clicks
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    if (event.button !== 0) return // Only left clicks
-
-    event.preventDefault()
-    
-    if (router) {
-      router.navigate(to, options)
-    } else {
-      // Fallback to regular navigation
-      location.href = to
-    }
+  const r = router ?? globalRouter
+  if (!r) {
+    console.warn('[solarflare] Cannot track active links: router not initialized')
+    return () => {}
   }
 
-  const classes = [className, isActive && activeClass].filter(Boolean).join(' ') || undefined
+  return effect(() => {
+    const match = r.current.value
+    const currentPath = match?.url.pathname ?? location.pathname
 
-  return h(
-    'a',
-    {
-      href: to,
-      onClick: handleClick,
-      class: classes,
-      'aria-current': isActive ? 'page' : undefined,
-      ...rest,
-    },
-    children
-  )
-}
+    document.querySelectorAll<HTMLAnchorElement>(selector).forEach((link) => {
+      const href = link.getAttribute('href')
+      if (!href) return
 
-/** Router provider props */
-export interface RouterProviderProps {
-  /** Router instance */
-  router: Router
-  /** Children to render */
-  children?: VNode | VNode[]
-}
+      try {
+        const url = new URL(href, location.origin)
+        const isMatch = exact ? url.pathname === currentPath : currentPath.startsWith(url.pathname)
 
-/**
- * Router provider component
- *
- * @example
- * ```tsx
- * import manifest from 'solarflare:routes'
- *
- * const router = createRouter(manifest, { viewTransitions: true })
- *
- * render(
- *   <RouterProvider router={router}>
- *     <App />
- *   </RouterProvider>,
- *   document.getElementById('app')
- * )
- * ```
- */
-export const RouterProvider: FunctionComponent<RouterProviderProps> = ({ router, children }) => {
-  useEffect(() => {
-    router.start()
-    return () => router.stop()
-  }, [router])
-
-  return h(RouterContext.Provider, { value: router }, children)
+        link.classList.toggle(activeClass, isMatch)
+        link.setAttribute('aria-current', isMatch ? 'page' : '')
+      } catch {
+        // Invalid URL, skip
+      }
+    })
+  })
 }

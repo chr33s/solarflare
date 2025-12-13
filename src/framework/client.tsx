@@ -270,30 +270,28 @@ export { ParamsContext, DataContext }
  * Re-export router for client-side SPA navigation
  */
 export {
-  // Factory function
+  // Factory functions
   createRouter,
+  initRouter,
+  getRouter,
   // Feature detection
   supportsNavigation,
   supportsViewTransitions,
   // Router class
   Router,
-  RouterContext,
-  // Preact hooks
-  useRouter,
-  useRoute,
-  useParams as useRouteParams,
-  useNavigate,
-  useIsActive,
-  // Preact components
-  RouterProvider,
-  Link,
+  // Convenience functions
+  navigate,
+  isActive,
+  // DOM utilities
+  enhanceLinks,
+  trackActiveLinks,
   // Types
   type RouteManifestEntry,
   type RoutesManifest,
   type RouteMatch,
   type NavigateOptions,
   type RouterConfig,
-  type LinkProps,
-  type RouterProviderProps,
+  type RouteSubscriber,
 } from './router'
+
 

@@ -213,50 +213,56 @@ async function extractCssImports(filePath: string): Promise<string[]> {
 
 /**
  * Generate virtual client entry for a single component (for chunked builds)
- * Includes router initialization for SPA navigation with RouterProvider
+ * Includes router initialization for SPA navigation
  */
 function generateChunkedClientEntry(
   meta: ComponentMeta
 ): string {
   return `/**
  * Auto-generated Client Chunk: ${meta.chunk}
- * Registers ${meta.tag} web component with RouterProvider
+ * Registers ${meta.tag} web component with router
  */
 import { h } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { createRouter, RouterProvider } from './framework/client'
+import { initRouter, getRouter } from './framework/client'
 import BaseComponent from './app/${meta.file}'
 
-// Wrapped component with RouterProvider - handles async router init
+// Initialize router once globally
+function ensureRouter() {
+  if (typeof window === 'undefined') return null
+  
+  // Use existing router if available
+  if (window.__SF_ROUTER__) return window.__SF_ROUTER__
+  
+  // Create router from manifest (must be pre-loaded or inlined)
+  if (window.__SF_ROUTES__) {
+    window.__SF_ROUTER__ = initRouter(window.__SF_ROUTES__).start()
+    return window.__SF_ROUTER__
+  }
+  
+  return null
+}
+
+// Wrapped component - initializes router on mount
 function Component(props) {
-  const [router, setRouter] = useState(null)
+  const [ready, setReady] = useState(!!window.__SF_ROUTER__)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (ready) return
     
-    // Use existing router if available
-    if (window.__SF_ROUTER__) {
-      setRouter(window.__SF_ROUTER__)
-      return
-    }
-
     // Load manifest and create router
     fetch('/routes.json')
       .then(res => res.json())
       .then(manifest => {
-        if (!window.__SF_ROUTER__) {
-          window.__SF_ROUTER__ = createRouter(manifest).start()
-        }
-        setRouter(window.__SF_ROUTER__)
+        window.__SF_ROUTES__ = manifest
+        ensureRouter()
+        setReady(true)
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => setReady(true)) // Render anyway on error
+  }, [ready])
 
-  // Render without router context until ready (SSR content visible)
-  if (!router) return h(BaseComponent, props)
-  
-  return h(RouterProvider, { router }, h(BaseComponent, props))
+  return h(BaseComponent, props)
 }
 
 // Register web component
