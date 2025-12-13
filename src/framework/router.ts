@@ -197,7 +197,7 @@ export class Router {
   ): Promise<void> {
     const doTransition = async () => {
       if (match) {
-        await this.#loadRoute(match)
+        await this.#loadRoute(match, url)
         this.current.value = match
         this.#config.onNavigate(match)
       } else {
@@ -215,11 +215,32 @@ export class Router {
     }
   }
 
-  /** Load route assets (CSS and JS chunk) */
-  async #loadRoute(match: RouteMatch): Promise<void> {
+  /** Load route assets and swap page content */
+  async #loadRoute(match: RouteMatch, url: URL): Promise<void> {
     const { entry } = match
 
-    // Load CSS
+    // Fetch the new page HTML from the server
+    const response = await fetch(url.href, {
+      headers: { 'Accept': 'text/html' }
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${url.href}: ${response.status}`)
+    }
+
+    const html = await response.text()
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+
+    // Swap the main content (#app or body)
+    const newContent = doc.querySelector('#app') ?? doc.body
+    const currentContent = document.querySelector('#app') ?? document.body
+
+    if (newContent && currentContent) {
+      currentContent.innerHTML = newContent.innerHTML
+    }
+
+    // Load any new CSS
     if (entry.styles?.length) {
       for (const href of entry.styles) {
         if (!document.querySelector(`link[href="${href}"]`)) {
@@ -231,7 +252,7 @@ export class Router {
       }
     }
 
-    // Load JS chunk
+    // Load JS chunk for web component registration
     if (entry.chunk) {
       await import(entry.chunk)
     }

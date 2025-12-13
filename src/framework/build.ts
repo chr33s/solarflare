@@ -213,6 +213,7 @@ async function extractCssImports(filePath: string): Promise<string[]> {
 
 /**
  * Generate virtual client entry for a single component (for chunked builds)
+ * Includes router initialization for SPA navigation
  */
 function generateChunkedClientEntry(
   meta: ComponentMeta
@@ -222,9 +223,21 @@ function generateChunkedClientEntry(
  * Registers ${meta.tag} web component
  */
 import register from 'preact-custom-element'
+import { createRouter } from './framework/client'
 import Component from './app/${meta.file}'
 
+// Register web component
 register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false })
+
+// Initialize router (idempotent - only starts once)
+if (typeof window !== 'undefined' && !window.__SF_ROUTER__) {
+  fetch('/routes.json')
+    .then(res => res.json())
+    .then(manifest => {
+      window.__SF_ROUTER__ = createRouter(manifest).start()
+    })
+    .catch(() => {})
+}
 `
 }
 
@@ -543,8 +556,8 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
     routes: [...clientRoutesManifest.routes, ...serverRoutes],
   }
 
-  // Write the combined routes manifest to dist (exposed as virtual module solarflare:routes)
-  const routesManifestPath = './dist/routes.json'
+  // Write the combined routes manifest to client dist (for client-side router)
+  const routesManifestPath = './dist/client/routes.json'
   await Bun.write(routesManifestPath, JSON.stringify(combinedManifest, null, 2))
 
   // Clean up temp build files
