@@ -4,9 +4,8 @@
  * Auto-generates client and server entries, then builds both bundles
  */
 import { Glob } from 'bun'
-import { exists } from 'fs/promises'
+import { watch } from 'fs'
 import { join } from 'path'
-import { unlink } from 'fs/promises'
 import ts from 'typescript'
 import {
   createProgram,
@@ -18,10 +17,43 @@ import {
   type ValidationResult,
 } from './ast'
 
-const APP_DIR = './src/app'
-const DIST_CLIENT = './dist/client'
-const DIST_SERVER = './dist/server'
-const PUBLIC_DIR = './public'
+
+// Resolve paths relative to project root (two levels up from src/framework/)
+const ROOT_DIR = join(import.meta.dir, '../..')
+const APP_DIR = join(ROOT_DIR, 'src/app')
+const DIST_DIR = join(ROOT_DIR, 'dist')
+const DIST_CLIENT = join(DIST_DIR, 'client')
+const DIST_SERVER = join(DIST_DIR, 'server')
+const PUBLIC_DIR = join(ROOT_DIR, 'public')
+
+// Generated file paths
+const MODULES_PATH = join(DIST_DIR, '.modules.generated.ts')
+const CHUNKS_PATH = join(DIST_DIR, '.chunks.generated.json')
+const ROUTES_TYPE_PATH = join(DIST_DIR, 'routes.d.ts')
+const ROUTES_MANIFEST_PATH = join(DIST_CLIENT, 'routes.json')
+
+/**
+ * Safe unlink that ignores ENOENT errors (file doesn't exist)
+ */
+async function safeUnlink(path: string): Promise<void> {
+  const file = Bun.file(path)
+  if (await file.exists()) {
+    await file.delete()
+  }
+}
+
+/**
+ * Safe rename (copy + delete) that ignores missing source files
+ */
+async function safeRename(src: string, dest: string): Promise<boolean> {
+  const srcFile = Bun.file(src)
+  if (!(await srcFile.exists())) {
+    return false
+  }
+  await Bun.write(dest, srcFile)
+  await srcFile.delete()
+  return true
+}
 
 /**
  * Validate all route files and report errors/warnings using AST analysis
@@ -225,8 +257,8 @@ function generateChunkedClientEntry(
 import { h } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { initRouter, getRouter } from './framework/client'
-import BaseComponent from './app/${meta.file}'
+import { initRouter, getRouter } from '../src/framework/client'
+import BaseComponent from '../src/app/${meta.file}'
 
 // Initialize router once globally
 function ensureRouter() {
@@ -316,13 +348,62 @@ async function buildClient() {
   // Get metadata for all components
   const metas = clientFiles.map((file) => getComponentMeta(program, file))
 
+  // Copy static assets FIRST (before JS build triggers wrangler reload)
+  // This ensures CSS/assets are available when browser refreshes
+  
+  // Scan layouts for CSS imports and copy them to dist
+  const layoutFiles = await findLayouts()
+  const layoutCssMap: Record<string, string[]> = {}  // layout directory -> CSS files
+
+  for (const layoutFile of layoutFiles) {
+    const layoutPath = join(APP_DIR, layoutFile)
+    const cssImports = await extractCssImports(layoutPath)
+    
+    if (cssImports.length > 0) {
+      const cssOutputPaths: string[] = []
+      const layoutDir = layoutFile.split('/').slice(0, -1).join('/')
+      
+      for (const cssImport of cssImports) {
+        // Resolve CSS path relative to layout file
+        const cssSourcePath = join(APP_DIR, layoutDir, cssImport)
+        
+        // Generate output filename: retain the imported CSS filename
+        const cssFileName = cssImport.replace('./', '')
+        const cssOutputName = cssFileName
+        
+        // Copy CSS to dist
+        if (await Bun.file(cssSourcePath).exists()) {
+          const destPath = join(DIST_CLIENT, cssOutputName)
+          await Bun.write(destPath, Bun.file(cssSourcePath))
+          cssOutputPaths.push(`/${cssOutputName}`)
+        }
+      }
+      
+      if (cssOutputPaths.length > 0) {
+        // Store by layout directory pattern (e.g., "/blog" or "/")
+        const layoutPattern = layoutDir ? `/${layoutDir}` : '/'
+        layoutCssMap[layoutPattern] = cssOutputPaths
+      }
+    }
+  }
+
+  // Copy public assets if directory exists
+  if (await Bun.file(PUBLIC_DIR).exists()) {
+    const publicFiles = await scanFiles('**/*', PUBLIC_DIR)
+    for (const file of publicFiles) {
+      const src = join(PUBLIC_DIR, file)
+      const dest = join(DIST_CLIENT, file)
+      await Bun.write(dest, Bun.file(src))
+    }
+  }
+
   // Generate individual entry files for each component
   const entryPaths: string[] = []
   const entryToMeta: Record<string, ComponentMeta> = {}
 
   for (const meta of metas) {
     const entryContent = generateChunkedClientEntry(meta)
-    const entryPath = `./src/.entry-${meta.chunk.replace('.js', '')}.generated.tsx`
+    const entryPath = join(DIST_DIR, `.entry-${meta.chunk.replace('.js', '')}.generated.tsx`)
     await Bun.write(entryPath, entryContent)
     entryPaths.push(entryPath)
     entryToMeta[entryPath] = meta
@@ -374,8 +455,7 @@ async function buildClient() {
         // Rename to the desired chunk name
         const targetPath = join(DIST_CLIENT, meta.chunk)
         if (outputPath !== targetPath) {
-          await Bun.write(targetPath, Bun.file(outputPath))
-          await unlink(outputPath)
+          await safeRename(outputPath, targetPath)
         }
         manifest.chunks[meta.parsed.pattern] = `/${meta.chunk}`
         manifest.tags[meta.tag] = `/${meta.chunk}`
@@ -394,44 +474,7 @@ async function buildClient() {
       // Extract the route name and rename to a clean CSS name
       const baseName = outputName.replace('.entry-', '').replace('.generated.css', '')
       const targetPath = join(DIST_CLIENT, `${baseName}.css`)
-      await Bun.write(targetPath, Bun.file(outputPath))
-      await unlink(outputPath)
-    }
-  }
-
-  // Scan layouts for CSS imports and copy them to dist
-  const layoutFiles = await findLayouts()
-  const layoutCssMap: Record<string, string[]> = {}  // layout directory -> CSS files
-
-  for (const layoutFile of layoutFiles) {
-    const layoutPath = join(APP_DIR, layoutFile)
-    const cssImports = await extractCssImports(layoutPath)
-    
-    if (cssImports.length > 0) {
-      const cssOutputPaths: string[] = []
-      const layoutDir = layoutFile.split('/').slice(0, -1).join('/')
-      
-      for (const cssImport of cssImports) {
-        // Resolve CSS path relative to layout file
-        const cssSourcePath = join(APP_DIR, layoutDir, cssImport)
-        
-        // Generate output filename: retain the imported CSS filename
-        const cssFileName = cssImport.replace('./', '')
-        const cssOutputName = cssFileName
-        
-        // Copy CSS to dist
-        if (await Bun.file(cssSourcePath).exists()) {
-          const destPath = join(DIST_CLIENT, cssOutputName)
-          await Bun.write(destPath, Bun.file(cssSourcePath))
-          cssOutputPaths.push(`/${cssOutputName}`)
-        }
-      }
-      
-      if (cssOutputPaths.length > 0) {
-        // Store by layout directory pattern (e.g., "/blog" or "/")
-        const layoutPattern = layoutDir ? `/${layoutDir}` : '/'
-        layoutCssMap[layoutPattern] = cssOutputPaths
-      }
+      await safeRename(outputPath, targetPath)
     }
   }
 
@@ -452,9 +495,8 @@ async function buildClient() {
     }
   }
 
-  // Write chunk manifest for the server (temp file, deleted after build)
-  const manifestPath = './src/app/.chunks.generated.json'
-  await Bun.write(manifestPath, JSON.stringify(manifest, null, 2))
+  // Write chunk manifest for the server
+  await Bun.write(CHUNKS_PATH, JSON.stringify(manifest, null, 2))
 
   // Generate routes manifest for client-side router (client routes only for now)
   // Server routes will be added in buildServer phase
@@ -472,21 +514,9 @@ async function buildClient() {
   // Return manifest for server to augment with server routes
   console.log(`   Generated ${metas.length} chunk(s)`)
 
-  // Copy public assets if directory exists
-  if (await exists(PUBLIC_DIR)) {
-    const publicFiles = await scanFiles('**/*', PUBLIC_DIR)
-    for (const file of publicFiles) {
-      const src = join(PUBLIC_DIR, file)
-      const dest = join(DIST_CLIENT, file)
-      await Bun.write(dest, Bun.file(src))
-    }
-  }
-
   // Clean up temporary entry files
   for (const entryPath of entryPaths) {
-    if (await Bun.file(entryPath).exists()) {
-      await unlink(entryPath)
-    }
+    await safeUnlink(entryPath)
   }
 
   console.log('✅ Client build complete')
@@ -512,9 +542,8 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
   }
 
   // Generate route types file to dist (exposed as virtual module solarflare:routes/types)
-  const routesTypePath = './dist/routes.d.ts'
   const routesTypeContent = generateRoutesTypeFile(routeFiles)
-  await Bun.write(routesTypePath, routesTypeContent)
+  await Bun.write(ROUTES_TYPE_PATH, routesTypeContent)
   console.log('   Generated route types')
 
   // Create shared program for AST analysis of all modules
@@ -541,13 +570,12 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
     process.exit(1)
   }
 
-  // Write generated modules file (imported by worker.tsx, temp file deleted after build)
-  const modulesPath = './src/app/.modules.generated.ts'
-  await Bun.write(modulesPath, modulesContent)
+  // Write generated modules file (imported by worker.tsx)
+  await Bun.write(MODULES_PATH, modulesContent)
 
   console.log('📦 Building server bundle...')
   const result = await Bun.build({
-    entrypoints: ['./src/app/index.ts'],
+    entrypoints: [join(APP_DIR, 'index.ts')],
     outdir: DIST_SERVER,
     target: 'bun',
     naming: '[dir]/index.[ext]',
@@ -586,16 +614,7 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
   }
 
   // Write the combined routes manifest to client dist (for client-side router)
-  const routesManifestPath = './dist/client/routes.json'
-  await Bun.write(routesManifestPath, JSON.stringify(combinedManifest, null, 2))
-
-  // Clean up temp build files
-  const generatedFiles = [modulesPath, './src/app/.chunks.generated.json']
-  for (const file of generatedFiles) {
-    if (await Bun.file(file).exists()) {
-      await unlink(file)
-    }
-  }
+  await Bun.write(ROUTES_MANIFEST_PATH, JSON.stringify(combinedManifest, null, 2))
 
   console.log('✅ Server build complete')
 }
@@ -615,4 +634,105 @@ async function build() {
   console.log(`\n🚀 Build completed in ${duration}s\n`)
 }
 
-build()
+// CLI entry point
+const args = process.argv.slice(2)
+
+/**
+ * Watch mode - rebuilds on file changes, optionally starts dev server
+ */
+async function watchMode() {
+  console.log('\n⚡ Solarflare Dev Mode\n')
+
+  // Initial build
+  try {
+    await build()
+  } catch (err) {
+    console.error('❌ Initial build failed:', err)
+  }
+
+  // Start wrangler dev server as child process (after initial build)
+  let wranglerProc: Bun.Subprocess | null = null
+  
+  if (args.includes('--serve') || args.includes('-s')) {
+    console.log('🌐 Starting wrangler dev server...\n')
+    wranglerProc = Bun.spawn({
+      cmd: ['bun', 'wrangler', 'dev'],
+      stdout: 'inherit',
+      stderr: 'inherit',
+      stdin: 'pipe',  // Don't inherit stdin so we control SIGINT
+      env: { ...process.env },
+    })
+  }
+
+  console.log('\n👀 Watching for changes...\n')
+
+  // Debounce timer and build lock
+  let debounceTimer: Timer | null = null
+  let isBuilding = false
+  let pendingBuild = false
+  const DEBOUNCE_MS = 150
+
+  async function doBuild(filename: string) {
+    if (isBuilding) {
+      pendingBuild = true
+      return
+    }
+
+    isBuilding = true
+    console.log(`\n🔄 Change detected: ${filename}\n`)
+    try {
+      await build()
+      console.log('\n👀 Watching for changes...\n')
+    } catch (err) {
+      console.error('❌ Build failed:', err)
+      console.log('\n👀 Watching for changes...\n')
+    } finally {
+      isBuilding = false
+      if (pendingBuild) {
+        pendingBuild = false
+        await doBuild('(queued changes)')
+      }
+    }
+  }
+
+  const watcher = watch(APP_DIR, { recursive: true }, (_event, filename) => {
+    if (!filename) return
+
+    // Skip generated files
+    if (filename.endsWith('.generated.ts') || filename.endsWith('.generated.json')) {
+      return
+    }
+
+    // Clear existing timer
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+    }
+
+    // Set new debounced rebuild
+    debounceTimer = setTimeout(() => {
+      doBuild(filename)
+    }, DEBOUNCE_MS)
+  })
+
+  // Cleanup on exit
+  let isExiting = false
+  process.on('SIGINT', () => {
+    if (isExiting) return
+    isExiting = true
+    console.log('\n\n👋 Stopping dev server...\n')
+    watcher.close()
+    if (wranglerProc) {
+      wranglerProc.kill('SIGTERM')
+    }
+    process.exit(0)
+  })
+
+  // Keep process alive
+  await new Promise(() => {})
+}
+
+if (args.includes('--watch') || args.includes('-w')) {
+  watchMode()
+} else {
+  build()
+}

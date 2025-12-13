@@ -15,9 +15,9 @@ import {
   type ModuleMap,
 } from './server'
 // @ts-ignore - Generated at build time
-import modules from '../app/.modules.generated'
+import modules from '../../dist/.modules.generated'
 // @ts-ignore - Generated at build time
-import chunkManifest from '../app/.chunks.generated.json'
+import chunkManifest from '../../dist/.chunks.generated.json'
 
 const typedModules = modules as ModuleMap
 

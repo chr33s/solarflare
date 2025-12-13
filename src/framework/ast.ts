@@ -25,6 +25,7 @@ export const COMPILER_OPTIONS: ts.CompilerOptions = {
   strict: true,
   skipLibCheck: true,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
+  noEmit: true,  // Don't emit any files during analysis
 }
 
 /**
@@ -460,7 +461,7 @@ export function generateTypedModulesFile(entries: ModuleEntry[]): {
   }
 
   const generateEntries = (modules: ModuleEntry[]) =>
-    modules.map((m) => `    './${m.parsed.normalized}': () => import('./${m.parsed.normalized}')`).join(',\n')
+    modules.map((m) => `    './${m.parsed.normalized}': () => import('../src/app/${m.parsed.normalized}')`).join(',\n')
 
   const content = `/**
  * Auto-generated route modules

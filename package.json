@@ -14,11 +14,11 @@
     "#solarflare/*": "./src/framework/*"
   },
   "scripts": {
-    "build": "bunx solarflare",
+    "build": "bun ./src/framework/build.ts",
     "check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "deploy": "bun wrangler deploy",
-    "dev": "bun wrangler dev"
+    "dev": "bun ./src/framework/build.ts --serve --watch"
   },
   "dependencies": {
     "@preact/signals-core": "^1.8.0",
