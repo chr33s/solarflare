@@ -164,9 +164,11 @@ The build runs via `bun run build` (which executes `bunx solarflare`):
 ```
 src/app/
 ├── .modules.generated.ts    # Pre-resolved route imports (temp, deleted after build)
-├── .chunks.generated.json   # Chunk manifest for asset injection (temp, deleted after build)
-├── .routes.generated.json   # Routes manifest for client router (persisted)
-└── .routes.generated.d.ts   # Type-safe route definitions (persisted)
+└── .chunks.generated.json   # Chunk manifest (temp, deleted after build)
+
+dist/
+├── routes.json              # Routes manifest (exposed as solarflare:routes)
+└── routes.d.ts              # Type-safe route definitions (exposed as solarflare:routes/types)
 ```
 
 ### Client Router
@@ -182,7 +184,7 @@ The client router enables SPA navigation using native browser APIs:
 ```tsx
 // src/app/index.client.tsx
 import { createRouter, RouterProvider, Link, useRoute, useNavigate } from 'solarflare/client'
-import manifest from './.routes.generated.json'
+import manifest from 'solarflare:routes'
 
 // Create router from build-time manifest
 const router = createRouter(manifest, {

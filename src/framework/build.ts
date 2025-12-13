@@ -410,7 +410,7 @@ async function buildClient() {
     }
   }
 
-  // Write chunk manifest for the server
+  // Write chunk manifest for the server (temp file, deleted after build)
   const manifestPath = './src/app/.chunks.generated.json'
   await Bun.write(manifestPath, JSON.stringify(manifest, null, 2))
 
@@ -469,8 +469,8 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
     process.exit(1)
   }
 
-  // Generate route types file (persisted for consumption)
-  const routesTypePath = './src/app/.routes.generated.d.ts'
+  // Generate route types file to dist (exposed as virtual module solarflare:routes/types)
+  const routesTypePath = './dist/routes.d.ts'
   const routesTypeContent = generateRoutesTypeFile(routeFiles)
   await Bun.write(routesTypePath, routesTypeContent)
   console.log('   Generated route types')
@@ -499,7 +499,7 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
     process.exit(1)
   }
 
-  // Write generated modules file (imported by worker.tsx)
+  // Write generated modules file (imported by worker.tsx, temp file deleted after build)
   const modulesPath = './src/app/.modules.generated.ts'
   await Bun.write(modulesPath, modulesContent)
 
@@ -543,11 +543,11 @@ async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: stri
     routes: [...clientRoutesManifest.routes, ...serverRoutes],
   }
 
-  // Write the combined routes manifest
-  const routesManifestPath = './src/app/.routes.generated.json'
+  // Write the combined routes manifest to dist (exposed as virtual module solarflare:routes)
+  const routesManifestPath = './dist/routes.json'
   await Bun.write(routesManifestPath, JSON.stringify(combinedManifest, null, 2))
 
-  // Clean up generated files (route types and routes manifest are kept)
+  // Clean up temp build files
   const generatedFiles = [modulesPath, './src/app/.chunks.generated.json']
   for (const file of generatedFiles) {
     if (await Bun.file(file).exists()) {

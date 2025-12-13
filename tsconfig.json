@@ -14,7 +14,9 @@
     "moduleResolution": "bundler",
     "paths": {
       "#app/*": ["./src/app/*"],
-      "#solarflare/*": ["./src/framework/*"]
+      "#solarflare/*": ["./src/framework/*"],
+      "solarflare:routes": ["./dist/routes.json"],
+      "solarflare:routes/types": ["./dist/routes.d.ts"]
     },
     "noEmit": true,
     "noFallthroughCasesInSwitch": true,

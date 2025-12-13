@@ -508,3 +508,225 @@ declare module 'solarflare/ast' {
     errors: ts.Diagnostic[];
   };
 }
+
+// ============================================================================
+// Router Module
+// ============================================================================
+
+/**
+ * Client-side SPA Router for build-time routes
+ */
+declare module 'solarflare/router' {
+  import { FunctionComponent, VNode } from 'preact';
+  import { ReadonlySignal } from '@preact/signals';
+
+  /**
+   * Route definition from build-time manifest
+   */
+  export interface RouteManifestEntry {
+    /** URL pattern pathname (e.g., '/blog/:slug') */
+    pattern: string;
+    /** Custom element tag name */
+    tag: string;
+    /** Chunk path for this route's JS */
+    chunk?: string;
+    /** CSS stylesheets for this route */
+    styles?: string[];
+    /** Route type */
+    type: 'client' | 'server';
+    /** Dynamic parameter names */
+    params: string[];
+  }
+
+  /**
+   * Build-time routes manifest
+   */
+  export interface RoutesManifest {
+    routes: RouteManifestEntry[];
+    /** Base path for all routes */
+    base?: string;
+  }
+
+  /**
+   * Route match result
+   */
+  export interface RouteMatch {
+    /** Matched manifest entry */
+    entry: RouteManifestEntry;
+    /** Extracted URL parameters */
+    params: Record<string, string>;
+    /** The matched URL */
+    url: URL;
+  }
+
+  /**
+   * Navigation options
+   */
+  export interface NavigateOptions {
+    /** Replace current history entry instead of pushing */
+    replace?: boolean;
+    /** State to associate with the history entry */
+    state?: unknown;
+    /** Skip view transition entirely */
+    skipTransition?: boolean;
+  }
+
+  /**
+   * Router configuration
+   */
+  export interface RouterConfig {
+    /** Base path for all routes */
+    base?: string;
+    /** Enable view transitions (default: true if supported) */
+    viewTransitions?: boolean;
+    /** Scroll behavior after navigation */
+    scrollBehavior?: 'auto' | 'smooth' | 'instant' | false;
+    /** Called when no route matches */
+    onNotFound?: (url: URL) => void;
+    /** Called after navigation completes */
+    onNavigate?: (match: RouteMatch) => void;
+  }
+
+  /** Check if View Transitions API is supported */
+  export function supportsViewTransitions(): boolean;
+
+  /** Check if Navigation API is supported */
+  export function supportsNavigation(): boolean;
+
+  /**
+   * Client-side SPA Router
+   */
+  export class Router {
+    /** Reactive current match */
+    readonly current: import('@preact/signals').Signal<RouteMatch | null>;
+    /** Reactive params derived from current match */
+    readonly params: ReadonlySignal<Record<string, string>>;
+
+    constructor(manifest: RoutesManifest, config?: RouterConfig);
+
+    /** Match a URL against routes */
+    match(url: URL): RouteMatch | null;
+
+    /** Navigate to a URL */
+    navigate(to: string | URL, options?: NavigateOptions): Promise<void>;
+
+    /** Start intercepting navigation */
+    start(): this;
+
+    /** Stop the router */
+    stop(): this;
+
+    // Navigation helpers
+    back(): void;
+    forward(): void;
+    go(delta: number): void;
+  }
+
+  /**
+   * Create a router from a build-time routes manifest
+   */
+  export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router;
+
+  /** Router context */
+  export const RouterContext: import('preact').Context<Router | null>;
+
+  /** Hook to access the router instance */
+  export function useRouter(): Router;
+
+  /** Hook to get current route match (reactive via signals) */
+  export function useRoute(): RouteMatch | null;
+
+  /** Hook to get current route params (reactive via signals) */
+  export function useParams(): Record<string, string>;
+
+  /** Hook for programmatic navigation */
+  export function useNavigate(): (to: string | URL, options?: NavigateOptions) => Promise<void>;
+
+  /** Hook to check if a path matches the current route */
+  export function useIsActive(path: string, exact?: boolean): boolean;
+
+  /** Link component props */
+  export interface LinkProps {
+    /** Target URL */
+    to: string;
+    /** Navigation options */
+    options?: NavigateOptions;
+    /** Link children */
+    children?: VNode | VNode[] | string;
+    /** Additional class names */
+    class?: string;
+    /** Active class name when link matches current route */
+    activeClass?: string;
+    /** Whether to match exactly */
+    exact?: boolean;
+    /** Additional HTML attributes */
+    [key: string]: unknown;
+  }
+
+  /**
+   * Link component for SPA navigation with view transitions
+   */
+  export const Link: FunctionComponent<LinkProps>;
+
+  /** Router provider props */
+  export interface RouterProviderProps {
+    /** Router instance */
+    router: Router;
+    /** Children to render */
+    children?: VNode | VNode[];
+  }
+
+  /**
+   * Router provider component
+   */
+  export const RouterProvider: FunctionComponent<RouterProviderProps>;
+}
+
+// ============================================================================
+// Virtual Modules - Generated at build time
+// ============================================================================
+
+/**
+ * Virtual module: Routes manifest
+ * Generated at build time and compiled to dist/routes.json
+ * 
+ * @example
+ * ```ts
+ * import manifest from 'solarflare:routes'
+ * import { createRouter } from 'solarflare/router'
+ * 
+ * const router = createRouter(manifest)
+ * ```
+ */
+declare module 'solarflare:routes' {
+  import type { RoutesManifest } from 'solarflare/router';
+  const manifest: RoutesManifest;
+  export default manifest;
+}
+
+/**
+ * Virtual module: Route type definitions
+ * Generated at build time for type-safe route navigation
+ * 
+ * @example
+ * ```ts
+ * import type { Routes, RoutePath, RouteParams } from 'solarflare:routes/types'
+ * 
+ * function navigate<P extends RoutePath>(path: P, params: RouteParams<P>) { ... }
+ * ```
+ */
+declare module 'solarflare:routes/types' {
+  /**
+   * Type-safe route definitions
+   * Maps route patterns to their parameter types
+   */
+  export interface Routes {
+    [pattern: string]: { params: Record<string, string> | Record<string, never> };
+  }
+
+  /** All available route paths */
+  export type RoutePath = keyof Routes;
+
+  /** Extract params type for a specific route */
+  export type RouteParams<T extends RoutePath> = Routes[T]['params'];
+}

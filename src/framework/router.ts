@@ -349,7 +349,7 @@ export class Router {
  *
  * @example
  * ```ts
- * import manifest from './.routes.generated.json'
+ * import manifest from 'solarflare:routes'
  *
  * const router = createRouter(manifest, {
  *   viewTransitions: true,
@@ -496,7 +496,7 @@ export interface RouterProviderProps {
  *
  * @example
  * ```tsx
- * import manifest from './.routes.generated.json'
+ * import manifest from 'solarflare:routes'
  *
  * const router = createRouter(manifest, { viewTransitions: true })
  *
