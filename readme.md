@@ -24,8 +24,9 @@ A file-based routing framework for Preact + Cloudflare Workers using `preact-cus
 src/framework/
 ├── ast.ts           # TypeScript Compiler API utilities for path parsing, validation, code generation
 ├── build.ts         # Build script: route scanning, validation, client/server bundling
-├── client.tsx       # Web component registration, hydration, hooks (useParams, useData)
+├── client.tsx       # Web component registration, hydration, hooks, SPA router
 ├── route-tree.ts    # Optimized route tree for O(path_length) URL matching
+├── router.ts        # Client SPA router internals (URLPattern, Navigation API, View Transitions)
 ├── server.tsx       # Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
 ├── worker.tsx       # Cloudflare Worker fetch handler with SSR and asset injection
 └── solarflare.d.ts  # Type declarations
@@ -42,6 +43,7 @@ src/framework/
     "./worker": "./src/framework/worker.tsx"
   },
   "dependencies": {
+    "@preact/signals": "^2.5.1",
     "preact": "^10.28.0",
     "preact-custom-element": "^4.6.0",
     "preact-render-to-string": "^6.6.3",
@@ -163,7 +165,86 @@ The build runs via `bun run build` (which executes `bunx solarflare`):
 src/app/
 ├── .modules.generated.ts    # Pre-resolved route imports (temp, deleted after build)
 ├── .chunks.generated.json   # Chunk manifest for asset injection (temp, deleted after build)
+├── .routes.generated.json   # Routes manifest for client router (persisted)
 └── .routes.generated.d.ts   # Type-safe route definitions (persisted)
+```
+
+### Client Router
+
+The client router enables SPA navigation using native browser APIs:
+- **URLPattern** for route matching
+- **Navigation API** for intercepting navigation
+- **View Transitions API** for smooth page transitions
+- **Preact Signals** for reactive state
+
+#### Usage
+
+```tsx
+// src/app/index.client.tsx
+import { createRouter, RouterProvider, Link, useRoute, useNavigate } from 'solarflare/client'
+import manifest from './.routes.generated.json'
+
+// Create router from build-time manifest
+const router = createRouter(manifest, {
+  viewTransitions: true,
+  onNavigate: (match) => console.log('Navigated to:', match.url.pathname)
+})
+
+function App() {
+  return (
+    <RouterProvider router={router}>
+      <nav>
+        <Link to="/" activeClass="active" exact>Home</Link>
+        <Link to="/blog/hello" activeClass="active">Blog Post</Link>
+      </nav>
+      <Content />
+    </RouterProvider>
+  )
+}
+
+function Content() {
+  const match = useRoute()
+  const navigate = useNavigate()
+  
+  return (
+    <div>
+      <p>Current path: {match?.url.pathname}</p>
+      <button onClick={() => navigate('/blog/world')}>
+        Go to World
+      </button>
+    </div>
+  )
+}
+```
+
+#### Routes Manifest Format
+
+```json
+{
+  "routes": [
+    {
+      "pattern": "/blog/:slug",
+      "tag": "sf-blog-slug",
+      "chunk": "/blog.slug.js",
+      "styles": ["/blog.css"],
+      "type": "client",
+      "params": ["slug"]
+    },
+    {
+      "pattern": "/",
+      "tag": "sf-root",
+      "chunk": "/index.js",
+      "type": "client",
+      "params": []
+    },
+    {
+      "pattern": "/api",
+      "tag": "sf-api",
+      "type": "server",
+      "params": []
+    }
+  ]
+}
 ```
 
 ### Web Component Registration
@@ -205,7 +286,7 @@ export default define(BlogPost);
 
 The build script uses TypeScript Compiler API to extract props:
 
-```typescript
+```tsx
 // src/framework/build.ts
 function extractPropsFromProgram(program: ts.Program, filePath: string): string[] {
   const checker = program.getTypeChecker()
@@ -343,6 +424,95 @@ export function findPairedModules(filePath: string, availableModules: string[]):
 
 /** Generate a complete type-safe modules file */
 export function generateTypedModulesFile(entries: ModuleEntry[]): { content: string; errors: string[] }
+```
+
+#### Router API (exported from `solarflare/client`)
+
+```tsx
+import { Signal, ReadonlySignal } from '@preact/signals'
+
+/** Route definition from build-time manifest */
+export interface RouteManifestEntry {
+  pattern: string           // URLPattern pathname (e.g., '/blog/:slug')
+  tag: string               // Custom element tag name
+  chunk?: string            // Chunk path for this route's JS
+  styles?: string[]         // CSS stylesheets for this route
+  type: 'client' | 'server' // Route type
+  params: string[]          // Dynamic parameter names
+}
+
+/** Build-time routes manifest */
+export interface RoutesManifest {
+  routes: RouteManifestEntry[]
+  base?: string             // Base path for all routes
+}
+
+/** Route match result */
+export interface RouteMatch {
+  entry: RouteManifestEntry
+  params: Record<string, string>
+  url: URL
+}
+
+/** Router configuration */
+export interface RouterConfig {
+  base?: string                                    // Base path for all routes
+  viewTransitions?: boolean                        // Enable view transitions (default: true if supported)
+  scrollBehavior?: 'auto' | 'smooth' | 'instant' | false
+  onNotFound?: (url: URL) => void                  // Called when no route matches
+  onNavigate?: (match: RouteMatch) => void         // Called after navigation
+}
+
+/** Check if Navigation API is supported */
+export function supportsNavigation(): boolean
+
+/** Check if View Transitions API is supported */
+export function supportsViewTransitions(): boolean
+
+/** Create a router from build-time routes manifest */
+export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router
+
+/** Router class */
+export class Router {
+  /** Reactive current match (Preact Signal) */
+  readonly current: Signal<RouteMatch | null>
+  
+  /** Reactive params derived from current match */
+  readonly params: ReadonlySignal<Record<string, string>>
+  
+  /** Match a URL against registered routes */
+  match(url: URL): RouteMatch | null
+  
+  /** Navigate to a URL */
+  navigate(to: string | URL, options?: NavigateOptions): Promise<void>
+  
+  /** Navigate back/forward in history */
+  back(): void
+  forward(): void
+  go(delta: number): void
+  
+  /** Start/stop the router */
+  start(): this
+  stop(): this
+}
+
+// Preact hooks
+export function useRouter(): Router
+export function useRoute(): RouteMatch | null
+export function useParams(): Record<string, string>
+export function useNavigate(): (to: string | URL, options?: NavigateOptions) => Promise<void>
+export function useIsActive(path: string, exact?: boolean): boolean
+
+// Preact components
+export const RouterProvider: FunctionComponent<{ router: Router; children?: VNode }>
+export const Link: FunctionComponent<{
+  to: string
+  options?: NavigateOptions
+  children?: VNode | string
+  class?: string
+  activeClass?: string
+  exact?: boolean
+}>
 ```
 
 #### `solarflare/server` (server.tsx)

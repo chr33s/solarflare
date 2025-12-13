@@ -265,3 +265,35 @@ export function defineWithMeta<P extends Record<string, any>>(
  * Export ParamsContext and DataContext for framework use
  */
 export { ParamsContext, DataContext }
+
+/**
+ * Re-export router for client-side SPA navigation
+ */
+export {
+  // Factory function
+  createRouter,
+  // Feature detection
+  supportsNavigation,
+  supportsViewTransitions,
+  // Router class
+  Router,
+  RouterContext,
+  // Preact hooks
+  useRouter,
+  useRoute,
+  useParams as useRouteParams,
+  useNavigate,
+  useIsActive,
+  // Preact components
+  RouterProvider,
+  Link,
+  // Types
+  type RouteManifestEntry,
+  type RoutesManifest,
+  type RouteMatch,
+  type NavigateOptions,
+  type RouterConfig,
+  type LinkProps,
+  type RouterProviderProps,
+} from './router'
+

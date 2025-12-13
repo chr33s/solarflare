@@ -413,6 +413,21 @@ async function buildClient() {
   // Write chunk manifest for the server
   const manifestPath = './src/app/.chunks.generated.json'
   await Bun.write(manifestPath, JSON.stringify(manifest, null, 2))
+
+  // Generate routes manifest for client-side router (client routes only for now)
+  // Server routes will be added in buildServer phase
+  const routesManifest = {
+    routes: metas.map((meta) => ({
+      pattern: meta.parsed.pattern,
+      tag: meta.tag,
+      chunk: manifest.chunks[meta.parsed.pattern],
+      styles: manifest.styles[meta.parsed.pattern],
+      type: 'client' as const,
+      params: meta.parsed.params,
+    })),
+  }
+
+  // Return manifest for server to augment with server routes
   console.log(`   Generated ${metas.length} chunk(s)`)
 
   // Copy public assets if directory exists
@@ -433,12 +448,14 @@ async function buildClient() {
   }
 
   console.log('✅ Client build complete')
+  
+  return routesManifest
 }
 
 /**
  * Build the server bundle
  */
-async function buildServer() {
+async function buildServer(clientRoutesManifest: { routes: Array<{ pattern: string; tag: string; chunk?: string; styles?: string[]; type: 'client'; params: string[] }> }) {
   console.log('🔍 Scanning for route modules...')
   const routeFiles = await findRouteModules()
   const layoutFiles = await findLayouts()
@@ -504,7 +521,33 @@ async function buildServer() {
     process.exit(1)
   }
 
-  // Clean up generated files (route types are kept)
+  // Add server routes to the manifest (routes that aren't already covered by client routes)
+  const serverRoutes = routeFiles
+    .filter((f) => f.includes('.server.') && !f.includes('/_'))
+    .map((file) => {
+      const parsed = parsePath(file)
+      // Check if there's a matching client route
+      const hasClientRoute = clientRoutesManifest.routes.some((r) => r.pattern === parsed.pattern)
+      return { file, parsed, hasClientRoute }
+    })
+    .filter(({ hasClientRoute }) => !hasClientRoute)
+    .map(({ parsed }) => ({
+      pattern: parsed.pattern,
+      tag: parsed.tag,
+      type: 'server' as const,
+      params: parsed.params,
+    }))
+
+  // Combine client and server routes
+  const combinedManifest = {
+    routes: [...clientRoutesManifest.routes, ...serverRoutes],
+  }
+
+  // Write the combined routes manifest
+  const routesManifestPath = './src/app/.routes.generated.json'
+  await Bun.write(routesManifestPath, JSON.stringify(combinedManifest, null, 2))
+
+  // Clean up generated files (route types and routes manifest are kept)
   const generatedFiles = [modulesPath, './src/app/.chunks.generated.json']
   for (const file of generatedFiles) {
     if (await Bun.file(file).exists()) {
@@ -523,8 +566,8 @@ async function build() {
 
   console.log('\n⚡ Solarflare Build\n')
 
-  await buildClient()
-  await buildServer()
+  const clientManifest = await buildClient()
+  await buildServer(clientManifest)
 
   const duration = ((performance.now() - startTime) / 1000).toFixed(2)
   console.log(`\n🚀 Build completed in ${duration}s\n`)
