@@ -6,6 +6,7 @@
       "name": "solarflare",
       "dependencies": {
         "@preact/signals-core": "^1.8.0",
+        "diff-dom-streaming": "^0.6.6",
         "preact": "^10.28.0",
         "preact-custom-element": "^4.6.0",
         "preact-render-to-string": "^6.6.4",
@@ -167,6 +168,8 @@
     "cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
 
     "detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
+
+    "diff-dom-streaming": ["diff-dom-streaming@0.6.6", "", {}, "sha512-K217pR/h/UEQv3J0PXu0sshkW49PbyM/Il9pqXaoLLqHU/KaApdujPr0LfzobqqjEdfmSA+EYmHWHsnE9c7+NQ=="],
 
     "error-stack-parser-es": ["error-stack-parser-es@1.0.5", "", {}, "sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA=="],
 

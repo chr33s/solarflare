@@ -5,6 +5,7 @@
  */
 
 import { signal, computed, effect, type ReadonlySignal } from '@preact/signals-core'
+import diff from 'diff-dom-streaming'
 
 // ============================================================================
 // Types
@@ -226,36 +227,27 @@ export class Router {
     match: RouteMatch | null,
     options: NavigateOptions
   ): Promise<void> {
-    const doTransition = async () => {
-      try {
-        if (match) {
-          await this.#loadRoute(match, url)
-          this.current.value = match
-          this.#config.onNavigate(match)
-        } else {
-          this.current.value = null
-          this.#config.onNotFound(url)
-        }
-        this.#handleScroll(url)
-      } catch (error) {
-        this.#handleError(error instanceof Error ? error : new Error(String(error)), url)
-      }
-    }
+    const useTransition = this.#config.viewTransitions && 
+      supportsViewTransitions() && 
+      !options.skipTransition
 
-    // Use View Transitions if enabled
-    if (this.#config.viewTransitions && supportsViewTransitions() && !options.skipTransition) {
-      try {
-        await (document as any).startViewTransition(doTransition).finished
-      } catch (error) {
-        this.#handleError(error instanceof Error ? error : new Error(String(error)), url)
+    try {
+      if (match) {
+        await this.#loadRoute(match, url, useTransition)
+        this.current.value = match
+        this.#config.onNavigate(match)
+      } else {
+        this.current.value = null
+        this.#config.onNotFound(url)
       }
-    } else {
-      await doTransition()
+      this.#handleScroll(url)
+    } catch (error) {
+      this.#handleError(error instanceof Error ? error : new Error(String(error)), url)
     }
   }
 
   /** Load route assets and swap page content */
-  async #loadRoute(match: RouteMatch, url: URL): Promise<void> {
+  async #loadRoute(match: RouteMatch, url: URL, useTransition: boolean): Promise<void> {
     const { entry } = match
 
     // Fetch the new page HTML from the server
@@ -267,17 +259,10 @@ export class Router {
       throw new Error(`Failed to fetch ${url.href}: ${response.status}`)
     }
 
-    const html = await response.text()
-    const parser = new DOMParser()
-    const doc = parser.parseFromString(html, 'text/html')
-
-    // Swap the main content (#app or body)
-    const newContent = doc.querySelector('#app') ?? doc.body
-    const currentContent = document.querySelector('#app') ?? document.body
-
-    if (newContent && currentContent) {
-      currentContent.innerHTML = newContent.innerHTML
-    }
+    // Use diff-dom-streaming to incrementally update DOM
+    // This preserves web component state and only mutates changed nodes
+    // Must diff against document (not #app) since response is full HTML
+    await diff(document, response.body!, { transition: useTransition })
 
     // Load any new CSS (ensure absolute URL)
     if (entry.styles?.length) {
@@ -295,7 +280,7 @@ export class Router {
     // Load JS chunk for web component registration (ensure absolute URL)
     if (entry.chunk) {
       const absoluteChunk = new URL(entry.chunk, location.origin).href
-      await import(/* @vite-ignore */ absoluteChunk)
+      await import(absoluteChunk)
     }
   }
 
