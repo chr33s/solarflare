@@ -76,30 +76,13 @@ function findPairedModule(path: string): string | null {
  * Cloudflare Worker fetch handler
  * Routes are auto-discovered at build time
  */
-async function worker(request: Request, env: Env): Promise<Response> {
+async function worker(request: Request): Promise<Response> {
   const url = new URL(request.url);
-
-  // Serve static assets first (non-root paths with file extensions)
-  if (url.pathname !== "/" && url.pathname.includes(".")) {
-    try {
-      const asset = await env.ASSETS.fetch(request);
-      if (asset.ok) return asset;
-    } catch {
-      // Asset not found, continue to route matching
-    }
-  }
 
   // Match route using URLPattern - prefers client routes for SSR
   const match = matchRoute(router, url);
 
   if (!match) {
-    // Try serving as static asset before 404
-    try {
-      const asset = await env.ASSETS.fetch(request);
-      if (asset.ok) return asset;
-    } catch {
-      // Ignore
-    }
     return new Response("Not Found", { status: 404 });
   }
 
