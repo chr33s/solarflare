@@ -177,7 +177,7 @@ function getChunkName(file: string, hash?: string): string {
     .replace(/\//g, ".")
     .replace(/\$/g, "") // Remove $ to avoid URL issues
     .replace(/^index$/, "index");
-  
+
   return hash ? `${base}.${hash}.js` : `${base}.js`;
 }
 
@@ -185,7 +185,7 @@ async function getComponentMeta(program: ts.Program, file: string): Promise<Comp
   const filePath = join(APP_DIR, file);
   const props = extractPropsFromProgram(program, filePath);
   const parsed = parsePath(file);
-  
+
   // Generate hash from file content
   const content = await Bun.file(filePath).text();
   const hash = generateHash(content);
@@ -251,18 +251,44 @@ async function extractCssImports(filePath: string): Promise<string[]> {
 
 /**
  * Generate virtual client entry for a single component (for chunked builds)
- * Includes router initialization for SPA navigation
+ * Includes router initialization and HMR support via wrapper pattern
+ *
+ * HMR Implementation:
+ * - Uses wrapper component pattern to overcome customElements.define() limitation
+ * - Wrapper holds mutable reference to actual component (CurrentComponent)
+ * - Event listener triggers re-renders when component updates
+ * - Note: import.meta.hot code is included but may be stripped during bundling
+ * - Manual HMR testing: window.dispatchEvent(new CustomEvent('sf:hmr:TAG_NAME'))
  */
 function generateChunkedClientEntry(meta: ComponentMeta): string {
   return `/**
  * Auto-generated Client Chunk: ${meta.chunk}
- * Registers ${meta.tag} web component with router
+ * HMR-enabled wrapper for ${meta.tag}
  */
 import { h } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { initRouter, getRouter } from '../src/framework/client'
+import { initRouter } from '../src/framework/client'
 import BaseComponent from '../src/app/${meta.file}'
+
+// Mutable reference for HMR - updated when module is hot-replaced
+let CurrentComponent = BaseComponent
+
+// HMR Support - allows component updates without re-registering custom element
+if (import.meta.hot) {
+  import.meta.hot.accept('../src/app/${meta.file}', (newModule) => {
+    if (newModule?.default) {
+      CurrentComponent = newModule.default
+      console.log('[HMR] Updated <${meta.tag}>')
+      // Notify all instances of this component to re-render
+      window.dispatchEvent(new CustomEvent('sf:hmr:${meta.tag}'))
+    }
+  })
+  
+  import.meta.hot.dispose(() => {
+    console.log('[HMR] Disposing <${meta.tag}>')
+  })
+}
 
 // Initialize router once globally
 function ensureRouter() {
@@ -280,10 +306,19 @@ function ensureRouter() {
   return null
 }
 
-// Wrapped component - initializes router on mount
+// HMR Wrapper Component - re-renders when CurrentComponent changes
 function Component(props) {
   const [ready, setReady] = useState(!!window.__SF_ROUTER__)
+  const [, forceUpdate] = useState(0)
 
+  // Listen for HMR updates specific to this component
+  useEffect(() => {
+    const handler = () => forceUpdate(n => n + 1)
+    window.addEventListener('sf:hmr:${meta.tag}', handler)
+    return () => window.removeEventListener('sf:hmr:${meta.tag}', handler)
+  }, [])
+
+  // Router initialization
   useEffect(() => {
     if (ready) return
     
@@ -298,10 +333,11 @@ function Component(props) {
       .catch(() => setReady(true)) // Render anyway on error
   }, [ready])
 
-  return h(BaseComponent, props)
+  // Render current (possibly HMR-updated) component
+  return h(CurrentComponent, props)
 }
 
-// Register web component
+// Register wrapper as web component (only happens once)
 register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false })
 `;
 }
@@ -399,17 +435,17 @@ async function buildClient() {
     const publicFiles = await scanFiles("**/*", PUBLIC_DIR);
     for (const file of publicFiles) {
       const src = join(PUBLIC_DIR, file);
-      
+
       // Generate hash for the asset
       const content = await Bun.file(src).arrayBuffer();
       const hash = generateHash(Buffer.from(content).toString());
-      
+
       // Add hash to filename before extension
       const parts = file.split(".");
       const ext = parts.pop();
       const base = parts.join(".");
       const hashedName = ext ? `${base}.${hash}.${ext}` : `${base}.${hash}`;
-      
+
       const dest = join(DIST_CLIENT, hashedName);
       await Bun.write(dest, Bun.file(src));
     }
@@ -495,7 +531,7 @@ async function buildClient() {
       const cssHash = generateHash(cssContent);
       const targetPath = join(DIST_CLIENT, `${baseName}.${cssHash}.css`);
       await safeRename(outputPath, targetPath);
-      
+
       // Update manifest with the hashed CSS filename
       for (const meta of metas) {
         const metaBase = getChunkName(meta.file).replace(/\.js$/, "");
