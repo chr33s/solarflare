@@ -4,11 +4,7 @@
  */
 import { type VNode, h } from 'preact'
 import { type FunctionComponent } from 'preact'
-import { parsePath } from './ast'
-import { RouteTree, createRouteTree, matchRouteFromTree } from './route-tree'
-
-// Re-export route tree utilities
-export { RouteTree, createRouteTree, matchRouteFromTree, type TreeMatch } from './route-tree'
+import { parsePath } from './paths'
 
 /**
  * Marker for asset injection - will be replaced with actual script/style tags
@@ -52,47 +48,6 @@ export interface ParsedPattern {
   /** Route specificity score for sorting */
   specificity: number
 }
-
-/**
- * Parse URL parameters from a request URL using URLPattern
- * Matches against registered routes to extract dynamic segments
- */
-export function parse(request: Request): Record<string, string> {
-  const url = new URL(request.url)
-  
-  // Common route patterns - this will be populated by createRouter
-  // For now, extract params by matching common patterns
-  const pathname = url.pathname
-  
-  // Try to match dynamic segments like :slug, :id, etc.
-  const params: Record<string, string> = {}
-  
-  // Extract path segments and look for dynamic values
-  const segments = pathname.split('/').filter(Boolean)
-  
-  // Store the segments for potential dynamic matching
-  // The actual pattern matching will happen when routes are registered
-  if (segments.length > 0) {
-    // Check if there's a route pattern that matches
-    for (const route of _registeredRoutes) {
-      const result = route.pattern.exec(url)
-      if (result) {
-        const groups = result.pathname.groups
-        for (const [key, value] of Object.entries(groups)) {
-          if (value !== undefined) {
-            params[key] = value
-          }
-        }
-        break
-      }
-    }
-  }
-  
-  return params
-}
-
-// Internal route registry for parse() function
-let _registeredRoutes: Route[] = []
 
 /**
  * Route definition with parsed pattern metadata
@@ -158,21 +113,11 @@ export function flattenModules(
 }
 
 /**
- * Router result with both array and tree representations
- */
-export interface Router {
-  /** Flat array of routes (for compatibility) */
-  routes: Route[]
-  /** Optimized route tree for fast lookups */
-  tree: RouteTree
-}
-
-/**
  * Create router from structured module map
- * Returns both a flat route array and an optimized route tree
+ * Returns a sorted array of routes for linear URLPattern matching
  * Filters out _prefixed files, sorts by specificity using parsed pattern metadata
  */
-export function createRouter(modules: ModuleMap): Router {
+export function createRouter(modules: ModuleMap): Route[] {
   // Combine server and client modules for routing (layouts are handled separately)
   const routeModules = { ...modules.server, ...modules.client }
 
@@ -198,13 +143,7 @@ export function createRouter(modules: ModuleMap): Router {
       return b.parsedPattern.specificity - a.parsedPattern.specificity
     })
 
-  // Register routes for parse() function
-  _registeredRoutes = routes
-
-  // Create optimized route tree
-  const tree = createRouteTree(routes)
-
-  return { routes, tree }
+  return routes
 }
 
 /**
@@ -309,17 +248,10 @@ export interface RouteMatch {
 }
 
 /**
- * Match URL against routes using optimized route tree or URLPattern fallback
- * Accepts either a Router object (with tree) or a legacy Route[] array
+ * Match URL against routes using URLPattern
+ * Linear search through sorted routes array (fast enough for modern browsers)
  */
-export function matchRoute(router: Router | Route[], url: URL): RouteMatch | null {
-  // Use route tree if available (Router object)
-  if ('tree' in router && router.tree) {
-    return matchRouteFromTree(router.tree, url)
-  }
-
-  // Legacy path: linear search through routes array
-  const routes = Array.isArray(router) ? router : router.routes
+export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   for (const route of routes) {
     const result = route.pattern.exec(url)
     if (result) {

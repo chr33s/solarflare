@@ -199,7 +199,13 @@ export function define<P extends Record<string, any>>(
     const meta = parseTagMeta(filePath)
     const tag = options?.tag ?? meta.tag
     const shadow = options?.shadow ?? false
-    const shouldValidate = options?.validate ?? process.env.NODE_ENV !== 'production'
+    const shouldValidate = options?.validate ?? import.meta.env?.DEV ?? false
+
+    // Check if already registered
+    if (customElements.get(tag)) {
+      console.warn(`[solarflare] Custom element "${tag}" is already registered, skipping`)
+      return Component
+    }
 
     // Validate tag if enabled
     if (shouldValidate) {
@@ -275,16 +281,12 @@ export {
   initRouter,
   getRouter,
   // Feature detection
-  supportsNavigation,
   supportsViewTransitions,
   // Router class
   Router,
   // Convenience functions
   navigate,
   isActive,
-  // DOM utilities
-  enhanceLinks,
-  trackActiveLinks,
   // Types
   type RouteManifestEntry,
   type RoutesManifest,

@@ -54,7 +54,7 @@ type ServerLoader = (
   request: Request
 ) => Record<string, unknown> | Promise<Record<string, unknown>>
 
-// Create router with optimized route tree
+// Create router with sorted routes array
 const router = createRouter(typedModules)
 
 /**
@@ -89,7 +89,7 @@ async function worker(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // Match route using optimized route tree - prefers client routes for SSR
+  // Match route using URLPattern - prefers client routes for SSR
   const match = matchRoute(router, url)
 
   if (!match) {

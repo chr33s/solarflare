@@ -10,13 +10,12 @@ import ts from 'typescript'
 import {
   createProgram,
   getDefaultExportInfo,
-  parsePath,
   validateModule,
   generateTypedModulesFile,
   type ModuleEntry,
   type ValidationResult,
 } from './ast'
-
+import { parsePath } from './paths'
 
 // Resolve paths relative to project root (two levels up from src/framework/)
 const ROOT_DIR = join(import.meta.dir, '../..')

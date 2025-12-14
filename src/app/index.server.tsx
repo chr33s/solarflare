@@ -1,8 +1,6 @@
 import { env } from 'cloudflare:workers'
-import { parse } from '#solarflare/server'
 
-export default async function server(request: Request) {
-  const params = parse(request)
+export default async function server(request: Request, params: Record<string, string>) {
   console.log({
     method: request.method,
     url: request.url,

@@ -9,28 +9,33 @@ bun install # brew install bun
 bun dev --serve --watch
 ```
 
-```jsx
-// src/blog/[slug].server.tsx
-export default async function blogServer({ request, params }) {
+```tsx
+// src/app/blog/$slug.server.tsx
+export default async function server(request: Request, params: Record<string, string>) {
   return Response.json({
     url: request.url,
     params,
   })
 }
 
-// src/blog/[slug].client.tsx
-export default function Component({ params }) {
-  return <h1>Blog: {params.slug}</h1>
+// src/app/blog/$slug.client.tsx
+interface Props {
+  slug: string;
+  title: string;
 }
 
-// src/api.server.ts
+export default function BlogPost({ slug, title }: Props) {
+  return <h1>{title}</h1>
+}
+
+// src/app/api.server.tsx
 import { env } from 'cloudflare:workers'
 
-export default async function apiServer(request: Request) {
+export default async function server(request: Request) {
   return Response.json({
-    hello: env.HELLO ?? 'world'
+    hello: env.HELLO ?? 'world',
     url: request.url,
-  });
+  })
 }
 ```
 
@@ -45,6 +50,13 @@ bun run dev
 
 ## Framework Implementation Plan
 
+### Assumptions
+
+Given the history around progressive enhancement in web apps, interested in thoughts on a admin app framework that:
+Using latest browser apis (URLPattern, Navigation, View Transitions API), if unavailable simply fall back to default http state (i.e. you using an old browser, so get old experience)
+opinionated conventions (i.e. do it this way, and it just works vs multiple ways todo the same thing leading to complexity / edge cases)
+optimized for simple use cases (e.g. < 100 routes, < 500 RPS, ..)
+
 ### Overview
 
 A file-based routing framework for Preact + Cloudflare Workers using `preact-custom-element` for web component hydration, TypeScript Compiler API for build-time code generation, pre-resolved module maps for route discovery, and URLPattern for request matching.
@@ -56,7 +68,6 @@ src/framework/
 ├── ast.ts           # TypeScript Compiler API utilities for path parsing, validation, code generation
 ├── build.ts         # Build script: route scanning, validation, client/server bundling
 ├── client.tsx       # Web component registration, hydration, hooks, SPA router
-├── route-tree.ts    # Optimized route tree for O(path_length) URL matching
 ├── router.ts        # Client SPA router internals (URLPattern, Navigation API, View Transitions)
 ├── server.tsx       # Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
 ├── worker.tsx       # Cloudflare Worker fetch handler with SSR and asset injection
@@ -74,15 +85,16 @@ src/framework/
     "./worker": "./src/framework/worker.tsx"
   },
   "dependencies": {
-    "@preact/signals": "^2.5.1",
+    "@preact/signals-core": "^1.8.0",
+    "diff-dom-streaming": "^0.6.6",
     "preact": "^10.28.0",
     "preact-custom-element": "^4.6.0",
-    "preact-render-to-string": "^6.6.3",
-    "typescript": "~5.9.3"
+    "preact-render-to-string": "^6.6.4"
   },
   "devDependencies": {
     "@types/bun": "^1.3.4",
-    "wrangler": "^4.54.0"
+    "wrangler": "^4.54.0",
+    "typescript": "~5.9.3"
   }
 }
 ```
@@ -93,10 +105,10 @@ src/framework/
 |---------|---------|
 | `*.client.tsx` | Client components, auto-registered as web components |
 | `*.server.tsx` | Server handlers, run in Workers runtime |
-| `_layout.tsx` | Layout component, wraps child routes |
-| `_*` | Hidden from routes (layouts, components) |
-| `$param` | Dynamic URL segment → `:param` in URLPattern |
-| `index.*` | Matches directory root path |
+| `_layout.tsx`  | Layout component, wraps child routes |
+| `_*`           | Hidden from routes (layouts, components) |
+| `$param`       | Dynamic URL segment → `:param` in URLPattern |
+| `index.*`      | Matches directory root path |
 
 ### Layouts
 
@@ -193,13 +205,12 @@ The build runs via `bun run build` (which executes `bunx solarflare`):
 #### Generated Files
 
 ```
-src/app/
+dist/
 ├── .modules.generated.ts    # Pre-resolved route imports (temp, deleted after build)
 └── .chunks.generated.json   # Chunk manifest (temp, deleted after build)
-
-dist/
-├── routes.json              # Routes manifest (exposed as solarflare:routes)
 └── routes.d.ts              # Type-safe route definitions (exposed as solarflare:routes/types)
+dist/client
+└── routes.json              # Routes manifest (exposed as solarflare:routes)
 ```
 
 ### Client Router
@@ -212,39 +223,22 @@ The client router enables SPA navigation using native browser APIs:
 
 #### Usage
 
+Client components are automatically registered as web components at build time. The Navigation API intercepts link clicks automatically - no manual router setup needed:
+
 ```tsx
 // src/app/index.client.tsx
-import { createRouter, RouterProvider, Link, useRoute, useNavigate } from 'solarflare/client'
-import manifest from 'solarflare:routes'
-
-// Create router from build-time manifest
-const router = createRouter(manifest, {
-  viewTransitions: true,
-  onNavigate: (match) => console.log('Navigated to:', match.url.pathname)
-})
-
-function App() {
-  return (
-    <RouterProvider router={router}>
-      <nav>
-        <Link to="/" activeClass="active" exact>Home</Link>
-        <Link to="/blog/hello" activeClass="active">Blog Post</Link>
-      </nav>
-      <Content />
-    </RouterProvider>
-  )
+interface Props {
+  title: string
 }
 
-function Content() {
-  const match = useRoute()
-  const navigate = useNavigate()
-  
+export default function App({ title }: Props) {
   return (
     <div>
-      <p>Current path: {match?.url.pathname}</p>
-      <button onClick={() => navigate('/blog/world')}>
-        Go to World
-      </button>
+      <h1>{title}</h1>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/blog/hello">Blog Post</a>
+      </nav>
     </div>
   )
 }
@@ -284,35 +278,51 @@ function Content() {
 
 #### How It Works
 
-The `define` function runs at **runtime** in the browser and:
-1. Parses the tag name from the file path using `parsePath()` from ast.ts
-2. Validates the tag against web component naming rules
-3. Registers the component with `preact-custom-element`
+Client components are **automatically registered** at build time:
+1. Build script extracts props from TypeScript types using Compiler API
+2. Generates entry files that call `preact-custom-element`'s `register()` function
+3. Tag names are generated from file paths (e.g., `blog/$slug.client.tsx` → `sf-blog-slug`)
 
 #### Usage
 
+**Zero-config approach (recommended):**
+
 ```tsx
 // src/app/blog/$slug.client.tsx
-import { define } from "solarflare/client";
-
 interface Props {
-  slug: string;
-  title: string;
-  content: string;
+  slug: string
+  title: string
+  content: string
 }
 
-function BlogPost({ slug, title, content }: Props) {
+export default function BlogPost({ slug, title, content }: Props) {
   return (
     <article>
       <h1>{title}</h1>
       <div>{content}</div>
     </article>
-  );
+  )
+}
+// Component automatically registered as <sf-blog-slug> at build time
+```
+
+**Manual registration (for custom options):**
+
+```tsx
+// src/app/blog/$slug.client.tsx
+import { define } from "solarflare/client"
+
+interface Props {
+  slug: string
+  title: string
 }
 
-// Props are passed via build-time extraction
-// Tag "sf-blog-slug" is generated from file path
-export default define(BlogPost);
+function BlogPost({ slug, title }: Props) {
+  return <article><h1>{title}</h1></article>
+}
+
+// Only needed if you want custom options like shadow DOM
+export default define(BlogPost, { shadow: true })
 ```
 
 #### Build-Time Props Extraction
@@ -352,7 +362,6 @@ register(Component, 'sf-blog-slug', ["slug", "title", "content"], { shadow: fals
 import { type FunctionComponent, createContext } from 'preact'
 import { useContext } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { parsePath } from './ast'
 
 const ParamsContext = createContext<Record<string, string>>({})
 const DataContext = createContext<unknown>(null)
@@ -376,18 +385,14 @@ export interface TagMeta {
   type: 'client' | 'server' | 'unknown'
 }
 
-/** Parse file path into structured tag metadata */
-export function parseTagMeta(path: string): TagMeta {
-  const parsed = parsePath(path)
-  return {
-    tag: parsed.tag,
-    filePath: parsed.original,
-    segments: parsed.segments,
-    paramNames: parsed.params,
-    isRoot: parsed.isIndex,
-    type: parsed.kind === 'client' || parsed.kind === 'server' ? parsed.kind : 'unknown',
-  }
+export interface TagValidation {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
 }
+
+/** Parse file path into structured tag metadata */
+export function parseTagMeta(path: string): TagMeta
 
 /** Validate a generated tag against web component naming rules */
 export function validateTag(meta: TagMeta): TagValidation
@@ -399,22 +404,11 @@ export interface DefineOptions {
   validate?: boolean
 }
 
-/** Register a Preact component as a web component */
+/** Register a Preact component as a web component (optional - auto-registered at build time) */
 export function define<P>(
   Component: FunctionComponent<P>,
   options?: DefineOptions
-): FunctionComponent<P> {
-  if (typeof window !== 'undefined' && typeof HTMLElement !== 'undefined') {
-    const propNames = options?.observedAttributes ?? []
-    const filePath = import.meta.path
-    const meta = parseTagMeta(filePath)
-    const tag = options?.tag ?? meta.tag
-    const shadow = options?.shadow ?? false
-
-    register(Component, tag, propNames, { shadow })
-  }
-  return Component
-}
+): FunctionComponent<P>
 ```
 
 #### `solarflare/ast` (ast.ts)
@@ -461,6 +455,8 @@ export function generateTypedModulesFile(entries: ModuleEntry[]): { content: str
 
 #### Router API (exported from `solarflare/client`)
 
+**Modern Browsers Only**: Solarflare requires the Navigation API and View Transitions API (available in Chrome 102+, Edge 102+, Safari 15.4+).
+
 ```tsx
 import { Signal, ReadonlySignal } from '@preact/signals'
 
@@ -491,13 +487,10 @@ export interface RouteMatch {
 export interface RouterConfig {
   base?: string                                    // Base path for all routes
   viewTransitions?: boolean                        // Enable view transitions (default: true if supported)
-  scrollBehavior?: 'auto' | 'smooth' | 'instant' | false
+  scrollBehavior?: 'auto' | 'smooth' | false      // Scroll behavior after navigation
   onNotFound?: (url: URL) => void                  // Called when no route matches
   onNavigate?: (match: RouteMatch) => void         // Called after navigation
 }
-
-/** Check if Navigation API is supported */
-export function supportsNavigation(): boolean
 
 /** Check if View Transitions API is supported */
 export function supportsViewTransitions(): boolean
@@ -516,7 +509,7 @@ export class Router {
   /** Match a URL against registered routes */
   match(url: URL): RouteMatch | null
   
-  /** Navigate to a URL */
+  /** Navigate to a URL (uses Navigation API) */
   navigate(to: string | URL, options?: NavigateOptions): Promise<void>
   
   /** Navigate back/forward in history */
@@ -529,23 +522,9 @@ export class Router {
   stop(): this
 }
 
-// Preact hooks
-export function useRouter(): Router
-export function useRoute(): RouteMatch | null
+// Hooks for accessing route state
 export function useParams(): Record<string, string>
-export function useNavigate(): (to: string | URL, options?: NavigateOptions) => Promise<void>
-export function useIsActive(path: string, exact?: boolean): boolean
-
-// Preact components
-export const RouterProvider: FunctionComponent<{ router: Router; children?: VNode }>
-export const Link: FunctionComponent<{
-  to: string
-  options?: NavigateOptions
-  children?: VNode | string
-  class?: string
-  activeClass?: string
-  exact?: boolean
-}>
+export function useData<T>(): T
 ```
 
 #### `solarflare/server` (server.tsx)
@@ -618,87 +597,6 @@ export function generateAssetTags(script?: string, styles?: string[]): string
 export function renderComponent(Component: FunctionComponent, tag: string, props: Record<string, unknown>): VNode
 ```
 
-#### `solarflare/route-tree` (route-tree.ts)
-
-Optimized route lookups using a hierarchical tree structure. Reduces sequential matching of all URL patterns by narrowing the search space as we traverse, achieving O(path_length) lookups instead of O(num_routes).
-
-```tsx
-import type { Route, RouteMatch, RouteParamDef } from './server'
-
-/**
- * Route tree node representing part of the route hierarchy
- * Each node manages static, parameterized, and wildcard routes separately
- */
-export interface RouteNode {
-  /** Static segment children (e.g., `/users`, `/posts`) */
-  static: Map<string, RouteNode>
-  /** Parameterized segment child (e.g., `/:id`) */
-  parameterized: RouteNode | null
-  /** Parameter name for parameterized nodes */
-  paramName: string | null
-  /** Wildcard segment child (e.g., `/*`) */
-  wildcard: RouteNode | null
-  /** Routes that terminate at this node */
-  routes: Route[]
-}
-
-/**
- * Match result from tree traversal
- */
-export interface TreeMatch {
-  /** The matched route */
-  route: Route
-  /** Extracted URL parameters */
-  params: Record<string, string>
-  /** Matched path segments */
-  matchedSegments: string[]
-}
-
-/**
- * Optimized Route Tree for fast URL matching
- *
- * Routes are organized hierarchically:
- * - Static segments are checked first (fastest)
- * - Parameterized segments (:id) are checked second
- * - Wildcard segments (*) are checked last
- */
-export class RouteTree {
-  /** Root node of the tree */
-  readonly root: RouteNode
-
-  /** Add a route to the tree */
-  addRoute(route: Route): void
-
-  /** Add multiple routes to the tree */
-  addRoutes(routes: Route[]): void
-
-  /** Match a URL against the route tree */
-  match(url: URL): TreeMatch | null
-
-  /** Clear the match cache */
-  clearCache(): void
-
-  /** Get all routes in the tree (for compatibility) */
-  getRoutes(): Route[]
-
-  /** Get tree statistics for debugging */
-  getStats(): {
-    totalRoutes: number
-    cacheSize: number
-    treeDepth: number
-    staticNodes: number
-    paramNodes: number
-    wildcardNodes: number
-  }
-}
-
-/** Create a route tree from an array of routes */
-export function createRouteTree(routes: Route[]): RouteTree
-
-/** Match a URL against the route tree and return a RouteMatch (compatible with matchRoute API) */
-export function matchRouteFromTree(tree: RouteTree, url: URL): RouteMatch | null
-```
-
 #### `solarflare/worker` (worker.tsx)
 
 ```tsx
@@ -753,7 +651,7 @@ async function worker(request: Request, env: Env): Promise<Response> {
   // Server-only routes (no paired client) return Response directly
   if (route.type === 'server' && !findPairedModule(route.path)) {
     const mod = await route.loader()
-    return (mod.default as Function)(request)
+    return (mod.default as Function)(request, params)
   }
 
   // Load props from server loader if available
@@ -761,7 +659,7 @@ async function worker(request: Request, env: Env): Promise<Response> {
   const serverPath = findPairedModule(route.path)
   if (serverPath) {
     const serverMod = await modules.server[serverPath]()
-    props = { ...params, ...(await serverMod.default(request)) }
+    props = { ...params, ...(await serverMod.default(request, params)) }
   }
 
   // Load and render client component
@@ -876,22 +774,6 @@ interface ValidationResult {
   warnings: string[]
   exportInfo: ExportInfo | null
 }
-
-/** Route tree node for hierarchical URL matching */
-interface RouteNode {
-  static: Map<string, RouteNode>      // Static segment children
-  parameterized: RouteNode | null     // Parameterized segment child (:id)
-  paramName: string | null            // Parameter name for parameterized nodes
-  wildcard: RouteNode | null          // Wildcard segment child (*)
-  routes: Route[]                     // Routes terminating at this node
-}
-
-/** Match result from route tree traversal */
-interface TreeMatch {
-  route: Route                        // The matched route
-  params: Record<string, string>      // Extracted URL parameters
-  matchedSegments: string[]           // Matched path segments
-}
 ```
 
 ### SSR Output Example
@@ -916,20 +798,20 @@ Server renders:
 ### Implementation Steps
 
 1. **ast.ts** — `parsePath()`, `createProgram()`, `validateModule()`, `generateTypedModulesFile()`
-2. **build.ts** — Route scanning, validation, client/server bundling, chunk manifest generation
-3. **route-tree.ts** — `RouteTree` class, `createRouteTree()`, `matchRouteFromTree()` for O(path_length) lookups
-4. **client.tsx** — `define()` with tag validation, `useParams()`, `useData()` hooks
-5. **server.tsx** — `createRouter()`, `matchRoute()`, `findLayouts()`, `wrapWithLayouts()`, `renderComponent()`, `Assets`
-6. **worker.tsx** — Fetch handler with SSR, asset injection from chunk manifest
+2. **build.ts** — Route scanning, validation, props extraction, client/server bundling, auto-generate component registration
+3. **client.tsx** — Runtime hooks (`useParams()`, `useData()`), optional `define()` for custom registration
+4. **server.tsx** — `createRouter()`, `matchRoute()`, `findLayouts()`, `wrapWithLayouts()`, `renderComponent()`, `Assets`
+5. **worker.tsx** — Fetch handler with SSR, asset injection from chunk manifest
 
 ### Benefits
 
-- **Zero config** — Props auto-extracted from TypeScript types via Compiler API
+- **Modern browser-native** — Uses Navigation API, View Transitions API, and URLPattern (Chrome 102+, Edge 102+, Safari 15.4+)
+- **Zero config** — Components auto-registered at build time, props extracted from TypeScript types
 - **Type-safe** — Full TypeScript support for component props and route params
 - **Build-time validation** — Module exports validated against expected signatures
 - **Per-route code splitting** — Each client component gets its own chunk
-- **Fast routing** — O(path_length) lookups via hierarchical route tree with LRU caching
-- **DX** — Just export `define(Component)`, everything else is automatic
+- **Fast routing** — Native URLPattern matching on sorted routes (modern browsers are fast!)
+- **DX** — Just export your component, everything else is automatic
 - **Nested layouts** — Automatic layout discovery and nesting
 - **Asset injection** — CSS and JS paths resolved from chunk manifest
 

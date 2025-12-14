@@ -102,11 +102,6 @@ export function supportsViewTransitions(): boolean {
   return typeof document !== 'undefined' && 'startViewTransition' in document
 }
 
-/** Check if Navigation API is supported */
-export function supportsNavigation(): boolean {
-  return typeof window !== 'undefined' && 'navigation' in window
-}
-
 // ============================================================================
 // Router Class
 // ============================================================================
@@ -209,16 +204,15 @@ export class Router {
   /** Navigate to a URL */
   async navigate(to: string | URL, options: NavigateOptions = {}): Promise<void> {
     const url = typeof to === 'string' ? new URL(to, location.origin) : to
-    const match = this.match(url)
-
-    // Update history
-    if (options.replace) {
-      history.replaceState(options.state ?? null, '', url.href)
-    } else {
-      history.pushState(options.state ?? null, '', url.href)
+    
+    // Let Navigation API handle history mutations
+    const nav = (window as any).navigation
+    if (nav) {
+      await nav.navigate(url.href, {
+        history: options.replace ? 'replace' : 'auto',
+        state: options.state,
+      })
     }
-
-    await this.#executeNavigation(url, match, options)
   }
 
   /** Execute navigation with optional view transition */
@@ -289,28 +283,27 @@ export class Router {
     const behavior = this.#config.scrollBehavior
     if (behavior === false) return
 
+    // Map 'instant' to 'auto' for standard compliance
+    const scrollBehavior: ScrollBehavior = behavior === 'instant' ? 'auto' : behavior
+
     // Scroll to hash target if present
     if (url.hash) {
       const target = document.querySelector(url.hash)
       if (target) {
-        target.scrollIntoView({ behavior: behavior === 'auto' ? 'instant' : behavior })
+        target.scrollIntoView({ behavior: scrollBehavior })
         return
       }
     }
 
     // Scroll to top
-    scrollTo({ top: 0, left: 0, behavior: behavior === 'auto' ? 'instant' : behavior })
+    scrollTo({ top: 0, left: 0, behavior: scrollBehavior })
   }
 
   /** Start intercepting navigation */
   start(): this {
     if (this.#started) return this
 
-    if (supportsNavigation()) {
-      this.#setupNavigationAPI()
-    } else {
-      this.#setupLegacyNavigation()
-    }
+    this.#setupNavigationAPI()
 
     // Set initial route match (don't fetch - page is already SSR'd)
     const url = new URL(location.href)
@@ -353,43 +346,6 @@ export class Router {
 
     nav.addEventListener('navigate', handler)
     this.#cleanupFns.push(() => nav.removeEventListener('navigate', handler))
-  }
-
-  /** Setup legacy popstate/click handlers */
-  #setupLegacyNavigation(): void {
-    const popstateHandler = () => {
-      const url = new URL(location.href)
-      const match = this.match(url)
-      this.#executeNavigation(url, match, { skipTransition: true })
-    }
-
-    const clickHandler = (event: MouseEvent) => {
-      const link = (event.target as Element).closest('a')
-      if (!link) return
-
-      const href = link.getAttribute('href')
-      if (!href || link.hasAttribute('download')) return
-      if (link.target && link.target !== '_self') return
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-
-      try {
-        const url = new URL(href, location.origin)
-        if (url.origin !== location.origin) return
-
-        event.preventDefault()
-        this.navigate(url)
-      } catch {
-        // Invalid URL, let browser handle it
-      }
-    }
-
-    addEventListener('popstate', popstateHandler)
-    document.addEventListener('click', clickHandler)
-
-    this.#cleanupFns.push(
-      () => removeEventListener('popstate', popstateHandler),
-      () => document.removeEventListener('click', clickHandler)
-    )
   }
 
   // ============================================================================
@@ -514,118 +470,4 @@ export function isActive(path: string, exact = false): boolean {
   return getRouter().isActive(path, exact)
 }
 
-// ============================================================================
-// Link Enhancement (vanilla DOM)
-// ============================================================================
 
-/**
- * Enhance existing anchor elements with SPA navigation
- * Call this after dynamic content is added to the page
- *
- * @example
- * ```ts
- * // Enhance all links in a container
- * enhanceLinks(document.querySelector('.dynamic-content'))
- *
- * // Or enhance specific links
- * enhanceLinks(document.querySelectorAll('a[data-spa]'))
- * ```
- */
-export function enhanceLinks(
-  target: Element | NodeListOf<Element> | null,
-  router?: Router
-): void {
-  if (!target) return
-
-  const r = router ?? globalRouter
-  if (!r) {
-    console.warn('[solarflare] Cannot enhance links: router not initialized')
-    return
-  }
-
-  const elements = 'forEach' in target ? target : [target]
-
-  elements.forEach((el) => {
-    const links = el.tagName === 'A' ? [el as HTMLAnchorElement] : el.querySelectorAll('a')
-
-    links.forEach((link) => {
-      // Skip already enhanced or external links
-      if (link.dataset.spaEnhanced) return
-      if (link.target && link.target !== '_self') return
-
-      const href = link.getAttribute('href')
-      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:'))
-        return
-
-      try {
-        const url = new URL(href, location.origin)
-        if (url.origin !== location.origin) return
-
-        link.dataset.spaEnhanced = 'true'
-
-        link.addEventListener('click', (event) => {
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-          if (event.button !== 0) return
-
-          event.preventDefault()
-          r.navigate(url)
-        })
-      } catch {
-        // Invalid URL, skip
-      }
-    })
-  })
-}
-
-// ============================================================================
-// Active Link Styling (vanilla DOM)
-// ============================================================================
-
-/**
- * Update active state classes on links reactively
- * Returns cleanup function
- *
- * @example
- * ```ts
- * // Add 'active' class to current route links
- * const cleanup = trackActiveLinks({
- *   selector: 'nav a',
- *   activeClass: 'active',
- *   exact: false
- * })
- * ```
- */
-export function trackActiveLinks(options: {
-  selector: string
-  activeClass?: string
-  exact?: boolean
-  router?: Router
-}): () => void {
-  const { selector, activeClass = 'active', exact = false, router } = options
-
-  const r = router ?? globalRouter
-  if (!r) {
-    console.warn('[solarflare] Cannot track active links: router not initialized')
-    return () => {}
-  }
-
-  return effect(() => {
-    const match = r.current.value
-    const currentPath = match?.url.pathname ?? location.pathname
-
-    document.querySelectorAll<HTMLAnchorElement>(selector).forEach((link) => {
-      const href = link.getAttribute('href')
-      if (!href) return
-
-      try {
-        const url = new URL(href, location.origin)
-        const isMatch = exact ? url.pathname === currentPath : currentPath.startsWith(url.pathname)
-
-        link.classList.toggle(activeClass, isMatch)
-        link.setAttribute('aria-current', isMatch ? 'page' : '')
-      } catch {
-        // Invalid URL, skip
-      }
-    })
-  })
-}

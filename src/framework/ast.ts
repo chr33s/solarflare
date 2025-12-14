@@ -4,11 +4,7 @@
  */
 import { join } from 'path'
 import ts from 'typescript'
-import { parsePath, getModuleKind, type ParsedPath, type ModuleKind } from './paths'
-
-// Re-export path utilities for backward compatibility
-// These are defined in paths.ts to avoid TypeScript dependency in client code
-export { parsePath, getModuleKind, type ParsedPath, type ModuleKind }
+import { parsePath, type ParsedPath, type ModuleKind } from './paths'
 
 // ============================================================================
 // Program & Type Checker Utilities
@@ -429,7 +425,7 @@ export function getTypeDeclaration(kind: ModuleKind): string {
     case 'server':
       return '(request: Request, params: Record<string, string>, env: Env) => Response | Promise<Response> | Record<string, unknown> | Promise<Record<string, unknown>>'
     case 'client':
-      return '(props: Record<string, unknown>) => import("preact").VNode'
+      return '(props: any) => import("preact").VNode'
     case 'layout':
       return '(props: { children: import("preact").VNode }) => import("preact").VNode'
     default:
