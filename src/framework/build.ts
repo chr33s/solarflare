@@ -153,6 +153,17 @@ interface ComponentMeta {
   parsed: ReturnType<typeof parsePath>;
   /** Chunk filename for this component (e.g., "blog.$slug.js") */
   chunk: string;
+  /** Content hash for cache busting */
+  hash?: string;
+}
+
+/**
+ * Generate a short hash from content for cache busting
+ */
+function generateHash(content: string): string {
+  const hasher = new Bun.CryptoHasher("sha256");
+  hasher.update(content);
+  return hasher.digest("hex").slice(0, 8);
 }
 
 /**
@@ -160,23 +171,27 @@ interface ComponentMeta {
  * e.g., "blog/$slug.client.tsx" → "blog.slug.js"
  * Note: $ is removed to avoid URL encoding issues
  */
-function getChunkName(file: string): string {
-  return (
-    file
-      .replace(/\.client\.tsx?$/, "")
-      .replace(/\//g, ".")
-      .replace(/\$/g, "") // Remove $ to avoid URL issues
-      .replace(/^index$/, "index") + ".js"
-  );
+function getChunkName(file: string, hash?: string): string {
+  const base = file
+    .replace(/\.client\.tsx?$/, "")
+    .replace(/\//g, ".")
+    .replace(/\$/g, "") // Remove $ to avoid URL issues
+    .replace(/^index$/, "index");
+  
+  return hash ? `${base}.${hash}.js` : `${base}.js`;
 }
 
-function getComponentMeta(program: ts.Program, file: string): ComponentMeta {
+async function getComponentMeta(program: ts.Program, file: string): Promise<ComponentMeta> {
   const filePath = join(APP_DIR, file);
   const props = extractPropsFromProgram(program, filePath);
   const parsed = parsePath(file);
-  const chunk = getChunkName(file);
+  
+  // Generate hash from file content
+  const content = await Bun.file(filePath).text();
+  const hash = generateHash(content);
+  const chunk = getChunkName(file, hash);
 
-  return { file, tag: parsed.tag, props, parsed, chunk };
+  return { file, tag: parsed.tag, props, parsed, chunk, hash };
 }
 
 /**
@@ -335,7 +350,7 @@ async function buildClient() {
   const program = createProgram(filePaths);
 
   // Get metadata for all components
-  const metas = clientFiles.map((file) => getComponentMeta(program, file));
+  const metas = await Promise.all(clientFiles.map((file) => getComponentMeta(program, file)));
 
   // Copy static assets FIRST (before JS build triggers wrangler reload)
   // This ensures CSS/assets are available when browser refreshes
@@ -356,9 +371,12 @@ async function buildClient() {
         // Resolve CSS path relative to layout file
         const cssSourcePath = join(APP_DIR, layoutDir, cssImport);
 
-        // Generate output filename: retain the imported CSS filename
+        // Generate output filename with hash
         const cssFileName = cssImport.replace("./", "");
-        const cssOutputName = cssFileName;
+        const cssContent = await Bun.file(cssSourcePath).text();
+        const cssHash = generateHash(cssContent);
+        const cssBase = cssFileName.replace(/\.css$/, "");
+        const cssOutputName = `${cssBase}.${cssHash}.css`;
 
         // Copy CSS to dist
         if (await Bun.file(cssSourcePath).exists()) {
@@ -376,12 +394,23 @@ async function buildClient() {
     }
   }
 
-  // Copy public assets if directory exists
+  // Copy public assets with content hashes if directory exists
   if (await Bun.file(PUBLIC_DIR).exists()) {
     const publicFiles = await scanFiles("**/*", PUBLIC_DIR);
     for (const file of publicFiles) {
       const src = join(PUBLIC_DIR, file);
-      const dest = join(DIST_CLIENT, file);
+      
+      // Generate hash for the asset
+      const content = await Bun.file(src).arrayBuffer();
+      const hash = generateHash(Buffer.from(content).toString());
+      
+      // Add hash to filename before extension
+      const parts = file.split(".");
+      const ext = parts.pop();
+      const base = parts.join(".");
+      const hashedName = ext ? `${base}.${hash}.${ext}` : `${base}.${hash}`;
+      
+      const dest = join(DIST_CLIENT, hashedName);
       await Bun.write(dest, Bun.file(src));
     }
   }
@@ -453,17 +482,30 @@ async function buildClient() {
     }
   }
 
-  // Handle CSS outputs - rename them to match route names
+  // Handle CSS outputs - rename them to match route names with hashes
   for (const output of result.outputs) {
     const outputPath = output.path;
     const outputName = outputPath.split("/").pop() || "";
 
     // Handle CSS files generated from imports
     if (outputName.endsWith(".css") && outputName.startsWith(".entry-")) {
-      // Extract the route name and rename to a clean CSS name
+      // Extract the route name and rename to a clean CSS name with hash
       const baseName = outputName.replace(".entry-", "").replace(".generated.css", "");
-      const targetPath = join(DIST_CLIENT, `${baseName}.css`);
+      const cssContent = await Bun.file(outputPath).text();
+      const cssHash = generateHash(cssContent);
+      const targetPath = join(DIST_CLIENT, `${baseName}.${cssHash}.css`);
       await safeRename(outputPath, targetPath);
+      
+      // Update manifest with the hashed CSS filename
+      for (const meta of metas) {
+        const metaBase = getChunkName(meta.file).replace(/\.js$/, "");
+        if (baseName === metaBase || baseName.includes(metaBase)) {
+          if (!manifest.styles[meta.parsed.pattern]) {
+            manifest.styles[meta.parsed.pattern] = [];
+          }
+          manifest.styles[meta.parsed.pattern].push(`/${baseName}.${cssHash}.css`);
+        }
+      }
     }
   }
 
