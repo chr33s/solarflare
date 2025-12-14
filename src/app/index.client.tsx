@@ -1,7 +1,7 @@
-import { CountButton } from './_components/count-button'
-import { PostForm } from './_components/post-form'
-import logo from './logo.svg'
-import './index.css'
+import { CountButton } from "./_components/count-button";
+import { PostForm } from "./_components/post-form";
+import logo from "./logo.svg";
+import "./index.css";
 
 export default function Index({ hello }: { hello: string }) {
   return (
@@ -11,5 +11,5 @@ export default function Index({ hello }: { hello: string }) {
       <CountButton />
       <PostForm action="/" />
     </main>
-  )
+  );
 }

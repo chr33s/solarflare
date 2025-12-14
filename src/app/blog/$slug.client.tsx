@@ -1,6 +1,6 @@
-import { navigate } from '#solarflare/client'
-import { CountButton } from '#app/_components/count-button'
-import { PostForm } from '#app/_components/post-form'
+import { navigate } from "#solarflare/client";
+import { CountButton } from "#app/_components/count-button";
+import { PostForm } from "#app/_components/post-form";
 
 export default function BlogPost({ slug, title }: { slug: string; title: string }) {
   return (
@@ -9,7 +9,7 @@ export default function BlogPost({ slug, title }: { slug: string; title: string 
       <p>Slug: {slug}</p>
       <CountButton />
       <PostForm action={`/blog/${slug}`} />
-      <button onClick={() => navigate('/')}>Go Home</button>
+      <button onClick={() => navigate("/")}>Go Home</button>
     </article>
-  )
+  );
 }

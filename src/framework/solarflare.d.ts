@@ -4,7 +4,7 @@
 interface ImportMeta {
   glob<T = { default: unknown }>(
     pattern: string,
-    options?: { eager?: boolean }
+    options?: { eager?: boolean },
   ): Record<string, () => Promise<T>>;
 }
 
@@ -12,45 +12,45 @@ interface ImportMeta {
  * Extend Window with Solarflare router
  */
 interface Window {
-  __SF_ROUTER__?: import('./router').Router;
+  __SF_ROUTER__?: import("./router").Router;
 }
 
-declare module '*.css' {
+declare module "*.css" {
   const classNames: Record<string, string>;
   export default classNames;
 }
 
-declare module '*.gif' {
+declare module "*.gif" {
   const image: string;
   export default image;
 }
 
-declare module '*.html' {
+declare module "*.html" {
   const html: string;
   export default html;
 }
 
-declare module '*.ico' {
+declare module "*.ico" {
   const image: string;
   export default image;
 }
 
-declare module '*.jpeg' {
+declare module "*.jpeg" {
   const image: string;
   export default image;
 }
 
-declare module '*.jpg' {
+declare module "*.jpg" {
   const image: string;
   export default image;
 }
 
-declare module '*.png' {
+declare module "*.png" {
   const image: string;
   export default image;
 }
 
-declare module '*.svg' {
+declare module "*.svg" {
   const image: any;
   export default image;
 }
@@ -58,8 +58,8 @@ declare module '*.svg' {
 /**
  * Solarflare Framework Types
  */
-declare module 'solarflare/client' {
-  import { FunctionComponent, Context } from 'preact';
+declare module "solarflare/client" {
+  import { FunctionComponent, Context } from "preact";
 
   /**
    * Parsed tag metadata from file path
@@ -76,7 +76,7 @@ declare module 'solarflare/client' {
     /** Whether this is the root/index component */
     isRoot: boolean;
     /** Component type based on file suffix */
-    type: 'client' | 'server' | 'unknown';
+    type: "client" | "server" | "unknown";
   }
 
   /**
@@ -136,7 +136,7 @@ declare module 'solarflare/client' {
    */
   export function define<P extends Record<string, any>>(
     Component: FunctionComponent<P>,
-    options?: DefineOptions
+    options?: DefineOptions,
   ): FunctionComponent<P>;
 
   /**
@@ -144,7 +144,7 @@ declare module 'solarflare/client' {
    */
   export function defineWithMeta<P extends Record<string, any>>(
     Component: FunctionComponent<P>,
-    options?: DefineOptions
+    options?: DefineOptions,
   ): DefineResult<P>;
 
   /**
@@ -161,8 +161,8 @@ declare module 'solarflare/client' {
   export const DataContext: Context<unknown>;
 }
 
-declare module 'solarflare/server' {
-  import { VNode, FunctionComponent } from 'preact';
+declare module "solarflare/server" {
+  import { VNode, FunctionComponent } from "preact";
 
   /**
    * Route parameter definition extracted from pattern
@@ -207,7 +207,7 @@ declare module 'solarflare/server' {
     /** Dynamic module loader */
     loader: () => Promise<{ default: unknown }>;
     /** Route type: client or server */
-    type: 'client' | 'server';
+    type: "client" | "server";
   }
 
   /**
@@ -278,7 +278,7 @@ declare module 'solarflare/server' {
    * Flatten a structured ModuleMap into a flat record
    */
   export function flattenModules(
-    modules: ModuleMap
+    modules: ModuleMap,
   ): Record<string, () => Promise<{ default: unknown }>>;
 
   /**
@@ -291,7 +291,7 @@ declare module 'solarflare/server' {
    */
   export function findLayoutHierarchy(
     routePath: string,
-    modules: Record<string, () => Promise<{ default: unknown }>>
+    modules: Record<string, () => Promise<{ default: unknown }>>,
   ): LayoutHierarchy;
 
   /**
@@ -327,10 +327,7 @@ declare module 'solarflare/server' {
    * @param content - The content to wrap
    * @param layouts - The layouts to apply
    */
-  export function wrapWithLayouts(
-    content: VNode<any>,
-    layouts: Layout[]
-  ): Promise<VNode<any>>;
+  export function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>>;
 
   /**
    * Generate asset HTML tags for injection
@@ -343,7 +340,7 @@ declare module 'solarflare/server' {
   export function renderComponent(
     Component: FunctionComponent<any>,
     tag: string,
-    props: Record<string, unknown>
+    props: Record<string, unknown>,
   ): VNode<any>;
 
   /**
@@ -352,8 +349,8 @@ declare module 'solarflare/server' {
   export function parse(request: Request): Record<string, string>;
 }
 
-declare module 'solarflare/worker' {
-  import { ModuleMap } from 'solarflare/server';
+declare module "solarflare/worker" {
+  import { ModuleMap } from "solarflare/server";
 
   /**
    * Cloudflare Worker fetch handler
@@ -364,8 +361,8 @@ declare module 'solarflare/worker' {
   export default worker;
 }
 
-declare module 'solarflare/ast' {
-  import ts from 'typescript';
+declare module "solarflare/ast" {
+  import ts from "typescript";
 
   /**
    * Compiler options for Solarflare TypeScript analysis
@@ -380,7 +377,7 @@ declare module 'solarflare/ast' {
   /**
    * Module kind based on file naming convention
    */
-  export type ModuleKind = 'server' | 'client' | 'layout' | 'unknown';
+  export type ModuleKind = "server" | "client" | "layout" | "unknown";
 
   /**
    * Parsed path information with AST-validated metadata
@@ -472,7 +469,7 @@ declare module 'solarflare/ast' {
    */
   export function getDefaultExportInfo(
     checker: ts.TypeChecker,
-    sourceFile: ts.SourceFile
+    sourceFile: ts.SourceFile,
   ): ExportInfo | null;
 
   /**
@@ -481,7 +478,7 @@ declare module 'solarflare/ast' {
   export function validateModule(
     program: ts.Program,
     filePath: string,
-    baseDir?: string
+    baseDir?: string,
   ): ValidationResult;
 
   /**
@@ -489,7 +486,7 @@ declare module 'solarflare/ast' {
    */
   export function findPairedModules(
     filePath: string,
-    availableModules: string[]
+    availableModules: string[],
   ): {
     client: string | null;
     server: string | null;
@@ -509,7 +506,7 @@ declare module 'solarflare/ast' {
    */
   export function validateGeneratedCode(
     code: string,
-    filename?: string
+    filename?: string,
   ): {
     valid: boolean;
     errors: ts.Diagnostic[];
@@ -523,9 +520,9 @@ declare module 'solarflare/ast' {
 /**
  * Client-side SPA Router for build-time routes
  */
-declare module 'solarflare/router' {
-  import { FunctionComponent, VNode } from 'preact';
-  import { ReadonlySignal } from '@preact/signals';
+declare module "solarflare/router" {
+  import { FunctionComponent, VNode } from "preact";
+  import { ReadonlySignal } from "@preact/signals";
 
   /**
    * Route definition from build-time manifest
@@ -540,7 +537,7 @@ declare module 'solarflare/router' {
     /** CSS stylesheets for this route */
     styles?: string[];
     /** Route type */
-    type: 'client' | 'server';
+    type: "client" | "server";
     /** Dynamic parameter names */
     params: string[];
   }
@@ -587,7 +584,7 @@ declare module 'solarflare/router' {
     /** Enable view transitions (default: true if supported) */
     viewTransitions?: boolean;
     /** Scroll behavior after navigation */
-    scrollBehavior?: 'auto' | 'smooth' | 'instant' | false;
+    scrollBehavior?: "auto" | "smooth" | "instant" | false;
     /** Called when no route matches */
     onNotFound?: (url: URL) => void;
     /** Called after navigation completes */
@@ -605,7 +602,7 @@ declare module 'solarflare/router' {
    */
   export class Router {
     /** Reactive current match */
-    readonly current: import('@preact/signals').Signal<RouteMatch | null>;
+    readonly current: import("@preact/signals").Signal<RouteMatch | null>;
     /** Reactive params derived from current match */
     readonly params: ReadonlySignal<Record<string, string>>;
 
@@ -635,7 +632,7 @@ declare module 'solarflare/router' {
   export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router;
 
   /** Router context */
-  export const RouterContext: import('preact').Context<Router | null>;
+  export const RouterContext: import("preact").Context<Router | null>;
 
   /** Hook to access the router instance */
   export function useRouter(): Router;
@@ -696,17 +693,17 @@ declare module 'solarflare/router' {
 /**
  * Virtual module: Routes manifest
  * Generated at build time and compiled to dist/routes.json
- * 
+ *
  * @example
  * ```ts
  * import manifest from 'solarflare:routes'
  * import { createRouter } from 'solarflare/router'
- * 
+ *
  * const router = createRouter(manifest)
  * ```
  */
-declare module 'solarflare:routes' {
-  import type { RoutesManifest } from 'solarflare/router';
+declare module "solarflare:routes" {
+  import type { RoutesManifest } from "solarflare/router";
   const manifest: RoutesManifest;
   export default manifest;
 }
@@ -714,15 +711,15 @@ declare module 'solarflare:routes' {
 /**
  * Virtual module: Route type definitions
  * Generated at build time for type-safe route navigation
- * 
+ *
  * @example
  * ```ts
  * import type { Routes, RoutePath, RouteParams } from 'solarflare:routes/types'
- * 
+ *
  * function navigate<P extends RoutePath>(path: P, params: RouteParams<P>) { ... }
  * ```
  */
-declare module 'solarflare:routes/types' {
+declare module "solarflare:routes/types" {
   /**
    * Type-safe route definitions
    * Maps route patterns to their parameter types
@@ -735,5 +732,5 @@ declare module 'solarflare:routes/types' {
   export type RoutePath = keyof Routes;
 
   /** Extract params type for a specific route */
-  export type RouteParams<T extends RoutePath> = Routes[T]['params'];
+  export type RouteParams<T extends RoutePath> = Routes[T]["params"];
 }

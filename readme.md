@@ -101,14 +101,14 @@ src/framework/
 
 ### File Conventions
 
-| Pattern | Purpose |
-|---------|---------|
+| Pattern        | Purpose                                              |
+| -------------- | ---------------------------------------------------- |
 | `*.client.tsx` | Client components, auto-registered as web components |
-| `*.server.tsx` | Server handlers, run in Workers runtime |
-| `_layout.tsx`  | Layout component, wraps child routes |
-| `_*`           | Hidden from routes (layouts, components) |
-| `$param`       | Dynamic URL segment → `:param` in URLPattern |
-| `index.*`      | Matches directory root path |
+| `*.server.tsx` | Server handlers, run in Workers runtime              |
+| `_layout.tsx`  | Layout component, wraps child routes                 |
+| `_*`           | Hidden from routes (layouts, components)             |
+| `$param`       | Dynamic URL segment → `:param` in URLPattern         |
+| `index.*`      | Matches directory root path                          |
 
 ### Layouts
 
@@ -216,6 +216,7 @@ dist/client
 ### Client Router
 
 The client router enables SPA navigation using native browser APIs:
+
 - **URLPattern** for route matching
 - **Navigation API** for intercepting navigation
 - **View Transitions API** for smooth page transitions
@@ -279,6 +280,7 @@ export default function App({ title }: Props) {
 #### How It Works
 
 Client components are **automatically registered** at build time:
+
 1. Build script extracts props from TypeScript types using Compiler API
 2. Generates entry files that call `preact-custom-element`'s `register()` function
 3. Tag names are generated from file paths (e.g., `blog/$slug.client.tsx` → `sf-blog-slug`)
@@ -335,11 +337,11 @@ function extractPropsFromProgram(program: ts.Program, filePath: string): string[
   const checker = program.getTypeChecker()
   const sourceFile = program.getSourceFile(filePath)
   const exportInfo = getDefaultExportInfo(checker, sourceFile)
-  
+
   // Get first parameter type (props)
   const firstParam = exportInfo.signatures[0].getParameters()[0]
   const paramType = checker.getTypeOfSymbolAtLocation(firstParam, sourceFile)
-  
+
   return paramType.getProperties().map((p) => p.getName())
 }
 ```
@@ -502,21 +504,21 @@ export function createRouter(manifest: RoutesManifest, config?: RouterConfig): R
 export class Router {
   /** Reactive current match (Preact Signal) */
   readonly current: Signal<RouteMatch | null>
-  
+
   /** Reactive params derived from current match */
   readonly params: ReadonlySignal<Record<string, string>>
-  
+
   /** Match a URL against registered routes */
   match(url: URL): RouteMatch | null
-  
+
   /** Navigate to a URL (uses Navigation API) */
   navigate(to: string | URL, options?: NavigateOptions): Promise<void>
-  
+
   /** Navigate back/forward in history */
   back(): void
   forward(): void
   go(delta: number): void
-  
+
   /** Start/stop the router */
   start(): this
   stop(): this
@@ -779,6 +781,7 @@ interface ValidationResult {
 ### SSR Output Example
 
 Server renders:
+
 ```html
 <!DOCTYPE html>
 <html>
@@ -827,13 +830,15 @@ Server renders:
 The current attribute-based prop passing (<sf-blog-slug slug="hello" title="Hello">) only supports strings and has XSS/size concerns. sveltejs/devalue is the best fit—it enables complex types (Date, Map, Set), is XSS-safe, and requires minimal changes
 
 **Steps:**
+
 1. Add devalue dependency — Add devalue to package.json dependencies (~3KB)
-2. Create data island serializer in server.tsx — Use uneval() to emit <script>window.__SF__=...</script> with all component data keyed by ID
+2. Create data island serializer in server.tsx — Use uneval() to emit <script>window.**SF**=...</script> with all component data keyed by ID
 3. Update SSR rendering — Change custom element output from inline attributes to data-sf="component-id" references
-4. Modify useData() hook in client.tsx — Read from window.__SF__[id] instead of DOM attributes
+4. Modify useData() hook in client.tsx — Read from window.**SF**[id] instead of DOM attributes
 5. Adjust define() macro output — Generate hydration wrapper that pulls props from data island, not observed attributes
 
 **Further Considerations:**
+
 - Data island placement: Single global script at `</body>` for fewer DOM nodes
 - Streaming SSR: Data island must come before components or use dynamic injection
 - `capnweb` for client→Worker RPC: Separate from hydration — Phase 2

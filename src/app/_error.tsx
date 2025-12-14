@@ -1,9 +1,9 @@
-import type { VNode } from 'preact'
+import type { VNode } from "preact";
 
 export interface ErrorProps {
-  error: Error
-  url?: URL
-  reset?: () => void
+  error: Error;
+  url?: URL;
+  reset?: () => void;
 }
 
 export default function ErrorPage({ error, url, reset }: ErrorProps): VNode {
@@ -19,5 +19,5 @@ export default function ErrorPage({ error, url, reset }: ErrorProps): VNode {
       )}
       <a href="/">Go home</a>
     </div>
-  )
+  );
 }

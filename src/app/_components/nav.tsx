@@ -4,5 +4,5 @@ export function Nav() {
       <a href="/">Home</a>
       <a href="/blog/hello-world">Blog</a>
     </nav>
-  )
+  );
 }

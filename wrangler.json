@@ -3,12 +3,10 @@
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/client",
-    "run_worker_first": true,
+    "run_worker_first": true
   },
   "compatibility_date": "2025-12-02",
-  "compatibility_flags": [
-    "nodejs_als"
-  ],
+  "compatibility_flags": ["nodejs_als"],
   "dev": {
     "port": 8080
   },

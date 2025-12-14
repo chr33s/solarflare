@@ -2,14 +2,14 @@
  * Solarflare Server
  * Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
  */
-import { type VNode, h } from 'preact'
-import { type FunctionComponent } from 'preact'
-import { parsePath } from './paths'
+import { type VNode, h } from "preact";
+import { type FunctionComponent } from "preact";
+import { parsePath } from "./paths";
 
 /**
  * Marker for asset injection - will be replaced with actual script/style tags
  */
-export const ASSETS_MARKER = '<!--SOLARFLARE_ASSETS-->'
+export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
 
 /**
  * Assets placeholder component
@@ -18,7 +18,7 @@ export const ASSETS_MARKER = '<!--SOLARFLARE_ASSETS-->'
  */
 export function Assets(): VNode<any> {
   // Render a special comment marker that will be replaced with actual assets
-  return h('solarflare-assets', { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } })
+  return h("solarflare-assets", { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } });
 }
 
 /**
@@ -26,11 +26,11 @@ export function Assets(): VNode<any> {
  */
 export interface RouteParamDef {
   /** Parameter name (e.g., "slug" from ":slug") */
-  name: string
+  name: string;
   /** Whether the parameter is optional */
-  optional: boolean
+  optional: boolean;
   /** Original segment in the pattern */
-  segment: string
+  segment: string;
 }
 
 /**
@@ -38,15 +38,15 @@ export interface RouteParamDef {
  */
 export interface ParsedPattern {
   /** Original file path */
-  filePath: string
+  filePath: string;
   /** URLPattern pathname */
-  pathname: string
+  pathname: string;
   /** Extracted parameter definitions */
-  params: RouteParamDef[]
+  params: RouteParamDef[];
   /** Whether this is a static route (no params) */
-  isStatic: boolean
+  isStatic: boolean;
   /** Route specificity score for sorting */
-  specificity: number
+  specificity: number;
 }
 
 /**
@@ -54,17 +54,17 @@ export interface ParsedPattern {
  */
 export interface Route {
   /** URLPattern for matching requests */
-  pattern: URLPattern
+  pattern: URLPattern;
   /** Parsed pattern with type information */
-  parsedPattern: ParsedPattern
+  parsedPattern: ParsedPattern;
   /** Original file path */
-  path: string
+  path: string;
   /** Custom element tag name */
-  tag: string
+  tag: string;
   /** Dynamic module loader */
-  loader: () => Promise<{ default: unknown }>
+  loader: () => Promise<{ default: unknown }>;
   /** Route type: client or server */
-  type: 'client' | 'server'
+  type: "client" | "server";
 }
 
 /**
@@ -72,14 +72,14 @@ export interface Route {
  * Delegates to parsePath from ast.ts for unified path handling
  */
 export function parsePattern(filePath: string): ParsedPattern {
-  const parsed = parsePath(filePath)
-  
+  const parsed = parsePath(filePath);
+
   // Transform params from string[] to RouteParamDef[]
   const params: RouteParamDef[] = parsed.params.map((name) => ({
     name,
     optional: false,
     segment: `:${name}`,
-  }))
+  }));
 
   return {
     filePath: parsed.original,
@@ -87,29 +87,29 @@ export function parsePattern(filePath: string): ParsedPattern {
     params,
     isStatic: params.length === 0,
     specificity: parsed.specificity,
-  }
+  };
 }
 
 /**
  * Structured module map with typed categories
  */
 export interface ModuleMap {
-  server: Record<string, () => Promise<{ default: unknown }>>
-  client: Record<string, () => Promise<{ default: unknown }>>
-  layout: Record<string, () => Promise<{ default: unknown }>>
+  server: Record<string, () => Promise<{ default: unknown }>>;
+  client: Record<string, () => Promise<{ default: unknown }>>;
+  layout: Record<string, () => Promise<{ default: unknown }>>;
 }
 
 /**
  * Flatten a structured ModuleMap into a flat record
  */
 export function flattenModules(
-  modules: ModuleMap
+  modules: ModuleMap,
 ): Record<string, () => Promise<{ default: unknown }>> {
   return {
     ...modules.server,
     ...modules.client,
     ...modules.layout,
-  }
+  };
 }
 
 /**
@@ -119,31 +119,31 @@ export function flattenModules(
  */
 export function createRouter(modules: ModuleMap): Route[] {
   // Combine server and client modules for routing (layouts are handled separately)
-  const routeModules = { ...modules.server, ...modules.client }
+  const routeModules = { ...modules.server, ...modules.client };
 
   const routes = Object.entries(routeModules)
-    .filter(([path]) => !path.includes('/_'))
+    .filter(([path]) => !path.includes("/_"))
     .map(([path, loader]) => {
-      const parsedPattern = parsePattern(path)
+      const parsedPattern = parsePattern(path);
       return {
         pattern: new URLPattern({ pathname: parsedPattern.pathname }),
         parsedPattern,
         path,
         tag: parsePath(path).tag,
         loader,
-        type: path.includes('.server.') ? ('server' as const) : ('client' as const),
-      }
+        type: path.includes(".server.") ? ("server" as const) : ("client" as const),
+      };
     })
     .sort((a, b) => {
       // Static routes before dynamic routes
       if (a.parsedPattern.isStatic !== b.parsedPattern.isStatic) {
-        return a.parsedPattern.isStatic ? -1 : 1
+        return a.parsedPattern.isStatic ? -1 : 1;
       }
       // Higher specificity first (more specific routes win)
-      return b.parsedPattern.specificity - a.parsedPattern.specificity
-    })
+      return b.parsedPattern.specificity - a.parsedPattern.specificity;
+    });
 
-  return routes
+  return routes;
 }
 
 /**
@@ -151,13 +151,13 @@ export function createRouter(modules: ModuleMap): Route[] {
  */
 export interface Layout {
   /** Layout file path */
-  path: string
+  path: string;
   /** Dynamic layout loader */
-  loader: () => Promise<{ default: unknown }>
+  loader: () => Promise<{ default: unknown }>;
   /** Nesting depth (0 = root) */
-  depth: number
+  depth: number;
   /** Directory this layout applies to */
-  directory: string
+  directory: string;
 }
 
 /**
@@ -165,11 +165,11 @@ export interface Layout {
  */
 export interface LayoutHierarchy {
   /** Ordered layouts from root to leaf */
-  layouts: Layout[]
+  layouts: Layout[];
   /** Route path segments */
-  segments: string[]
+  segments: string[];
   /** Directories checked for layouts */
-  checkedPaths: string[]
+  checkedPaths: string[];
 }
 
 /**
@@ -179,45 +179,45 @@ export interface LayoutHierarchy {
  */
 export function findLayoutHierarchy(
   routePath: string,
-  modules: Record<string, () => Promise<{ default: unknown }>>
+  modules: Record<string, () => Promise<{ default: unknown }>>,
 ): LayoutHierarchy {
-  const layouts: Layout[] = []
-  const checkedPaths: string[] = []
+  const layouts: Layout[] = [];
+  const checkedPaths: string[] = [];
 
   // Remove leading ./ and get segments (minus the file itself)
-  const segments = routePath.replace(/^\.\//, '').split('/').slice(0, -1)
+  const segments = routePath.replace(/^\.\//, "").split("/").slice(0, -1);
 
   // Check root layout first
-  const rootLayout = './_layout.tsx'
-  checkedPaths.push(rootLayout)
+  const rootLayout = "./_layout.tsx";
+  checkedPaths.push(rootLayout);
   if (rootLayout in modules) {
     layouts.push({
       path: rootLayout,
       loader: modules[rootLayout],
       depth: 0,
-      directory: '.',
-    })
+      directory: ".",
+    });
   }
 
   // Walk up the path checking for layouts
-  let current = '.'
+  let current = ".";
   for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i]
-    if (!segment) continue
-    current += `/${segment}`
-    const layoutPath = `${current}/_layout.tsx`
-    checkedPaths.push(layoutPath)
+    const segment = segments[i];
+    if (!segment) continue;
+    current += `/${segment}`;
+    const layoutPath = `${current}/_layout.tsx`;
+    checkedPaths.push(layoutPath);
     if (layoutPath in modules) {
       layouts.push({
         path: layoutPath,
         loader: modules[layoutPath],
         depth: i + 1,
         directory: current,
-      })
+      });
     }
   }
 
-  return { layouts, segments, checkedPaths }
+  return { layouts, segments, checkedPaths };
 }
 
 /**
@@ -225,12 +225,9 @@ export function findLayoutHierarchy(
  * Returns layouts from root to leaf order
  * e.g., "./blog/$slug.server.tsx" → ["./_layout.tsx", "./blog/_layout.tsx"]
  */
-export function findLayouts(
-  routePath: string,
-  modules: ModuleMap
-): Layout[] {
+export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
   // Use the layout category from the structured module map
-  return findLayoutHierarchy(routePath, modules.layout).layouts
+  return findLayoutHierarchy(routePath, modules.layout).layouts;
 }
 
 /**
@@ -238,13 +235,13 @@ export function findLayouts(
  */
 export interface RouteMatch {
   /** Matched route */
-  route: Route
+  route: Route;
   /** Extracted URL parameters (validated against pattern definition) */
-  params: Record<string, string>
+  params: Record<string, string>;
   /** Parameter definitions from the route pattern */
-  paramDefs: RouteParamDef[]
+  paramDefs: RouteParamDef[];
   /** Whether all required params were matched */
-  complete: boolean
+  complete: boolean;
 }
 
 /**
@@ -253,32 +250,32 @@ export interface RouteMatch {
  */
 export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   for (const route of routes) {
-    const result = route.pattern.exec(url)
+    const result = route.pattern.exec(url);
     if (result) {
-      const params = (result.pathname.groups as Record<string, string>) ?? {}
-      const paramDefs = route.parsedPattern.params
+      const params = (result.pathname.groups as Record<string, string>) ?? {};
+      const paramDefs = route.parsedPattern.params;
 
       // Validate that all required params are present
       const complete = paramDefs
         .filter((p) => !p.optional)
-        .every((p) => p.name in params && params[p.name] !== undefined)
+        .every((p) => p.name in params && params[p.name] !== undefined);
 
       return {
         route,
         params,
         paramDefs,
         complete,
-      }
+      };
     }
   }
-  return null
+  return null;
 }
 
 /**
  * Layout props - just children, assets are injected separately
  */
 export interface LayoutProps {
-  children: VNode<any>
+  children: VNode<any>;
 }
 
 /**
@@ -287,42 +284,39 @@ export interface LayoutProps {
  * @param content - The content to wrap
  * @param layouts - The layouts to apply
  */
-export async function wrapWithLayouts(
-  content: VNode<any>,
-  layouts: Layout[]
-): Promise<VNode<any>> {
-  let wrapped: VNode<any> = content
+export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>> {
+  let wrapped: VNode<any> = content;
 
   // Apply layouts from leaf to root (reverse order)
   for (let i = layouts.length - 1; i >= 0; i--) {
-    const { loader } = layouts[i]
-    const mod = await loader()
-    const Layout = mod.default as FunctionComponent<LayoutProps>
-    wrapped = h(Layout, { children: wrapped })
+    const { loader } = layouts[i];
+    const mod = await loader();
+    const Layout = mod.default as FunctionComponent<LayoutProps>;
+    wrapped = h(Layout, { children: wrapped });
   }
 
-  return wrapped
+  return wrapped;
 }
 
 /**
  * Generate asset HTML tags for injection
  */
 export function generateAssetTags(script?: string, styles?: string[]): string {
-  let html = ''
-  
+  let html = "";
+
   // Add stylesheet links
   if (styles && styles.length > 0) {
     for (const href of styles) {
-      html += `<link rel="stylesheet" href="${href}">`
+      html += `<link rel="stylesheet" href="${href}">`;
     }
   }
-  
+
   // Add script tag
   if (script) {
-    html += `<script type="module" src="${script}"></script>`
+    html += `<script type="module" src="${script}"></script>`;
   }
-  
-  return html
+
+  return html;
 }
 
 /**
@@ -331,14 +325,14 @@ export function generateAssetTags(script?: string, styles?: string[]): string {
 export function renderComponent(
   Component: FunctionComponent<any>,
   tag: string,
-  props: Record<string, unknown>
+  props: Record<string, unknown>,
 ): VNode<any> {
   // Create the custom element wrapper with props as attributes
   // The SSR content goes inside the custom element
   // Convert props to string attributes for the custom element
-  const attrs: Record<string, string> = {}
+  const attrs: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
-    attrs[key] = String(value)
+    attrs[key] = String(value);
   }
-  return h(tag, attrs, h(Component, props))
+  return h(tag, attrs, h(Component, props));
 }

@@ -1,6 +1,6 @@
-import type { VNode } from 'preact'
-import { Assets } from '../framework/server'
-import { Nav } from './_components/nav'
+import type { VNode } from "preact";
+import { Assets } from "../framework/server";
+import { Nav } from "./_components/nav";
 
 export default function Layout({ children }: { children: VNode }) {
   return (
@@ -16,5 +16,5 @@ export default function Layout({ children }: { children: VNode }) {
         <div id="app">{children}</div>
       </body>
     </html>
-  )
+  );
 }
