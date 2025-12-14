@@ -5,7 +5,38 @@
 ## Quickstart
 
 ```sh
-bun install
+bun install # brew install bun
+bun dev --serve --watch
+```
+
+```jsx
+// src/blog/[slug].server.tsx
+export default async function blogServer({ request, params }) {
+  return Response.json({
+    url: request.url,
+    params,
+  })
+}
+
+// src/blog/[slug].client.tsx
+export default function Component({ params }) {
+  return <h1>Blog: {params.slug}</h1>
+}
+
+// src/api.server.ts
+import { env } from 'cloudflare:workers'
+
+export default async function apiServer(request: Request) {
+  return Response.json({
+    hello: env.HELLO ?? 'world'
+    url: request.url,
+  });
+}
+```
+
+### Development
+
+```sh
 bun link
 bun run clean
 bun run build
