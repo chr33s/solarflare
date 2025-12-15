@@ -12,6 +12,7 @@ import {
   renderToStream,
   type ModuleMap,
 } from "./server";
+import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward";
 // @ts-ignore - Generated at build time
 import modules from "../../dist/.modules.generated";
 // @ts-ignore - Generated at build time
@@ -26,6 +27,7 @@ interface ChunkManifest {
   chunks: Record<string, string>; // pattern -> chunk filename
   tags: Record<string, string>; // tag -> chunk filename
   styles: Record<string, string[]>; // pattern -> CSS filenames
+  devScripts?: string[]; // dev mode scripts (e.g., console-forward.js)
 }
 
 const manifest = chunkManifest as ChunkManifest;
@@ -42,6 +44,13 @@ function getScriptPath(tag: string): string | undefined {
  */
 function getStylesheets(pattern: string): string[] {
   return manifest.styles[pattern] ?? [];
+}
+
+/**
+ * Get dev mode scripts from the chunk manifest
+ */
+function getDevScripts(): string[] | undefined {
+  return manifest.devScripts;
 }
 
 /**
@@ -72,12 +81,27 @@ function findPairedModule(path: string): string | null {
 }
 
 /**
+ * Worker environment interface
+ */
+interface WorkerEnv {
+  /** Console forward log level (matches wrangler --log-level) */
+  WRANGLER_LOG?: LogLevel;
+  [key: string]: unknown;
+}
+
+/**
  * Cloudflare Worker fetch handler
  * Routes are auto-discovered at build time
  * Uses streaming SSR for improved TTFB
  */
-async function worker(request: Request): Promise<Response> {
+async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
+
+  // Handle console forward requests in dev mode
+  if (isConsoleRequest(request)) {
+    const logLevel = env?.WRANGLER_LOG ?? "log";
+    return processConsoleLogs(request, logLevel);
+  }
 
   // Match route using URLPattern - prefers client routes for SSR
   const match = matchRoute(router, url);
@@ -170,6 +194,7 @@ async function worker(request: Request): Promise<Response> {
   // Get the script and styles for this route's chunk
   const scriptPath = getScriptPath(route.tag);
   const stylesheets = getStylesheets(route.parsedPattern.pathname);
+  const devScripts = getDevScripts();
 
   // Render to streaming response with signal context
   const stream = await renderToStream(content, {
@@ -178,6 +203,7 @@ async function worker(request: Request): Promise<Response> {
     pathname: url.pathname,
     script: scriptPath,
     styles: stylesheets,
+    devScripts,
     deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
   });
 

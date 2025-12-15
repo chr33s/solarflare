@@ -17,6 +17,7 @@ import {
   type ValidationResult,
 } from "./ast";
 import { parsePath } from "./paths";
+import { generateClientScript } from "./console-forward";
 
 // Resolve paths relative to project root (two levels up from src/framework/)
 const ROOT_DIR = join(import.meta.dir, "../..");
@@ -515,6 +516,7 @@ interface ChunkManifest {
   chunks: Record<string, string>; // pattern -> chunk filename
   tags: Record<string, string>; // tag -> chunk filename
   styles: Record<string, string[]>; // pattern -> CSS filenames
+  devScripts?: string[]; // dev mode scripts (e.g., console-forward.js)
 }
 
 /**
@@ -619,6 +621,14 @@ async function buildClient() {
     }
   }
 
+  // Generate console forward script for dev mode only
+  if (!args.production) {
+    const consoleScript = generateClientScript();
+    const consoleScriptPath = join(DIST_CLIENT, "console-forward.js");
+    await Bun.write(consoleScriptPath, consoleScript);
+    console.log("   Generated console-forward.js (dev mode)");
+  }
+
   // Generate individual entry files for each component
   const entryPaths: string[] = [];
   const entryToMeta: Record<string, ComponentMeta> = {};
@@ -649,7 +659,12 @@ async function buildClient() {
   }
 
   // Build manifest mapping routes to their chunks
-  const manifest: ChunkManifest = { chunks: {}, tags: {}, styles: {} };
+  const manifest: ChunkManifest = { 
+    chunks: {}, 
+    tags: {}, 
+    styles: {},
+    devScripts: args.production ? undefined : ["/console-forward.js"],
+  };
 
   // Map entry paths to their output chunk names
   // Bun outputs entries as .entry-{name}.js when using splitting

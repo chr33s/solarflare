@@ -310,13 +310,20 @@ export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): P
 /**
  * Generate asset HTML tags for injection
  */
-export function generateAssetTags(script?: string, styles?: string[]): string {
+export function generateAssetTags(script?: string, styles?: string[], devScripts?: string[]): string {
   let html = "";
 
   // Add stylesheet links
   if (styles && styles.length > 0) {
     for (const href of styles) {
       html += `<link rel="stylesheet" href="${href}">`;
+    }
+  }
+
+  // Add dev mode scripts (like console forwarding)
+  if (devScripts && devScripts.length > 0) {
+    for (const src of devScripts) {
+      html += `<script src="${src}"></script>`;
     }
   }
 
@@ -377,6 +384,8 @@ export interface StreamRenderOptions {
   script?: string;
   /** Stylesheet paths to inject */
   styles?: string[];
+  /** Dev mode scripts to inject (e.g., console forwarding) */
+  devScripts?: string[];
   /** Deferred data to stream after initial render */
   deferred?: DeferredData;
 }
@@ -408,6 +417,7 @@ export function initServerContext(options: StreamRenderOptions): void {
 function createAssetInjectionTransformer(
   script?: string,
   styles?: string[],
+  devScripts?: string[],
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -432,7 +442,7 @@ function createAssetInjectionTransformer(
       const markerIndex = buffer.indexOf(marker);
       if (markerIndex !== -1) {
         // Generate replacement content
-        const assetTags = generateAssetTags(script, styles);
+        const assetTags = generateAssetTags(script, styles, devScripts);
         const storeScript = serializeStoreForHydration();
 
         // Replace marker with assets + store hydration
@@ -461,7 +471,7 @@ function createAssetInjectionTransformer(
         // Final check for marker in remaining content
         const markerIndex = buffer.indexOf(marker);
         if (markerIndex !== -1) {
-          const assetTags = generateAssetTags(script, styles);
+          const assetTags = generateAssetTags(script, styles, devScripts);
           const storeScript = serializeStoreForHydration();
           buffer = buffer.replace(marker, assetTags + storeScript);
         }
@@ -511,7 +521,7 @@ export async function renderToStream(
   const stream = renderToReadableStream(vnode) as RenderStream;
 
   // Create asset injection transformer
-  const transformer = createAssetInjectionTransformer(options.script, options.styles);
+  const transformer = createAssetInjectionTransformer(options.script, options.styles, options.devScripts);
 
   // Pipe through transformer
   const transformedStream = stream.pipeThrough(transformer);
