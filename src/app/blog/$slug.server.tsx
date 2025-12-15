@@ -7,8 +7,8 @@ export default async function server(request: Request, params: Record<string, st
     body: request.method === "POST" ? await request.formData() : null,
     params,
   });
-  return Response.json({
+  return {
     slug: params.slug,
     title: env.HELLO ?? "world",
-  });
+  };
 }

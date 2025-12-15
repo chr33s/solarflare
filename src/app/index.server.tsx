@@ -7,5 +7,5 @@ export default async function server(request: Request, params: Record<string, st
     body: request.method === "POST" ? await request.text() : null,
     params,
   });
-  return Response.json({ hello: env.HELLO ?? "world" });
+  return { hello: env.HELLO ?? "world" };
 }

@@ -1,17 +1,15 @@
 /**
  * Solarflare Worker
- * Cloudflare Worker fetch handler factory
+ * Cloudflare Worker fetch handler with streaming SSR
  */
 import { type FunctionComponent } from "preact";
-import { renderToString } from "preact-render-to-string";
 import {
   createRouter,
   matchRoute,
   findLayouts,
   wrapWithLayouts,
   renderComponent,
-  generateAssetTags,
-  ASSETS_MARKER,
+  renderToStream,
   type ModuleMap,
 } from "./server";
 // @ts-ignore - Generated at build time
@@ -52,6 +50,7 @@ function getStylesheets(pattern: string): string[] {
  */
 type ServerLoader = (
   request: Request,
+  params: Record<string, string>,
 ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 
 // Create router with sorted routes array
@@ -75,6 +74,7 @@ function findPairedModule(path: string): string | null {
 /**
  * Cloudflare Worker fetch handler
  * Routes are auto-discovered at build time
+ * Uses streaming SSR for improved TTFB
  */
 async function worker(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -112,14 +112,16 @@ async function worker(request: Request): Promise<Response> {
   }
 
   // Load props from server loader if available
-  let props: Record<string, unknown> = { ...params };
+  let serverData: Record<string, unknown> = {};
 
   if (serverPath && serverPath in typedModules.server) {
     const serverMod = await typedModules.server[serverPath]();
     const loader = serverMod.default as ServerLoader;
-    const serverProps = await loader(request);
-    props = { ...params, ...serverProps };
+    serverData = await loader(request, params);
   }
+
+  // Combine params and server data as props for the component
+  const props: Record<string, unknown> = { ...params, ...serverData };
 
   // Load the client component
   const clientMod = await typedModules.client[clientPath]();
@@ -134,18 +136,20 @@ async function worker(request: Request): Promise<Response> {
     content = await wrapWithLayouts(content, layouts);
   }
 
-  // Render to HTML string
-  let html = renderToString(content);
-
   // Get the script and styles for this route's chunk
   const scriptPath = getScriptPath(route.tag);
   const stylesheets = getStylesheets(route.parsedPattern.pathname);
 
-  // Generate asset tags and inject them by replacing the marker
-  const assetTags = generateAssetTags(scriptPath, stylesheets);
-  html = html.replace(`<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`, assetTags);
+  // Render to streaming response with signal context
+  const stream = await renderToStream(content, {
+    params,
+    serverData,
+    pathname: url.pathname,
+    script: scriptPath,
+    styles: stylesheets,
+  });
 
-  return new Response(html, {
+  return new Response(stream, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
     },

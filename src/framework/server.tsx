@@ -1,10 +1,18 @@
 /**
  * Solarflare Server
  * Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
+ * Streaming SSR with preact-render-to-string/stream
  */
 import { type VNode, h } from "preact";
 import { type FunctionComponent } from "preact";
+import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
 import { parsePath } from "./paths";
+import {
+  initStore,
+  setPathname,
+  serializeStoreForHydration,
+  resetStore,
+} from "./store";
 
 /**
  * Marker for asset injection - will be replaced with actual script/style tags
@@ -336,3 +344,187 @@ export function renderComponent(
   }
   return h(tag, attrs, h(Component, props));
 }
+
+// ============================================================================
+// Streaming SSR with Signals Context
+// ============================================================================
+
+/**
+ * Options for streaming rendering
+ */
+export interface StreamRenderOptions {
+  /** Route parameters */
+  params?: Record<string, string>;
+  /** Server-loaded data */
+  serverData?: unknown;
+  /** Current pathname */
+  pathname?: string;
+  /** Script path to inject */
+  script?: string;
+  /** Stylesheet paths to inject */
+  styles?: string[];
+}
+
+/**
+ * Initialize server-side store with request context
+ * Must be called before rendering to set up signal context
+ */
+export function initServerContext(options: StreamRenderOptions): void {
+  // Reset store for clean SSR (important for Cloudflare Workers reuse)
+  resetStore();
+
+  // Initialize store with request-specific data
+  initStore({
+    params: options.params,
+    serverData: options.serverData,
+  });
+
+  if (options.pathname) {
+    setPathname(options.pathname);
+  }
+}
+
+/**
+ * Transform a ReadableStream to inject assets and store hydration
+ * Replaces the ASSETS_MARKER with actual asset tags and appends store script
+ */
+function createAssetInjectionTransformer(
+  script?: string,
+  styles?: string[],
+): TransformStream<Uint8Array, Uint8Array> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const marker = `<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`;
+
+  return new TransformStream({
+    transform(chunk, controller) {
+      buffer += decoder.decode(chunk, { stream: true });
+
+      // Check if we have the complete marker
+      const markerIndex = buffer.indexOf(marker);
+      if (markerIndex !== -1) {
+        // Generate replacement content
+        const assetTags = generateAssetTags(script, styles);
+        const storeScript = serializeStoreForHydration();
+
+        // Replace marker with assets + store hydration
+        buffer = buffer.replace(marker, assetTags + storeScript);
+
+        // Flush everything before and including the replacement
+        controller.enqueue(encoder.encode(buffer));
+        buffer = "";
+      } else if (buffer.length > marker.length * 2) {
+        // If buffer is getting large and no marker found, flush safe portion
+        const safeLength = buffer.length - marker.length;
+        controller.enqueue(encoder.encode(buffer.slice(0, safeLength)));
+        buffer = buffer.slice(safeLength);
+      }
+    },
+    flush(controller) {
+      // Flush any remaining content
+      if (buffer) {
+        // Final check for marker in remaining content
+        const markerIndex = buffer.indexOf(marker);
+        if (markerIndex !== -1) {
+          const assetTags = generateAssetTags(script, styles);
+          const storeScript = serializeStoreForHydration();
+          buffer = buffer.replace(marker, assetTags + storeScript);
+        }
+        controller.enqueue(encoder.encode(buffer));
+      }
+    },
+  });
+}
+
+/**
+ * Extended stream interface with allReady promise
+ */
+export interface SolarflareStream extends ReadableStream<Uint8Array> {
+  /** Resolves when all content has been rendered */
+  allReady: Promise<void>;
+}
+
+/**
+ * Render a VNode to a streaming response with automatic asset injection
+ * Uses preact-render-to-string/stream for progressive HTML streaming
+ *
+ * @example
+ * ```tsx
+ * const stream = await renderToStream(
+ *   <Layout><Page /></Layout>,
+ *   {
+ *     params: { slug: 'hello-world' },
+ *     serverData: await loader(request),
+ *     script: '/chunk.js',
+ *     styles: ['/style.css'],
+ *   }
+ * );
+ *
+ * return new Response(stream, {
+ *   headers: { 'Content-Type': 'text/html; charset=utf-8' },
+ * });
+ * ```
+ */
+export async function renderToStream(
+  vnode: VNode<any>,
+  options: StreamRenderOptions = {},
+): Promise<SolarflareStream> {
+  // Initialize server context with signals
+  initServerContext(options);
+
+  // Render to streaming response
+  const stream = renderToReadableStream(vnode) as RenderStream;
+
+  // Create asset injection transformer
+  const transformer = createAssetInjectionTransformer(options.script, options.styles);
+
+  // Pipe through transformer
+  const transformedStream = stream.pipeThrough(transformer) as SolarflareStream;
+
+  // Forward allReady promise
+  transformedStream.allReady = stream.allReady;
+
+  return transformedStream;
+}
+
+/**
+ * Render to stream and wait for all content (no streaming benefits, but simpler)
+ * Useful for error pages or when you need the full HTML string
+ */
+export async function renderToStreamString(
+  vnode: VNode<any>,
+  options: StreamRenderOptions = {},
+): Promise<string> {
+  const stream = await renderToStream(vnode, options);
+
+  // Wait for all content
+  await stream.allReady;
+
+  // Read full stream to string
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let html = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    html += decoder.decode(value, { stream: true });
+  }
+
+  return html + decoder.decode();
+}
+
+// Re-export store utilities for use in server components
+export {
+  initStore,
+  setParams,
+  setServerData,
+  setPathname,
+  resetStore,
+  serializeStoreForHydration,
+  params,
+  serverData,
+  pathname,
+} from "./store";
+

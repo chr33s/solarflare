@@ -149,16 +149,47 @@ declare module "solarflare/client" {
 
   /**
    * Hook to access current route params
+   * Uses signals internally for reactivity with web components
+   * @see getRouter().params for signal-based reactive access
    */
   export function useParams(): Record<string, string>;
 
   /**
-   * Hook to access parsed data attribute
+   * Hook to access server data with loading/error states
    */
-  export function useData<T>(): T;
+  export function useServerData<T>(): import("./store").ServerData<T>;
 
-  export const ParamsContext: Context<Record<string, string>>;
-  export const DataContext: Context<unknown>;
+  /**
+   * Initialize client-side store from SSR hydration data
+   */
+  export function initClient(): void;
+
+  // Re-export store types and functions
+  export {
+    params,
+    serverData,
+    pathname,
+    initStore,
+    setParams,
+    setServerData,
+    setPathname,
+    hydrateStore,
+    resetStore,
+    computedParam,
+    computedData,
+    isLoading,
+    hasError,
+    onParamsChange,
+    onServerDataChange,
+    signal,
+    computed,
+    effect,
+    batch,
+    type ServerData,
+    type StoreConfig,
+    type ReadonlySignal,
+    type Signal,
+  } from "./store";
 }
 
 declare module "solarflare/server" {
@@ -347,6 +378,71 @@ declare module "solarflare/server" {
    * Parse URL parameters from a request URL using URLPattern
    */
   export function parse(request: Request): Record<string, string>;
+
+  // ============================================================================
+  // Streaming SSR with Signals Context
+  // ============================================================================
+
+  /**
+   * Options for streaming rendering
+   */
+  export interface StreamRenderOptions {
+    /** Route parameters */
+    params?: Record<string, string>;
+    /** Server-loaded data */
+    serverData?: unknown;
+    /** Current pathname */
+    pathname?: string;
+    /** Script path to inject */
+    script?: string;
+    /** Stylesheet paths to inject */
+    styles?: string[];
+  }
+
+  /**
+   * Extended stream interface with allReady promise
+   */
+  export interface SolarflareStream extends ReadableStream<Uint8Array> {
+    /** Resolves when all content has been rendered */
+    allReady: Promise<void>;
+  }
+
+  /**
+   * Initialize server-side store with request context
+   * Must be called before rendering to set up signal context
+   */
+  export function initServerContext(options: StreamRenderOptions): void;
+
+  /**
+   * Render a VNode to a streaming response with automatic asset injection
+   * Uses preact-render-to-string/stream for progressive HTML streaming
+   */
+  export function renderToStream(
+    vnode: VNode<any>,
+    options?: StreamRenderOptions,
+  ): Promise<SolarflareStream>;
+
+  /**
+   * Render to stream and wait for all content (no streaming benefits, but simpler)
+   * Useful for error pages or when you need the full HTML string
+   */
+  export function renderToStreamString(
+    vnode: VNode<any>,
+    options?: StreamRenderOptions,
+  ): Promise<string>;
+
+  // Re-export store utilities for use in server components
+  export {
+    initStore,
+    setParams,
+    setServerData,
+    setPathname,
+    resetStore,
+    serializeStoreForHydration,
+    params,
+    serverData,
+    pathname,
+  } from "./store";
 }
 
 declare module "solarflare/worker" {
@@ -355,10 +451,141 @@ declare module "solarflare/worker" {
   /**
    * Cloudflare Worker fetch handler
    * Routes are auto-discovered at build time from the generated modules
+   * Uses streaming SSR for improved TTFB
    */
   const worker: (request: Request, env: Env) => Promise<Response>;
 
   export default worker;
+}
+
+declare module "solarflare/store" {
+  import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals-core";
+
+  /**
+   * Server-rendered data passed to components
+   */
+  export interface ServerData<T = unknown> {
+    /** The actual data payload */
+    data: T;
+    /** Whether data is still loading (for streaming) */
+    loading: boolean;
+    /** Error if data fetch failed */
+    error: Error | null;
+  }
+
+  /**
+   * Store configuration
+   */
+  export interface StoreConfig {
+    /** Initial route params */
+    params?: Record<string, string>;
+    /** Initial server data */
+    serverData?: unknown;
+  }
+
+  /**
+   * Route parameters signal (readonly)
+   */
+  export const params: ReadonlySignal<Record<string, string>>;
+
+  /**
+   * Server data signal (readonly)
+   */
+  export const serverData: ReadonlySignal<ServerData<unknown>>;
+
+  /**
+   * Current pathname signal (readonly)
+   */
+  export const pathname: ReadonlySignal<string>;
+
+  /**
+   * Set route parameters
+   */
+  export function setParams(newParams: Record<string, string>): void;
+
+  /**
+   * Set server data
+   */
+  export function setServerData<T>(data: T): void;
+
+  /**
+   * Set server data loading state
+   */
+  export function setServerDataLoading(loading: boolean): void;
+
+  /**
+   * Set server data error
+   */
+  export function setServerDataError(error: Error): void;
+
+  /**
+   * Set current pathname
+   */
+  export function setPathname(path: string): void;
+
+  /**
+   * Batch multiple store updates
+   */
+  export function batchUpdate(fn: () => void): void;
+
+  /**
+   * Initialize store with config
+   */
+  export function initStore(config?: StoreConfig): void;
+
+  /**
+   * Reset store to initial state
+   */
+  export function resetStore(): void;
+
+  /**
+   * Get a specific param value
+   */
+  export function getParam(name: string): string | undefined;
+
+  /**
+   * Create a computed signal that extracts a specific param
+   */
+  export function computedParam(name: string): ReadonlySignal<string | undefined>;
+
+  /**
+   * Create a computed signal for typed server data
+   */
+  export function computedData<T>(): ReadonlySignal<T | null>;
+
+  /**
+   * Create a computed signal for loading state
+   */
+  export function isLoading(): ReadonlySignal<boolean>;
+
+  /**
+   * Create a computed signal for error state
+   */
+  export function hasError(): ReadonlySignal<Error | null>;
+
+  /**
+   * Run an effect when params change
+   */
+  export function onParamsChange(callback: (params: Record<string, string>) => void | (() => void)): () => void;
+
+  /**
+   * Run an effect when server data changes
+   */
+  export function onServerDataChange<T>(callback: (data: ServerData<T>) => void | (() => void)): () => void;
+
+  /**
+   * Serialize store state for client hydration
+   */
+  export function serializeStoreForHydration(): string;
+
+  /**
+   * Hydrate store from serialized state (client-side)
+   */
+  export function hydrateStore(): void;
+
+  // Re-exports from signals-core
+  export { signal, computed, effect, batch };
+  export type { ReadonlySignal, Signal };
 }
 
 declare module "solarflare/ast" {

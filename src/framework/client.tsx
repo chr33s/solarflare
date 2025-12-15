@@ -1,34 +1,99 @@
 /**
  * Solarflare Client
- * Web component registration, hydration & Bun macros
+ * Web component registration, hydration & signal-based state
  */
-import { type FunctionComponent, createContext } from "preact";
-import { useContext } from "preact/hooks";
+import { type FunctionComponent } from "preact";
+import { useEffect, useState } from "preact/hooks";
 import register from "preact-custom-element";
 import { parsePath } from "./paths";
-
-/**
- * Context for current route params
- */
-const ParamsContext = createContext<Record<string, string>>({});
-
-/**
- * Context for component data
- */
-const DataContext = createContext<unknown>(null);
+import {
+  params as paramsSignal,
+  serverData as serverDataSignal,
+  hydrateStore,
+  type ServerData,
+} from "./store";
+import { getRouter } from "./router";
 
 /**
  * Hook to access current route params
+ * Uses signals internally for reactivity with web components
+ *
+ * @example
+ * ```tsx
+ * function BlogPost() {
+ *   const params = useParams();
+ *   return <h1>Post: {params.slug}</h1>;
+ * }
+ * ```
+ *
+ * For signal-based reactive access, use:
+ * ```tsx
+ * import { getRouter } from "solarflare/client";
+ *
+ * function BlogPost() {
+ *   const router = getRouter();
+ *   // router.params is a ReadonlySignal<Record<string, string>>
+ *   return <h1>Post: {router.params.value.slug}</h1>;
+ * }
+ * ```
  */
 export function useParams(): Record<string, string> {
-  return useContext(ParamsContext);
+  // Try to get params from router first (client-side)
+  try {
+    const router = getRouter();
+    // Subscribe to signal changes and re-render
+    const [params, setParams] = useState(router.params.value);
+
+    useEffect(() => {
+      // Return cleanup function from effect subscription
+      return router.subscribe(() => {
+        setParams(router.params.value);
+      });
+    }, []);
+
+    return params;
+  } catch {
+    // Fallback to signal store (SSR or before router init)
+    return paramsSignal.value;
+  }
 }
 
 /**
- * Hook to access parsed data attribute
+ * Hook to access server data with loading/error states
+ *
+ * @example
+ * ```tsx
+ * function MyComponent() {
+ *   const { data, loading, error } = useServerData<Post>();
+ *
+ *   if (loading) return <Spinner />;
+ *   if (error) return <Error message={error.message} />;
+ *   return <Article data={data} />;
+ * }
+ * ```
  */
-export function useData<T>(): T {
-  return useContext(DataContext) as T;
+export function useServerData<T>(): ServerData<T> {
+  const [state, setState] = useState<ServerData<T>>(
+    serverDataSignal.value as ServerData<T>
+  );
+
+  useEffect(() => {
+    // Use effect to subscribe - signals-core effect returns cleanup
+    const { effect } = require("@preact/signals-core");
+    return effect(() => {
+      setState(serverDataSignal.value as ServerData<T>);
+    });
+  }, []);
+
+  return state;
+}
+
+/**
+ * Initialize client-side store from SSR hydration data
+ * Call this early in your client entry point
+ */
+export function initClient(): void {
+  hydrateStore();
 }
 
 /**
@@ -277,9 +342,39 @@ export function defineWithMeta<P extends Record<string, any>>(
 }
 
 /**
- * Export ParamsContext and DataContext for framework use
+ * Re-export store for signal-based state management
  */
-export { ParamsContext, DataContext };
+export {
+  // Signals
+  params,
+  serverData,
+  pathname,
+  // Actions
+  initStore,
+  setParams,
+  setServerData,
+  setPathname,
+  hydrateStore,
+  resetStore,
+  // Computed helpers
+  computedParam,
+  computedData,
+  isLoading,
+  hasError,
+  // Effect helpers
+  onParamsChange,
+  onServerDataChange,
+  // Re-exports from signals-core
+  signal,
+  computed,
+  effect,
+  batch,
+  // Types
+  type ServerData,
+  type StoreConfig,
+  type ReadonlySignal,
+  type Signal,
+} from "./store";
 
 /**
  * Re-export router for client-side SPA navigation
