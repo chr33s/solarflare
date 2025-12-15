@@ -380,11 +380,17 @@ async function extractAllCssImports(
  * - Note: import.meta.hot code is included but may be stripped during bundling
  */
 function generateChunkedClientEntry(meta: ComponentMeta): string {
+  const debugImports = args.debug
+    ? `import 'preact/debug'
+import '@preact/signals-debug'
+`
+    : "";
+
   return `/**
  * Auto-generated Client Chunk: ${meta.chunk}
  * HMR-enabled wrapper for ${meta.tag}
  */
-import { h } from 'preact'
+${debugImports}import { h } from 'preact'
 import { signal, useSignal, useSignalEffect } from '@preact/signals'
 import register from 'preact-custom-element'
 import { initRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client'
@@ -922,6 +928,7 @@ const { values: args } = parseArgs({
     serve: { type: "boolean", short: "s", default: false },
     watch: { type: "boolean", short: "w", default: false },
     clean: { type: "boolean", short: "c", default: false },
+    debug: { type: "boolean", short: "d", default: false },
   },
 });
 

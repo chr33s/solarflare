@@ -13,6 +13,7 @@
         "preact-render-to-string": "^6.6.4",
       },
       "devDependencies": {
+        "@preact/signals-debug": "^1.0.3",
         "@types/bun": "^1.3.4",
         "oxfmt": "^0.17.0",
         "oxlint": "^1.32.0",
@@ -190,6 +191,8 @@
     "@preact/signals": ["@preact/signals@2.5.1", "", { "dependencies": { "@preact/signals-core": "^1.12.0" }, "peerDependencies": { "preact": ">= 10.25.0 || >=11.0.0-0" } }, "sha512-VPjk5YFt7i11Fi4UK0tzaEe5xLwfhUxXL3l89ocxQ5aPz7bRo8M5+N73LjBMPklyXKYKz6YsNo4Smp8n6nplng=="],
 
     "@preact/signals-core": ["@preact/signals-core@1.12.1", "", {}, "sha512-BwbTXpj+9QutoZLQvbttRg5x3l5468qaV2kufh+51yha1c53ep5dY4kTuZR35+3pAZxpfQerGJiQqg34ZNZ6uA=="],
+
+    "@preact/signals-debug": ["@preact/signals-debug@1.0.3", "", { "peerDependencies": { "@preact/signals-core": ">=1.12.0" } }, "sha512-xynBgQyKPA0dtbvt2ihExrXPbqPAcuFyysLI2vov3KPlnfmvOO35pHBtzjQZDlGyXlemGB5OE/ozqNerch7TdA=="],
 
     "@sindresorhus/is": ["@sindresorhus/is@7.1.1", "", {}, "sha512-rO92VvpgMc3kfiTjGT52LEtJ8Yc5kCWhZjLQ3LwlA4pSgPpQO7bVpYXParOD8Jwf+cVQECJo3yP/4I8aZtUQTQ=="],
 

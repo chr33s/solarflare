@@ -31,6 +31,7 @@
     "preact-render-to-string": "^6.6.4"
   },
   "devDependencies": {
+    "@preact/signals-debug": "^1.0.3",
     "@types/bun": "^1.3.4",
     "oxfmt": "^0.17.0",
     "oxlint": "^1.32.0",
