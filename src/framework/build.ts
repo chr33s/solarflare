@@ -167,6 +167,15 @@ function generateHash(content: string): string {
 }
 
 /**
+ * Normalize asset path from nested directories to dot-separated
+ * e.g., "_components/nav" → "_components.nav"
+ * e.g., "blog/_layout" → "blog._layout"
+ */
+function normalizeAssetPath(path: string): string {
+  return path.replace(/\//g, ".");
+}
+
+/**
  * Generate chunk filename from file path
  * e.g., "blog/$slug.client.tsx" → "blog.slug.js"
  * Note: $ is removed to avoid URL encoding issues
@@ -247,6 +256,111 @@ async function extractCssImports(filePath: string): Promise<string[]> {
   }
 
   return cssImports;
+}
+
+/**
+ * Extract component import paths from a TypeScript/TSX file
+ * Returns relative paths to .tsx/.ts files
+ */
+async function extractComponentImports(filePath: string): Promise<string[]> {
+  const content = await Bun.file(filePath).text();
+  const imports: string[] = [];
+
+  // Match import statements for local .tsx/.ts files (starting with ./ or ../)
+  // Also match #app/* and #solarflare/* aliases
+  const importRegex = /import\s+(?:{[^}]+}|\w+)\s+from\s+['"]([^'"]+)['"]/g;
+  let match;
+  while ((match = importRegex.exec(content)) !== null) {
+    const importPath = match[1];
+    // Only follow local imports and app aliases, skip node_modules
+    if (importPath.startsWith("./") || importPath.startsWith("../") || importPath.startsWith("#app/")) {
+      imports.push(importPath);
+    }
+  }
+
+  return imports;
+}
+
+/**
+ * Resolve an import path to an absolute file path
+ */
+async function resolveImportPath(importPath: string, fromFile: string): Promise<string | null> {
+  const fromDir = fromFile.split("/").slice(0, -1).join("/");
+  
+  // Handle #app/* alias
+  if (importPath.startsWith("#app/")) {
+    const relativePath = importPath.replace("#app/", "");
+    // Try .tsx, .ts, /index.tsx, /index.ts extensions
+    const extensions = [".tsx", ".ts", "/index.tsx", "/index.ts"];
+    for (const ext of extensions) {
+      const fullPath = join(APP_DIR, relativePath + ext);
+      if (await Bun.file(fullPath).exists()) {
+        return fullPath;
+      }
+    }
+    // Try without extension (might already have it)
+    const fullPath = join(APP_DIR, relativePath);
+    if (await Bun.file(fullPath).exists()) {
+      return fullPath;
+    }
+    return null;
+  }
+  
+  // Handle relative imports
+  if (importPath.startsWith("./") || importPath.startsWith("../")) {
+    const extensions = [".tsx", ".ts", "/index.tsx", "/index.ts", ""];
+    for (const ext of extensions) {
+      const fullPath = join(fromDir, importPath + ext);
+      if (await Bun.file(fullPath).exists()) {
+        return fullPath;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Recursively extract all CSS imports from a file and its component dependencies
+ * Returns CSS paths relative to APP_DIR
+ */
+async function extractAllCssImports(
+  filePath: string,
+  visited: Set<string> = new Set()
+): Promise<string[]> {
+  // Avoid circular dependencies
+  if (visited.has(filePath)) {
+    return [];
+  }
+  visited.add(filePath);
+
+  const allCss: string[] = [];
+  const fileDir = filePath.split("/").slice(0, -1).join("/");
+
+  // Get direct CSS imports
+  const cssImports = await extractCssImports(filePath);
+  for (const cssImport of cssImports) {
+    // Resolve CSS path relative to the file
+    const cssPath = join(fileDir, cssImport);
+    // Convert to path relative to APP_DIR
+    if (cssPath.startsWith(APP_DIR)) {
+      allCss.push(cssPath.replace(APP_DIR + "/", "./"));
+    } else {
+      allCss.push(cssImport);
+    }
+  }
+
+  // Get component imports and recursively extract their CSS
+  const componentImports = await extractComponentImports(filePath);
+  for (const importPath of componentImports) {
+    const resolvedPath = await resolveImportPath(importPath, filePath);
+    if (resolvedPath && (await Bun.file(resolvedPath).exists())) {
+      const nestedCss = await extractAllCssImports(resolvedPath, visited);
+      allCss.push(...nestedCss);
+    }
+  }
+
+  return allCss;
 }
 
 /**
@@ -391,41 +505,64 @@ async function buildClient() {
   // Copy static assets FIRST (before JS build triggers wrangler reload)
   // This ensures CSS/assets are available when browser refreshes
 
-  // Scan layouts for CSS imports and copy them to dist
+  // Scan layouts for CSS imports (recursively following component imports) and copy them to dist
   const layoutFiles = await findLayouts();
   const layoutCssMap: Record<string, string[]> = {}; // layout directory -> CSS files
 
   for (const layoutFile of layoutFiles) {
     const layoutPath = join(APP_DIR, layoutFile);
-    const cssImports = await extractCssImports(layoutPath);
+    // Recursively extract all CSS from layout and its component dependencies
+    const allCssImports = await extractAllCssImports(layoutPath);
 
-    if (cssImports.length > 0) {
+    if (allCssImports.length > 0) {
       const cssOutputPaths: string[] = [];
       const layoutDir = layoutFile.split("/").slice(0, -1).join("/");
 
-      for (const cssImport of cssImports) {
-        // Resolve CSS path relative to layout file
-        const cssSourcePath = join(APP_DIR, layoutDir, cssImport);
+      for (const cssImport of allCssImports) {
+        // Resolve CSS path - could be relative to layout or already relative to APP_DIR
+        let cssSourcePath: string;
+        if (cssImport.startsWith("./")) {
+          // Already relative to APP_DIR from extractAllCssImports
+          cssSourcePath = join(APP_DIR, cssImport.replace("./", ""));
+        } else {
+          // Relative to layout file
+          cssSourcePath = join(APP_DIR, layoutDir, cssImport);
+        }
 
-        // Generate output filename with hash
-        const cssFileName = cssImport.replace("./", "");
+        if (!(await Bun.file(cssSourcePath).exists())) {
+          continue;
+        }
+
+        // Generate output filename with normalized path (dot-separated) and hash
+        const cssRelativePath = cssSourcePath.replace(APP_DIR + "/", "");
         const cssContent = await Bun.file(cssSourcePath).text();
         const cssHash = generateHash(cssContent);
-        const cssBase = cssFileName.replace(/\.css$/, "");
+        const cssBase = normalizeAssetPath(cssRelativePath.replace(/\.css$/, ""));
         const cssOutputName = `${cssBase}.${cssHash}.css`;
 
-        // Copy CSS to dist
-        if (await Bun.file(cssSourcePath).exists()) {
-          const destPath = join(DIST_CLIENT, cssOutputName);
-          await Bun.write(destPath, Bun.file(cssSourcePath));
-          cssOutputPaths.push(`/${cssOutputName}`);
+        // Copy CSS to dist with normalized filename
+        const destPath = join(DIST_CLIENT, cssOutputName);
+        await Bun.write(destPath, Bun.file(cssSourcePath));
+        
+        // Avoid duplicates
+        const outputPath = `/${cssOutputName}`;
+        if (!cssOutputPaths.includes(outputPath)) {
+          cssOutputPaths.push(outputPath);
         }
       }
 
       if (cssOutputPaths.length > 0) {
         // Store by layout directory pattern (e.g., "/blog" or "/")
         const layoutPattern = layoutDir ? `/${layoutDir}` : "/";
-        layoutCssMap[layoutPattern] = cssOutputPaths;
+        // Merge with existing CSS for this pattern
+        if (!layoutCssMap[layoutPattern]) {
+          layoutCssMap[layoutPattern] = [];
+        }
+        for (const path of cssOutputPaths) {
+          if (!layoutCssMap[layoutPattern].includes(path)) {
+            layoutCssMap[layoutPattern].push(path);
+          }
+        }
       }
     }
   }
@@ -440,8 +577,9 @@ async function buildClient() {
       const content = await Bun.file(src).arrayBuffer();
       const hash = generateHash(Buffer.from(content).toString());
 
-      // Add hash to filename before extension
-      const parts = file.split(".");
+      // Normalize path and add hash to filename before extension
+      const normalizedFile = normalizeAssetPath(file);
+      const parts = normalizedFile.split(".");
       const ext = parts.pop();
       const base = parts.join(".");
       const hashedName = ext ? `${base}.${hash}.${ext}` : `${base}.${hash}`;

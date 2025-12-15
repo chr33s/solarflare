@@ -1,4 +1,5 @@
 import type { VNode } from "preact";
+import "./_error.css";
 
 export interface ErrorProps {
   error: Error;
