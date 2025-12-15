@@ -13,8 +13,11 @@ A file-based routing framework for Preact + Cloudflare Workers with SSR streamin
 
 ## Requirements
 
-- [Bun](https://bun.sh) runtime
+- [Bun](https://bun.sh) (for local development and building)
+- [Node.js](https://nodejs.org) (>=22.18.0)
 - Modern browser (Chrome 102+, Edge 102+, Safari 15.4+)
+
+Alternatively, pre-compiled binaries are available for macOS, Linux, and Windows in the `bin/` directory. These binaries include the Bun runtime and can be used without installing Bun separately.
 
 ## Quick Start
 
@@ -39,12 +42,22 @@ bun run build
 bun run dev
 ```
 
+Or, if using a pre-compiled CLI binary:
+
+```sh
+npm install
+solarflare build
+solarflare --watch --serve
+```
+
+**Note:** The `solarflare` command automatically selects the correct binary for your platform (macOS, Linux, Windows). Just ensure the binaries are in the `bin/` directory.
+
 ## CLI Commands
 
 ### Build
 
 ```sh
-bunx solarflare [options]
+solarflare [options]
 ```
 
 | Option | Description |
@@ -58,21 +71,13 @@ bunx solarflare [options]
 
 ```sh
 # Development with watch and server
-bunx solarflare --watch --serve
+solarflare --watch --serve
 
 # Production build
-bunx solarflare --clean
+solarflare --clean
 
 # Verbose build for debugging
-bunx solarflare --verbose
-```
-
-### NPM Scripts
-
-```sh
-bun run build    # Production build
-bun run dev      # Development with watch + server
-bun run clean    # Remove build artifacts
+solarflare --verbose
 ```
 
 ## Project Structure
@@ -227,19 +232,44 @@ Request to `/blog/hello` renders:
 
 ## Development
 
-### Local Development
+### Local Development with Bun
 
 ```sh
-bun link           # Link package locally
-bun run clean      # Clean build artifacts
-bun run build      # Build for production
-bun run dev        # Start dev server with watch
+bun install          # Install dependencies
+bun run build        # Build for production
+bun run dev          # Start dev server with watch
 ```
+
+### Using Pre-Compiled Binaries
+
+Pre-compiled standalone executables for macOS, Linux, and Windows are available in the `bin/` directory. These include the Bun runtime and don't require Bun to be installed:
+
+```sh
+# For macOS ARM64 (Apple Silicon)
+cp bin/solarflare-macos-arm64 /usr/local/bin/solarflare
+chmod +x /usr/local/bin/solarflare
+
+# Or for your platform
+npm install
+solarflare build
+solarflare --watch --serve
+```
+
+### Building CLI Binaries
+
+To build new CLI binaries for distribution:
+
+```sh
+bun run build-cli      # Build for current platform
+bun run build-cli-all  # Build for all platforms (requires significant time)
+```
+
+The compiled binaries will be in the `bin/` directory.
 
 ### Deploying to Cloudflare
 
 ```sh
-bunx wrangler deploy
+npx wrangler deploy
 ```
 
 ## License

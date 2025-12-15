@@ -20,7 +20,8 @@ import { parsePath } from "./paths";
 import { generateClientScript } from "./console-forward";
 
 // Resolve paths relative to project root (two levels up from src/framework/)
-const ROOT_DIR = join(import.meta.dir, "../..");
+// Use process.cwd() for compiled binary, import.meta.dir for development
+const ROOT_DIR = join(process.cwd());
 const APP_DIR = join(ROOT_DIR, "src/app");
 const DIST_DIR = join(ROOT_DIR, "dist");
 const DIST_CLIENT = join(DIST_DIR, "client");

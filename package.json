@@ -4,7 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "license": "MIT",
-  "bin": "./src/framework/build.ts",
+  "bin": {
+    "solarflare": "./bin/solarflare.ts"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "exports": {
     "./client": "./src/framework/client.tsx",
     "./server": "./src/framework/server.tsx",
@@ -16,6 +21,7 @@
   },
   "scripts": {
     "build": "bun ./src/framework/build.ts",
+    "build:cli": "bun ./scripts/build-cli.ts",
     "check": "oxfmt --check && oxlint --type-aware && tsc --noEmit",
     "clean": "rm -rf dist",
     "deploy": "wrangler deploy",
