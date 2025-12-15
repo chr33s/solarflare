@@ -555,7 +555,8 @@ function createDeferredStream(
           const dataIsland = serializeDataIsland(dataIslandId, data);
           // Queue hydration call if coordinator isn't ready yet, otherwise call directly
           // Use requestAnimationFrame to ensure DOM is fully parsed before querySelector
-          const hydrationScript = `<script>requestAnimationFrame(()=>(window.__SF_HYDRATE__||(window.__SF_HYDRATE_QUEUE__??=[]).push.bind(window.__SF_HYDRATE_QUEUE__))("${tag}","${dataIslandId}"))</script>`;
+          // Note: Push a tuple [tag, dataIslandId] to the queue, not two separate elements
+          const hydrationScript = `<script>requestAnimationFrame(()=>window.__SF_HYDRATE__?window.__SF_HYDRATE__("${tag}","${dataIslandId}"):(window.__SF_HYDRATE_QUEUE__??=[]).push(["${tag}","${dataIslandId}"]))</script>`;
           controller.enqueue(encoder.encode(dataIsland + hydrationScript));
         } catch (err) {
           const errorScript = `<script>console.error("[solarflare] Deferred error:", ${JSON.stringify((err as Error).message)})</script>`;

@@ -343,7 +343,7 @@ export function getRegisteredComponent(tag: string): any | undefined {
 export function hydrateComponent(tag: string, dataIslandId?: string): void {
   if (typeof document === "undefined") return;
   
-  const element = document.querySelector(tag);
+  const element = document.querySelector(tag) as HTMLElement & { _sfDeferred?: Record<string, unknown>; _vdom?: unknown };
   if (!element) {
     console.warn(`[solarflare] Element "${tag}" not found for hydration`);
     return;
@@ -357,14 +357,12 @@ export function hydrateComponent(tag: string, dataIslandId?: string): void {
     // Remove loading state
     element.removeAttribute("data-loading");
     
-    // Update attributes to trigger preact-custom-element re-render
-    for (const [key, value] of Object.entries(data)) {
-      if (value !== null && value !== undefined) {
-        element.setAttribute(key, String(value));
-      }
-    }
+    // Always store deferred data on element for component to read
+    // This handles the case where hydration runs before component mounts
+    element._sfDeferred = data;
     
-    // Dispatch hydration event for custom handling
+    // If component is already mounted, also dispatch event to trigger re-render
+    // The component listens for this event to handle late-arriving data
     element.dispatchEvent(new CustomEvent("sf:hydrate", { 
       detail: data,
       bubbles: true,

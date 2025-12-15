@@ -382,7 +382,7 @@ function generateChunkedClientEntry(meta: ComponentMeta): string {
 import { h } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { initRouter, initHydrationCoordinator } from '../src/framework/client'
+import { initRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client'
 import BaseComponent from '../src/app/${meta.file}'
 
 // Initialize hydration coordinator for streaming SSR
@@ -427,12 +427,36 @@ function ensureRouter() {
 function Component(props) {
   const [ready, setReady] = useState(!!window.__SF_ROUTER__)
   const [, forceUpdate] = useState(0)
+  const [deferredProps, setDeferredProps] = useState(null)
 
   // Listen for HMR updates specific to this component
   useEffect(() => {
     const handler = () => forceUpdate(n => n + 1)
     window.addEventListener('sf:hmr:${meta.tag}', handler)
     return () => window.removeEventListener('sf:hmr:${meta.tag}', handler)
+  }, [])
+
+  // Check for deferred data on mount
+  useEffect(() => {
+    const el = document.querySelector('${meta.tag}')
+    
+    // Check for data stored by hydration coordinator (SSR streaming case)
+    if (el?._sfDeferred) {
+      const data = el._sfDeferred
+      delete el._sfDeferred
+      setDeferredProps(data)
+    } else {
+      // On client navigation, check if there's a data island we should read
+      const data = extractDataIsland('${meta.tag}-deferred')
+      if (data) {
+        setDeferredProps(data)
+      }
+    }
+    
+    // Also listen for future hydration events
+    const handler = (e) => setDeferredProps(e.detail)
+    el?.addEventListener('sf:hydrate', handler)
+    return () => el?.removeEventListener('sf:hydrate', handler)
   }, [])
 
   // Router initialization
@@ -458,8 +482,11 @@ function Component(props) {
     }
   }
 
+  // Merge deferred props (they override initial props)
+  const finalProps = deferredProps ? { ...cleanProps, ...deferredProps } : cleanProps
+
   // Render current (possibly HMR-updated) component
-  return h(CurrentComponent, cleanProps)
+  return h(CurrentComponent, finalProps)
 }
 
 // Register wrapper as web component (only happens once)
