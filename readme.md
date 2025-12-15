@@ -60,12 +60,12 @@ solarflare --watch --serve
 solarflare [options]
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--watch`, `-w` | Watch for file changes and rebuild |
-| `--serve`, `-s` | Start the development server after build |
-| `--clean`, `-c` | Clean output directory before build |
-| `--verbose`, `-v` | Enable verbose logging |
+| Option            | Description                              |
+| ----------------- | ---------------------------------------- |
+| `--watch`, `-w`   | Watch for file changes and rebuild       |
+| `--serve`, `-s`   | Start the development server after build |
+| `--clean`, `-c`   | Clean output directory before build      |
+| `--verbose`, `-v` | Enable verbose logging                   |
 
 ### Examples
 
@@ -97,14 +97,14 @@ src/app/
 
 ## File Conventions
 
-| Pattern | Purpose |
-|---------|---------|
-| `*.client.tsx` | Client component, auto-registered as web component |
-| `*.server.tsx` | Server handler, runs in Workers runtime |
-| `_layout.tsx` | Layout component, wraps child routes |
-| `_*` | Private (not routed) — layouts, components, utilities |
-| `$param` | Dynamic URL segment → `:param` in URLPattern |
-| `index.*` | Matches directory root path |
+| Pattern        | Purpose                                               |
+| -------------- | ----------------------------------------------------- |
+| `*.client.tsx` | Client component, auto-registered as web component    |
+| `*.server.tsx` | Server handler, runs in Workers runtime               |
+| `_layout.tsx`  | Layout component, wraps child routes                  |
+| `_*`           | Private (not routed) — layouts, components, utilities |
+| `$param`       | Dynamic URL segment → `:param` in URLPattern          |
+| `index.*`      | Matches directory root path                           |
 
 ## Usage
 

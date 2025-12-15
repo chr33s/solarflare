@@ -30,9 +30,7 @@ const key = `${platform}-${arch}`;
 const binaryName = binaries[key];
 
 if (!binaryName) {
-  console.error(
-    `❌ Solarflare CLI binary not available for ${platform} ${arch}`
-  );
+  console.error(`❌ Solarflare CLI binary not available for ${platform} ${arch}`);
   console.error(`Available platforms: ${Object.keys(binaries).join(", ")}`);
   process.exit(1);
 }
@@ -42,7 +40,7 @@ const binaryPath = join(binDir, "bin", binaryName);
 if (!existsSync(binaryPath)) {
   console.error(
     `❌ Binary not found: ${binaryPath}\n` +
-      `Run 'bun run build-cli' to compile the CLI for your platform.`
+      `Run 'bun run build-cli' to compile the CLI for your platform.`,
   );
   process.exit(1);
 }
