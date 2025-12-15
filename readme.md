@@ -31,7 +31,7 @@ export default async function server(
 }
 
 // src/app/index.client.tsx
-export default function BlogPost({ title }: { title: string }) {
+export default function Client({ title }: { title: string }) {
   return <h1>{title}</h1>
 }
 ```
@@ -242,7 +242,7 @@ bun run dev          # Start dev server with watch
 
 ### Using Pre-Compiled Binaries
 
-Pre-compiled standalone executables for macOS, Linux, and Windows are available in the `bin/` directory. These include the Bun runtime and don't require Bun to be installed:
+Pre-compiled standalone executables for macOS and Linux are available in the `bin/` directory. These include the Bun runtime and don't require Bun to be installed:
 
 ```sh
 # For macOS ARM64 (Apple Silicon)
@@ -260,8 +260,8 @@ solarflare --watch --serve
 To build new CLI binaries for distribution:
 
 ```sh
-bun run build-cli      # Build for current platform
-bun run build-cli-all  # Build for all platforms (requires significant time)
+bun run build:cli         # Build for current platform (macOS)
+bun run build:cli --all   # Build for all platforms
 ```
 
 The compiled binaries will be in the `bin/` directory.
