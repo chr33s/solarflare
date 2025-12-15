@@ -6,6 +6,7 @@
 import { Glob } from "bun";
 import { watch } from "fs";
 import { join } from "path";
+import { parseArgs } from "util";
 import ts from "typescript";
 import {
   createProgram,
@@ -644,8 +645,8 @@ async function buildClient() {
     entrypoints: entryPaths,
     outdir: DIST_CLIENT,
     target: "browser",
-    splitting: true,
-    minify: process.env.NODE_ENV === "production",
+    splitting: false, // FIX: known issue with Bun's bundler { splitting: true, minify: true } shared chunks sometimes don't get minified properly.
+    minify: args.production,
   });
 
   if (!result.success) {
@@ -831,7 +832,7 @@ async function buildServer(clientRoutesManifest: {
     outdir: DIST_SERVER,
     target: "bun",
     naming: "[dir]/index.[ext]",
-    minify: process.env.NODE_ENV === "production",
+    minify: args.production,
     external: ["cloudflare:workers"],
   });
 
@@ -872,12 +873,29 @@ async function buildServer(clientRoutesManifest: {
 }
 
 /**
+ * Clean the dist directory
+ */
+async function clean() {
+  const { rm } = await import("fs/promises");
+  try {
+    await rm(DIST_DIR, { recursive: true, force: true });
+    console.log("🧹 Cleaned dist directory");
+  } catch {
+    // Ignore errors if directory doesn't exist
+  }
+}
+
+/**
  * Main build function
  */
 async function build() {
   const startTime = performance.now();
 
   console.log("\n⚡ Solarflare Build\n");
+
+  if (args.clean) {
+    await clean();
+  }
 
   const clientManifest = await buildClient();
   await buildServer(clientManifest);
@@ -887,7 +905,15 @@ async function build() {
 }
 
 // CLI entry point
-const args = process.argv.slice(2);
+const { values: args } = parseArgs({
+  args: Bun.argv.slice(2),
+  options: {
+    production: { type: "boolean", short: "p", default: process.env.NODE_ENV === "production" },
+    serve: { type: "boolean", short: "s", default: false },
+    watch: { type: "boolean", short: "w", default: false },
+    clean: { type: "boolean", short: "c", default: false },
+  },
+});
 
 /**
  * Watch mode - rebuilds on file changes, optionally starts dev server
@@ -905,7 +931,7 @@ async function watchMode() {
   // Start wrangler dev server as child process (after initial build)
   let wranglerProc: Bun.Subprocess | null = null;
 
-  if (args.includes("--serve") || args.includes("-s")) {
+  if (args.serve) {
     console.log("🌐 Starting wrangler dev server...\n");
     wranglerProc = Bun.spawn({
       cmd: ["bun", "wrangler", "dev"],
@@ -983,7 +1009,7 @@ async function watchMode() {
   await new Promise(() => {});
 }
 
-if (args.includes("--watch") || args.includes("-w")) {
+if (args.watch) {
   void watchMode();
 } else {
   void build();

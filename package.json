@@ -17,9 +17,10 @@
     "build": "bun ./src/framework/build.ts",
     "check": "oxfmt --check && oxlint --type-aware && tsc --noEmit",
     "clean": "rm -rf dist",
-    "deploy": "bun wrangler deploy",
+    "deploy": "wrangler deploy",
     "dev": "bun ./src/framework/build.ts --serve --watch",
-    "fix": "oxfmt && oxlint --type-aware --fix"
+    "fix": "oxfmt && oxlint --type-aware --fix",
+    "start": "wrangler dev"
   },
   "dependencies": {
     "@preact/signals-core": "^1.8.0",
