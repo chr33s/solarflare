@@ -382,8 +382,11 @@ function generateChunkedClientEntry(meta: ComponentMeta): string {
 import { h } from 'preact'
 import { useState, useEffect } from 'preact/hooks'
 import register from 'preact-custom-element'
-import { initRouter } from '../src/framework/client'
+import { initRouter, initHydrationCoordinator } from '../src/framework/client'
 import BaseComponent from '../src/app/${meta.file}'
+
+// Initialize hydration coordinator for streaming SSR
+initHydrationCoordinator()
 
 // Mutable reference for HMR - updated when module is hot-replaced
 let CurrentComponent = BaseComponent
@@ -447,8 +450,16 @@ function Component(props) {
       .catch(() => setReady(true)) // Render anyway on error
   }, [ready])
 
+  // Clean props - filter out "undefined" strings from unset attributes
+  const cleanProps = {}
+  for (const key in props) {
+    if (props[key] !== 'undefined' && props[key] !== undefined) {
+      cleanProps[key] = props[key]
+    }
+  }
+
   // Render current (possibly HMR-updated) component
-  return h(CurrentComponent, props)
+  return h(CurrentComponent, cleanProps)
 }
 
 // Register wrapper as web component (only happens once)

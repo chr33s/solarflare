@@ -10,6 +10,7 @@ import {
   params as paramsSignal,
   serverData as serverDataSignal,
   hydrateStore,
+  initHydrationCoordinator,
   type ServerData,
 } from "./store";
 import { getRouter } from "./router";
@@ -94,6 +95,7 @@ export function useServerData<T>(): ServerData<T> {
  */
 export function initClient(): void {
   hydrateStore();
+  initHydrationCoordinator();
 }
 
 /**
@@ -364,6 +366,15 @@ export {
   // Effect helpers
   onParamsChange,
   onServerDataChange,
+  // Data islands
+  serializeDataIsland,
+  extractDataIsland,
+  // Hydration coordinator
+  registerForHydration,
+  getRegisteredComponent,
+  hydrateComponent,
+  initHydrationCoordinator,
+  cleanupHydrationCoordinator,
   // Re-exports from signals-core
   signal,
   computed,

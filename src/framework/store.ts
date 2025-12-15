@@ -5,6 +5,7 @@
  */
 
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals-core";
+import { stringify, parse } from "devalue";
 
 // ============================================================================
 // Types
@@ -216,8 +217,9 @@ export function onServerDataChange<T>(callback: (data: ServerData<T>) => void | 
 // ============================================================================
 
 /**
- * Serialize store state for client hydration
+ * Serialize store state for client hydration using devalue
  * Injects a script tag with the initial state
+ * Supports complex types: Date, Map, Set, RegExp, BigInt, etc.
  */
 export function serializeStoreForHydration(): string {
   const state = {
@@ -226,23 +228,24 @@ export function serializeStoreForHydration(): string {
     pathname: _pathname.value,
   };
   
-  // Escape for safe embedding in HTML
-  const json = JSON.stringify(state)
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/&/g, "\\u0026");
+  // Use devalue for safe serialization of complex types
+  const serialized = stringify(state);
   
-  return `<script>window.__SF_STORE__=${json}</script>`;
+  return `<script>window.__SF_STORE__=${serialized}</script>`;
 }
 
 /**
  * Hydrate store from serialized state (client-side)
+ * Uses devalue's parse for complex type reconstruction
  */
 export function hydrateStore(): void {
   if (typeof window === "undefined") return;
   
-  const state = (window as any).__SF_STORE__;
-  if (!state) return;
+  const serialized = (window as any).__SF_STORE__;
+  if (!serialized) return;
+  
+  // Parse with devalue to reconstruct complex types
+  const state = typeof serialized === "string" ? parse(serialized) : serialized;
   
   initStore({
     params: state.params,
@@ -261,3 +264,140 @@ export function hydrateStore(): void {
 
 export { signal, computed, effect, batch };
 export type { ReadonlySignal, Signal };
+
+// ============================================================================
+// Data Islands
+// ============================================================================
+
+/**
+ * Serialize data to a script tag for progressive hydration
+ * Uses devalue to preserve complex types (Date, Map, Set, etc.)
+ * 
+ * @example
+ * ```tsx
+ * const island = serializeDataIsland('sf-blog-slug-data', {
+ *   title: 'Hello',
+ *   createdAt: new Date(),
+ * });
+ * // <script type="application/json" data-island="sf-blog-slug-data">[...]</script>
+ * ```
+ */
+export function serializeDataIsland(id: string, data: unknown): string {
+  const serialized = stringify(data);
+  return `<script type="application/json" data-island="${id}">${serialized}</script>`;
+}
+
+/**
+ * Extract and parse data from a data island script tag (client-side)
+ * Reconstructs complex types using devalue's parse
+ * 
+ * @example
+ * ```tsx
+ * const data = extractDataIsland<BlogPost>('sf-blog-slug-data');
+ * console.log(data?.createdAt instanceof Date); // true
+ * ```
+ */
+export function extractDataIsland<T = unknown>(id: string): T | null {
+  if (typeof document === "undefined") return null;
+  
+  const script = document.querySelector(`script[data-island="${id}"]`);
+  if (!script?.textContent) return null;
+  
+  try {
+    return parse(script.textContent) as T;
+  } catch {
+    console.error(`[solarflare] Failed to parse data island "${id}"`);
+    return null;
+  }
+}
+
+// ============================================================================
+// Hydration Coordinator
+// ============================================================================
+
+/**
+ * Component registry for progressive hydration
+ */
+const componentRegistry = new Map<string, any>();
+
+/**
+ * Register a component for progressive hydration
+ * Called automatically by the generated entry files
+ */
+export function registerForHydration(tag: string, Component: any): void {
+  componentRegistry.set(tag, Component);
+}
+
+/**
+ * Get a registered component by tag
+ */
+export function getRegisteredComponent(tag: string): any | undefined {
+  return componentRegistry.get(tag);
+}
+
+/**
+ * Hydrate a component when its data island arrives
+ * Called by the injected hydration script after streaming
+ * Updates element attributes to trigger preact-custom-element re-render
+ */
+export function hydrateComponent(tag: string, dataIslandId?: string): void {
+  if (typeof document === "undefined") return;
+  
+  const element = document.querySelector(tag);
+  if (!element) {
+    console.warn(`[solarflare] Element "${tag}" not found for hydration`);
+    return;
+  }
+  
+  // Get data from island if specified
+  const islandId = dataIslandId ?? `${tag}-data`;
+  const data = extractDataIsland<Record<string, unknown>>(islandId);
+  
+  if (data && typeof data === "object") {
+    // Remove loading state
+    element.removeAttribute("data-loading");
+    
+    // Update attributes to trigger preact-custom-element re-render
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== null && value !== undefined) {
+        element.setAttribute(key, String(value));
+      }
+    }
+    
+    // Dispatch hydration event for custom handling
+    element.dispatchEvent(new CustomEvent("sf:hydrate", { 
+      detail: data,
+      bubbles: true,
+    }));
+  }
+}
+
+/**
+ * Initialize the global hydration trigger
+ * Called during client initialization
+ */
+export function initHydrationCoordinator(): void {
+  if (typeof window === "undefined") return;
+  
+  // Process any queued hydration calls that arrived before JS loaded
+  const queue = (window as any).__SF_HYDRATE_QUEUE__ as [string, string][] | undefined;
+  if (queue) {
+    for (const [tag, dataIslandId] of queue) {
+      hydrateComponent(tag, dataIslandId);
+    }
+    delete (window as any).__SF_HYDRATE_QUEUE__;
+  }
+  
+  // Expose global hydration trigger for streaming scripts
+  (window as any).__SF_HYDRATE__ = hydrateComponent;
+}
+
+/**
+ * Clean up hydration coordinator
+ */
+export function cleanupHydrationCoordinator(): void {
+  if (typeof window === "undefined") return;
+  
+  componentRegistry.clear();
+  delete (window as any).__SF_HYDRATE__;
+}

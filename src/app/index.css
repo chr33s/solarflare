@@ -1,3 +1,8 @@
 * {
   color: purple;
 }
+
+[data-loading="true"] {
+  min-height: 200px;
+  background-color: yellow;
+}

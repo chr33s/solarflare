@@ -112,16 +112,47 @@ async function worker(request: Request): Promise<Response> {
   }
 
   // Load props from server loader if available
-  let serverData: Record<string, unknown> = {};
+  let shellData: Record<string, unknown> = {};
+  let deferredPromise: Promise<Record<string, unknown>> | null = null;
 
   if (serverPath && serverPath in typedModules.server) {
     const serverMod = await typedModules.server[serverPath]();
     const loader = serverMod.default as ServerLoader;
-    serverData = await loader(request, params);
+    const result = await loader(request, params);
+    
+    // Auto-detect Promise values in the result
+    // Immediate values go to shellData, Promise values become deferred
+    const immediateData: Record<string, unknown> = {};
+    const deferredData: Record<string, Promise<unknown>> = {};
+    
+    for (const [key, value] of Object.entries(result)) {
+      if (value instanceof Promise) {
+        deferredData[key] = value;
+      } else {
+        immediateData[key] = value;
+      }
+    }
+    
+    shellData = immediateData;
+    
+    // If there are deferred promises, combine them into a single promise
+    const deferredKeys = Object.keys(deferredData);
+    if (deferredKeys.length > 0) {
+      deferredPromise = (async () => {
+        const resolved: Record<string, unknown> = {};
+        const entries = await Promise.all(
+          deferredKeys.map(async (key) => [key, await deferredData[key]])
+        );
+        for (const [key, value] of entries) {
+          resolved[key as string] = value;
+        }
+        return resolved;
+      })();
+    }
   }
 
-  // Combine params and server data as props for the component
-  const props: Record<string, unknown> = { ...params, ...serverData };
+  // Combine params and shell data as initial props
+  const props: Record<string, unknown> = { ...params, ...shellData };
 
   // Load the client component
   const clientMod = await typedModules.client[clientPath]();
@@ -143,15 +174,18 @@ async function worker(request: Request): Promise<Response> {
   // Render to streaming response with signal context
   const stream = await renderToStream(content, {
     params,
-    serverData,
+    serverData: shellData,
     pathname: url.pathname,
     script: scriptPath,
     styles: stylesheets,
+    deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
   });
 
   return new Response(stream, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

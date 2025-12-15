@@ -583,6 +583,47 @@ declare module "solarflare/store" {
    */
   export function hydrateStore(): void;
 
+  // Data Islands
+
+  /**
+   * Serialize data to a script tag for progressive hydration
+   * Uses devalue to preserve complex types (Date, Map, Set, etc.)
+   */
+  export function serializeDataIsland(id: string, data: unknown): string;
+
+  /**
+   * Extract and parse data from a data island script tag (client-side)
+   * Reconstructs complex types using devalue's parse
+   */
+  export function extractDataIsland<T = unknown>(id: string): T | null;
+
+  // Hydration Coordinator
+
+  /**
+   * Register a component for progressive hydration
+   */
+  export function registerForHydration(tag: string, Component: any): void;
+
+  /**
+   * Get a registered component by tag
+   */
+  export function getRegisteredComponent(tag: string): any | undefined;
+
+  /**
+   * Hydrate a component when its data island arrives
+   */
+  export function hydrateComponent(tag: string, dataIslandId?: string): void;
+
+  /**
+   * Initialize the global hydration trigger
+   */
+  export function initHydrationCoordinator(): void;
+
+  /**
+   * Clean up hydration coordinator
+   */
+  export function cleanupHydrationCoordinator(): void;
+
   // Re-exports from signals-core
   export { signal, computed, effect, batch };
   export type { ReadonlySignal, Signal };

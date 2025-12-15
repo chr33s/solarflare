@@ -11,6 +11,7 @@ import {
   initStore,
   setPathname,
   serializeStoreForHydration,
+  serializeDataIsland,
   resetStore,
 } from "./store";
 
@@ -340,7 +341,10 @@ export function renderComponent(
   // Convert props to string attributes for the custom element
   const attrs: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
-    attrs[key] = String(value);
+    // Skip undefined/null values to avoid "undefined" strings
+    if (value !== undefined && value !== null) {
+      attrs[key] = String(value);
+    }
   }
   return h(tag, attrs, h(Component, props));
 }
@@ -350,12 +354,22 @@ export function renderComponent(
 // ============================================================================
 
 /**
+ * Deferred data configuration for streaming
+ */
+export interface DeferredData {
+  /** Component tag to hydrate */
+  tag: string;
+  /** Promise that resolves to additional props */
+  promise: Promise<Record<string, unknown>>;
+}
+
+/**
  * Options for streaming rendering
  */
 export interface StreamRenderOptions {
   /** Route parameters */
   params?: Record<string, string>;
-  /** Server-loaded data */
+  /** Server-loaded data (shell data for immediate render) */
   serverData?: unknown;
   /** Current pathname */
   pathname?: string;
@@ -363,6 +377,8 @@ export interface StreamRenderOptions {
   script?: string;
   /** Stylesheet paths to inject */
   styles?: string[];
+  /** Deferred data to stream after initial render */
+  deferred?: DeferredData;
 }
 
 /**
@@ -480,12 +496,78 @@ export async function renderToStream(
   const transformer = createAssetInjectionTransformer(options.script, options.styles);
 
   // Pipe through transformer
-  const transformedStream = stream.pipeThrough(transformer) as SolarflareStream;
+  const transformedStream = stream.pipeThrough(transformer);
 
-  // Forward allReady promise
-  transformedStream.allReady = stream.allReady;
+  // If we have deferred data, we need to manually handle the stream
+  if (options.deferred) {
+    const { tag, promise } = options.deferred;
+    const resultStream = createDeferredStream(transformedStream, tag, promise);
+    (resultStream as SolarflareStream).allReady = stream.allReady;
+    return resultStream as SolarflareStream;
+  }
 
-  return transformedStream;
+  const resultStream = transformedStream as SolarflareStream;
+  resultStream.allReady = stream.allReady;
+  return resultStream;
+}
+
+/**
+ * Create a stream that sends HTML immediately (complete document),
+ * then appends deferred data script when the promise resolves.
+ * 
+ * The key insight: we flush complete HTML first, THEN wait for deferred.
+ * Browser renders immediately, deferred script updates DOM when it arrives.
+ */
+function createDeferredStream(
+  inputStream: ReadableStream<Uint8Array>,
+  tag: string,
+  promise: Promise<Record<string, unknown>>,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  
+  const stream = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      controller = ctrl;
+      
+      // Start async pipeline (non-blocking)
+      (async () => {
+        const reader = inputStream.getReader();
+        
+        // 1. Pipe all HTML chunks immediately
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+        } catch (err) {
+          controller.error(err);
+          return;
+        }
+        
+        // 2. HTML is now fully sent - browser starts rendering
+        // Now wait for deferred data (this doesn't block the HTML)
+        try {
+          const data = await promise;
+          const dataIslandId = `${tag}-deferred`;
+          const dataIsland = serializeDataIsland(dataIslandId, data);
+          // Queue hydration call if coordinator isn't ready yet, otherwise call directly
+          // Use requestAnimationFrame to ensure DOM is fully parsed before querySelector
+          const hydrationScript = `<script>requestAnimationFrame(()=>(window.__SF_HYDRATE__||(window.__SF_HYDRATE_QUEUE__??=[]).push.bind(window.__SF_HYDRATE_QUEUE__))("${tag}","${dataIslandId}"))</script>`;
+          controller.enqueue(encoder.encode(dataIsland + hydrationScript));
+        } catch (err) {
+          const errorScript = `<script>console.error("[solarflare] Deferred error:", ${JSON.stringify((err as Error).message)})</script>`;
+          controller.enqueue(encoder.encode(errorScript));
+        }
+        
+        controller.close();
+      })();
+    },
+  });
+  
+  return stream;
 }
 
 /**
@@ -523,6 +605,7 @@ export {
   setPathname,
   resetStore,
   serializeStoreForHydration,
+  serializeDataIsland,
   params,
   serverData,
   pathname,
