@@ -143,12 +143,12 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     const serverMod = await typedModules.server[serverPath]();
     const loader = serverMod.default as ServerLoader;
     const result = await loader(request, params);
-    
+
     // Auto-detect Promise values in the result
     // Immediate values go to shellData, Promise values become deferred
     const immediateData: Record<string, unknown> = {};
     const deferredData: Record<string, Promise<unknown>> = {};
-    
+
     for (const [key, value] of Object.entries(result)) {
       if (value instanceof Promise) {
         deferredData[key] = value;
@@ -156,16 +156,16 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
         immediateData[key] = value;
       }
     }
-    
+
     shellData = immediateData;
-    
+
     // If there are deferred promises, combine them into a single promise
     const deferredKeys = Object.keys(deferredData);
     if (deferredKeys.length > 0) {
       deferredPromise = (async () => {
         const resolved: Record<string, unknown> = {};
         const entries = await Promise.all(
-          deferredKeys.map(async (key) => [key, await deferredData[key]])
+          deferredKeys.map(async (key) => [key, await deferredData[key]]),
         );
         for (const [key, value] of entries) {
           resolved[key as string] = value;

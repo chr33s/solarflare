@@ -402,7 +402,11 @@ declare module "solarflare/server" {
   /**
    * Generate asset HTML tags for injection
    */
-  export function generateAssetTags(script?: string, styles?: string[], devScripts?: string[]): string;
+  export function generateAssetTags(
+    script?: string,
+    styles?: string[],
+    devScripts?: string[],
+  ): string;
 
   /**
    * Render a component with its tag wrapper for hydration

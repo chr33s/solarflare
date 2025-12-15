@@ -297,7 +297,11 @@ export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): P
 /**
  * Generate asset HTML tags for injection
  */
-export function generateAssetTags(script?: string, styles?: string[], devScripts?: string[]): string {
+export function generateAssetTags(
+  script?: string,
+  styles?: string[],
+  devScripts?: string[],
+): string {
   let html = "";
 
   // Add stylesheet links
@@ -335,8 +339,9 @@ export function renderComponent(
   // Convert props to string attributes for the custom element
   const attrs: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
-    // Skip undefined/null values to avoid "undefined" strings
-    if (value !== undefined && value !== null) {
+    // Only serialize primitive types to avoid "[object Object]" strings
+    const type = typeof value;
+    if (type === "string" || type === "number" || type === "boolean") {
       attrs[key] = String(value);
     }
   }
@@ -508,7 +513,11 @@ export async function renderToStream(
   const stream = renderToReadableStream(vnode) as RenderStream;
 
   // Create asset injection transformer
-  const transformer = createAssetInjectionTransformer(options.script, options.styles, options.devScripts);
+  const transformer = createAssetInjectionTransformer(
+    options.script,
+    options.styles,
+    options.devScripts,
+  );
 
   // Pipe through transformer
   const transformedStream = stream.pipeThrough(transformer);
@@ -529,7 +538,7 @@ export async function renderToStream(
 /**
  * Create a stream that sends HTML immediately (complete document),
  * then appends deferred data script when the promise resolves.
- * 
+ *
  * The key insight: we flush complete HTML first, THEN wait for deferred.
  * Browser renders immediately, deferred script updates DOM when it arrives.
  */
@@ -539,17 +548,17 @@ function createDeferredStream(
   promise: Promise<Record<string, unknown>>,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  
+
   let controller: ReadableStreamDefaultController<Uint8Array>;
-  
+
   const stream = new ReadableStream<Uint8Array>({
     start(ctrl) {
       controller = ctrl;
-      
+
       // Start async pipeline (non-blocking)
-      (async () => {
+      void (async () => {
         const reader = inputStream.getReader();
-        
+
         // 1. Pipe all HTML chunks immediately
         try {
           while (true) {
@@ -561,7 +570,7 @@ function createDeferredStream(
           controller.error(err);
           return;
         }
-        
+
         // 2. HTML is now fully sent - browser starts rendering
         // Now wait for deferred data (this doesn't block the HTML)
         try {
@@ -577,12 +586,12 @@ function createDeferredStream(
           const errorScript = `<script>console.error("[solarflare] Deferred error:", ${JSON.stringify((err as Error).message)})</script>`;
           controller.enqueue(encoder.encode(errorScript));
         }
-        
+
         controller.close();
       })();
     },
   });
-  
+
   return stream;
 }
 
@@ -599,4 +608,3 @@ export {
   serverData,
   pathname,
 } from "./store";
-

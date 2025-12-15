@@ -275,7 +275,11 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
   while ((match = importRegex.exec(content)) !== null) {
     const importPath = match[1];
     // Only follow local imports and app aliases, skip node_modules
-    if (importPath.startsWith("./") || importPath.startsWith("../") || importPath.startsWith("#app/")) {
+    if (
+      importPath.startsWith("./") ||
+      importPath.startsWith("../") ||
+      importPath.startsWith("#app/")
+    ) {
       imports.push(importPath);
     }
   }
@@ -288,7 +292,7 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
  */
 async function resolveImportPath(importPath: string, fromFile: string): Promise<string | null> {
   const fromDir = fromFile.split("/").slice(0, -1).join("/");
-  
+
   // Handle #app/* alias
   if (importPath.startsWith("#app/")) {
     const relativePath = importPath.replace("#app/", "");
@@ -307,7 +311,7 @@ async function resolveImportPath(importPath: string, fromFile: string): Promise<
     }
     return null;
   }
-  
+
   // Handle relative imports
   if (importPath.startsWith("./") || importPath.startsWith("../")) {
     const extensions = [".tsx", ".ts", "/index.tsx", "/index.ts", ""];
@@ -318,7 +322,7 @@ async function resolveImportPath(importPath: string, fromFile: string): Promise<
       }
     }
   }
-  
+
   return null;
 }
 
@@ -328,7 +332,7 @@ async function resolveImportPath(importPath: string, fromFile: string): Promise<
  */
 async function extractAllCssImports(
   filePath: string,
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
 ): Promise<string[]> {
   // Avoid circular dependencies
   if (visited.has(filePath)) {
@@ -575,7 +579,7 @@ async function buildClient() {
         // Copy CSS to dist with normalized filename
         const destPath = join(DIST_CLIENT, cssOutputName);
         await Bun.write(destPath, Bun.file(cssSourcePath));
-        
+
         // Avoid duplicates
         const outputPath = `/${cssOutputName}`;
         if (!cssOutputPaths.includes(outputPath)) {
@@ -659,9 +663,9 @@ async function buildClient() {
   }
 
   // Build manifest mapping routes to their chunks
-  const manifest: ChunkManifest = { 
-    chunks: {}, 
-    tags: {}, 
+  const manifest: ChunkManifest = {
+    chunks: {},
+    tags: {},
     styles: {},
     devScripts: args.production ? undefined : ["/console-forward.js"],
   };

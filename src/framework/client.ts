@@ -5,11 +5,7 @@
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths";
-import {
-  params as paramsSignal,
-  hydrateStore,
-  initHydrationCoordinator,
-} from "./store";
+import { params as paramsSignal, hydrateStore, initHydrationCoordinator } from "./store";
 import { getRouter } from "./router";
 
 /**

@@ -142,10 +142,10 @@ export function serializeStoreForHydration(): string {
     serverData: _serverData.value.data,
     pathname: _pathname.value,
   };
-  
+
   // Use devalue for safe serialization of complex types
   const serialized = stringify(state);
-  
+
   return `<script>window.__SF_STORE__=${serialized}</script>`;
 }
 
@@ -155,20 +155,20 @@ export function serializeStoreForHydration(): string {
  */
 export function hydrateStore(): void {
   if (typeof window === "undefined") return;
-  
+
   const serialized = (window as any).__SF_STORE__;
   if (!serialized) return;
-  
+
   // Parse with devalue to reconstruct complex types
   const state = typeof serialized === "string" ? parse(serialized) : serialized;
-  
+
   initStore({
     params: state.params,
     serverData: state.serverData,
   });
-  
+
   setPathname(state.pathname);
-  
+
   // Clean up
   delete (window as any).__SF_STORE__;
 }
@@ -187,7 +187,7 @@ export type { ReadonlySignal, Signal };
 /**
  * Serialize data to a script tag for progressive hydration
  * Uses devalue to preserve complex types (Date, Map, Set, etc.)
- * 
+ *
  * @example
  * ```tsx
  * const island = serializeDataIsland('sf-blog-slug-data', {
@@ -205,7 +205,7 @@ export function serializeDataIsland(id: string, data: unknown): string {
 /**
  * Extract and parse data from a data island script tag (client-side)
  * Reconstructs complex types using devalue's parse
- * 
+ *
  * @example
  * ```tsx
  * const data = extractDataIsland<BlogPost>('sf-blog-slug-data');
@@ -214,10 +214,10 @@ export function serializeDataIsland(id: string, data: unknown): string {
  */
 export function extractDataIsland<T = unknown>(id: string): T | null {
   if (typeof document === "undefined") return null;
-  
+
   const script = document.querySelector(`script[data-island="${id}"]`);
   if (!script?.textContent) return null;
-  
+
   try {
     return parse(script.textContent) as T;
   } catch {
@@ -237,31 +237,36 @@ export function extractDataIsland<T = unknown>(id: string): T | null {
  */
 export function hydrateComponent(tag: string, dataIslandId?: string): void {
   if (typeof document === "undefined") return;
-  
-  const element = document.querySelector(tag) as HTMLElement & { _sfDeferred?: Record<string, unknown>; _vdom?: unknown };
+
+  const element = document.querySelector(tag) as HTMLElement & {
+    _sfDeferred?: Record<string, unknown>;
+    _vdom?: unknown;
+  };
   if (!element) {
     console.warn(`[solarflare] Element "${tag}" not found for hydration`);
     return;
   }
-  
+
   // Get data from island if specified
   const islandId = dataIslandId ?? `${tag}-data`;
   const data = extractDataIsland<Record<string, unknown>>(islandId);
-  
+
   if (data && typeof data === "object") {
     // Remove loading state
     element.removeAttribute("data-loading");
-    
+
     // Always store deferred data on element for component to read
     // This handles the case where hydration runs before component mounts
     element._sfDeferred = data;
-    
+
     // If component is already mounted, also dispatch event to trigger re-render
     // The component listens for this event to handle late-arriving data
-    element.dispatchEvent(new CustomEvent("sf:hydrate", { 
-      detail: data,
-      bubbles: true,
-    }));
+    element.dispatchEvent(
+      new CustomEvent("sf:hydrate", {
+        detail: data,
+        bubbles: true,
+      }),
+    );
   }
 }
 
@@ -271,7 +276,7 @@ export function hydrateComponent(tag: string, dataIslandId?: string): void {
  */
 export function initHydrationCoordinator(): void {
   if (typeof window === "undefined") return;
-  
+
   // Process any queued hydration calls that arrived before JS loaded
   const queue = (window as any).__SF_HYDRATE_QUEUE__ as [string, string][] | undefined;
   if (queue) {
@@ -280,7 +285,7 @@ export function initHydrationCoordinator(): void {
     }
     delete (window as any).__SF_HYDRATE_QUEUE__;
   }
-  
+
   // Expose global hydration trigger for streaming scripts
   (window as any).__SF_HYDRATE__ = hydrateComponent;
 }

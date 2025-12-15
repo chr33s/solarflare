@@ -179,10 +179,7 @@ export async function processConsoleLogs(
 /**
  * Check if request is a console forward request
  */
-export function isConsoleRequest(
-  request: Request,
-  options: ConsoleForwardOptions = {},
-): boolean {
+export function isConsoleRequest(request: Request, options: ConsoleForwardOptions = {}): boolean {
   const { endpoint } = { ...DEFAULT_OPTIONS, ...options };
   const url = new URL(request.url);
   return url.pathname === endpoint && request.method === "POST";
