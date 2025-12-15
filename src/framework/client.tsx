@@ -7,10 +7,8 @@ import register from "preact-custom-element";
 import { parsePath } from "./paths";
 import {
   params as paramsSignal,
-  serverData as serverDataSignal,
   hydrateStore,
   initHydrationCoordinator,
-  type ServerData,
 } from "./store";
 import { getRouter } from "./router";
 
@@ -47,25 +45,6 @@ export function useParams(): Record<string, string> {
     // Fallback to signal store (SSR or before router init)
     return paramsSignal.value;
   }
-}
-
-/**
- * Hook to access server data with loading/error states
- *
- * @example
- * ```tsx
- * function MyComponent() {
- *   const { data, loading, error } = useServerData<Post>();
- *
- *   if (loading) return <Spinner />;
- *   if (error) return <Error message={error.message} />;
- *   return <Article data={data} />;
- * }
- * ```
- */
-export function useServerData<T>(): ServerData<T> {
-  // With @preact/signals, reading .value auto-subscribes the component
-  return serverDataSignal.value as ServerData<T>;
 }
 
 /**
@@ -188,14 +167,6 @@ export function validateTag(meta: TagMeta): TagValidation {
   };
 }
 
-/**
- * Generate custom element tag from file path with validation
- * e.g., "app/blog/$slug.client.tsx" → "sf-blog-slug"
- */
-export function pathToTagName(path: string): string {
-  return parsePath(path).tag;
-}
-
 export interface DefineOptions {
   /** Custom element tag name. Defaults to generated from file path */
   tag?: string;
@@ -205,20 +176,6 @@ export interface DefineOptions {
   observedAttributes?: string[];
   /** Whether to validate the tag and warn on issues. Defaults to true in development */
   validate?: boolean;
-}
-
-/**
- * Registration result with metadata for debugging
- */
-export interface DefineResult<P> {
-  /** The registered component */
-  Component: FunctionComponent<P>;
-  /** Tag metadata */
-  meta: TagMeta;
-  /** Validation result */
-  validation: TagValidation;
-  /** Whether registration succeeded */
-  registered: boolean;
 }
 
 /**
@@ -289,40 +246,6 @@ export function define<P extends Record<string, any>>(
 }
 
 /**
- * Define with full metadata result (for debugging/testing)
- * Returns the component along with registration metadata
- */
-export function defineWithMeta<P extends Record<string, any>>(
-  Component: FunctionComponent<P>,
-  options?: DefineOptions,
-): DefineResult<P> {
-  const filePath = import.meta.path;
-  const meta = parseTagMeta(filePath);
-  const tag = options?.tag ?? meta.tag;
-  const validation = validateTag({ ...meta, tag });
-
-  let registered = false;
-
-  // Only register custom elements in the browser
-  if (typeof window !== "undefined" && typeof HTMLElement !== "undefined") {
-    const propNames = options?.observedAttributes ?? [];
-    const shadow = options?.shadow ?? false;
-
-    if (validation.valid) {
-      register(Component, tag, propNames, { shadow });
-      registered = true;
-    }
-  }
-
-  return {
-    Component,
-    meta: { ...meta, tag },
-    validation,
-    registered,
-  };
-}
-
-/**
  * Re-export store for signal-based state management
  */
 export {
@@ -337,23 +260,12 @@ export {
   setPathname,
   hydrateStore,
   resetStore,
-  // Computed helpers
-  computedParam,
-  computedData,
-  isLoading,
-  hasError,
-  // Effect helpers
-  onParamsChange,
-  onServerDataChange,
   // Data islands
   serializeDataIsland,
   extractDataIsland,
   // Hydration coordinator
-  registerForHydration,
-  getRegisteredComponent,
   hydrateComponent,
   initHydrationCoordinator,
-  cleanupHydrationCoordinator,
   // Re-exports from signals-core
   signal,
   computed,

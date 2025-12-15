@@ -59,7 +59,8 @@ declare module "*.svg" {
  * Solarflare Framework Types
  */
 declare module "solarflare/client" {
-  import { FunctionComponent, Context } from "preact";
+  import { FunctionComponent } from "preact";
+  import { ReadonlySignal, Signal } from "@preact/signals";
 
   /**
    * Parsed tag metadata from file path
@@ -103,17 +104,25 @@ declare module "solarflare/client" {
   }
 
   /**
-   * Registration result with metadata for debugging
+   * Server-rendered data passed to components
    */
-  export interface DefineResult<P> {
-    /** The registered component */
-    Component: FunctionComponent<P>;
-    /** Tag metadata */
-    meta: TagMeta;
-    /** Validation result */
-    validation: TagValidation;
-    /** Whether registration succeeded */
-    registered: boolean;
+  export interface ServerData<T = unknown> {
+    /** The actual data payload */
+    data: T;
+    /** Whether data is still loading (for streaming) */
+    loading: boolean;
+    /** Error if data fetch failed */
+    error: Error | null;
+  }
+
+  /**
+   * Store configuration
+   */
+  export interface StoreConfig {
+    /** Initial route params */
+    params?: Record<string, string>;
+    /** Initial server data */
+    serverData?: unknown;
   }
 
   /**
@@ -127,25 +136,12 @@ declare module "solarflare/client" {
   export function validateTag(meta: TagMeta): TagValidation;
 
   /**
-   * Generate custom element tag from file path with validation
-   */
-  export function pathToTagName(path: string): string;
-
-  /**
    * Build-time macro that registers a Preact component as a web component
    */
   export function define<P extends Record<string, any>>(
     Component: FunctionComponent<P>,
     options?: DefineOptions,
   ): FunctionComponent<P>;
-
-  /**
-   * Define with full metadata result (for debugging/testing)
-   */
-  export function defineWithMeta<P extends Record<string, any>>(
-    Component: FunctionComponent<P>,
-    options?: DefineOptions,
-  ): DefineResult<P>;
 
   /**
    * Hook to access current route params
@@ -155,45 +151,107 @@ declare module "solarflare/client" {
   export function useParams(): Record<string, string>;
 
   /**
-   * Hook to access server data with loading/error states
-   */
-  export function useServerData<T>(): import("./store").ServerData<T>;
-
-  /**
    * Initialize client-side store from SSR hydration data
    */
   export function initClient(): void;
 
-  // Re-export store types and functions
-  export {
-    params,
-    serverData,
-    pathname,
-    initStore,
-    setParams,
-    setServerData,
-    setPathname,
-    hydrateStore,
-    resetStore,
-    computedParam,
-    computedData,
-    isLoading,
-    hasError,
-    onParamsChange,
-    onServerDataChange,
-    signal,
-    computed,
-    effect,
-    batch,
-    type ServerData,
-    type StoreConfig,
-    type ReadonlySignal,
-    type Signal,
-  } from "./store";
+  // Signals
+  export const params: ReadonlySignal<Record<string, string>>;
+  export const serverData: ReadonlySignal<ServerData<unknown>>;
+  export const pathname: ReadonlySignal<string>;
+
+  // Actions
+  export function initStore(config?: StoreConfig): void;
+  export function setParams(newParams: Record<string, string>): void;
+  export function setServerData<T>(data: T): void;
+  export function setPathname(path: string): void;
+  export function hydrateStore(): void;
+  export function resetStore(): void;
+
+  // Data islands
+  export function serializeDataIsland(id: string, data: unknown): string;
+  export function extractDataIsland<T = unknown>(id: string): T | null;
+
+  // Hydration coordinator
+  export function hydrateComponent(tag: string, dataIslandId?: string): void;
+  export function initHydrationCoordinator(): void;
+
+  // Re-exports from signals
+  export function signal<T>(value: T): Signal<T>;
+  export function computed<T>(fn: () => T): ReadonlySignal<T>;
+  export function effect(fn: () => void | (() => void)): () => void;
+  export function batch(fn: () => void): void;
+
+  export type { ReadonlySignal, Signal };
+
+  // Router re-exports
+  export interface RouteManifestEntry {
+    pattern: string;
+    tag: string;
+    chunk?: string;
+    styles?: string[];
+    type: "client" | "server";
+    params: string[];
+  }
+
+  export interface RoutesManifest {
+    routes: RouteManifestEntry[];
+    base?: string;
+  }
+
+  export interface RouteMatch {
+    entry: RouteManifestEntry;
+    params: Record<string, string>;
+    url: URL;
+  }
+
+  export interface NavigateOptions {
+    replace?: boolean;
+    state?: unknown;
+    skipTransition?: boolean;
+  }
+
+  export interface RouterConfig {
+    base?: string;
+    viewTransitions?: boolean;
+    scrollBehavior?: "auto" | "smooth" | "instant" | false;
+    onNotFound?: (url: URL) => void;
+    onNavigate?: (match: RouteMatch) => void;
+    onError?: (error: Error, url: URL) => void;
+  }
+
+  export type RouteSubscriber = (match: RouteMatch | null) => void;
+
+  export function supportsViewTransitions(): boolean;
+
+  export class Router {
+    readonly current: Signal<RouteMatch | null>;
+    readonly params: ReadonlySignal<Record<string, string>>;
+    readonly pathname: ReadonlySignal<string>;
+
+    constructor(manifest: RoutesManifest, config?: RouterConfig);
+    match(url: URL): RouteMatch | null;
+    navigate(to: string | URL, options?: NavigateOptions): Promise<void>;
+    start(): this;
+    stop(): this;
+    subscribe(callback: RouteSubscriber): () => void;
+    back(): void;
+    forward(): void;
+    go(delta: number): void;
+    isActive(path: string, exact?: boolean): boolean;
+    isActiveSignal(path: string, exact?: boolean): ReadonlySignal<boolean>;
+  }
+
+  export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router;
+  export function initRouter(manifest: RoutesManifest, config?: RouterConfig): Router;
+  export function getRouter(): Router;
+  export function navigate(to: string | URL, options?: NavigateOptions): Promise<void>;
+  export function isActive(path: string, exact?: boolean): boolean;
 }
 
 declare module "solarflare/server" {
   import { VNode, FunctionComponent } from "preact";
+  import { ReadonlySignal } from "@preact/signals";
 
   /**
    * Route parameter definition extracted from pattern
@@ -296,23 +354,6 @@ declare module "solarflare/server" {
   export function parsePattern(filePath: string): ParsedPattern;
 
   /**
-   * Convert file path to URLPattern pathname
-   */
-  export function pathToPattern(filePath: string): string;
-
-  /**
-   * Generate custom element tag from file path
-   */
-  export function pathToTag(filePath: string): string;
-
-  /**
-   * Flatten a structured ModuleMap into a flat record
-   */
-  export function flattenModules(
-    modules: ModuleMap,
-  ): Record<string, () => Promise<{ default: unknown }>>;
-
-  /**
    * Create router from structured module map
    */
   export function createRouter(modules: ModuleMap): Route[];
@@ -355,15 +396,13 @@ declare module "solarflare/server" {
 
   /**
    * Wrap content in nested layouts
-   * @param content - The content to wrap
-   * @param layouts - The layouts to apply
    */
   export function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>>;
 
   /**
    * Generate asset HTML tags for injection
    */
-  export function generateAssetTags(script?: string, styles?: string[]): string;
+  export function generateAssetTags(script?: string, styles?: string[], devScripts?: string[]): string;
 
   /**
    * Render a component with its tag wrapper for hydration
@@ -375,74 +414,74 @@ declare module "solarflare/server" {
   ): VNode<any>;
 
   /**
-   * Parse URL parameters from a request URL using URLPattern
+   * Server-rendered data passed to components
    */
-  export function parse(request: Request): Record<string, string>;
+  export interface ServerData<T = unknown> {
+    data: T;
+    loading: boolean;
+    error: Error | null;
+  }
 
-  // ============================================================================
-  // Streaming SSR with Signals Context
-  // ============================================================================
+  /**
+   * Store configuration
+   */
+  export interface StoreConfig {
+    params?: Record<string, string>;
+    serverData?: unknown;
+  }
+
+  /**
+   * Deferred data configuration for streaming
+   */
+  export interface DeferredData {
+    tag: string;
+    promise: Promise<Record<string, unknown>>;
+  }
 
   /**
    * Options for streaming rendering
    */
   export interface StreamRenderOptions {
-    /** Route parameters */
     params?: Record<string, string>;
-    /** Server-loaded data */
     serverData?: unknown;
-    /** Current pathname */
     pathname?: string;
-    /** Script path to inject */
     script?: string;
-    /** Stylesheet paths to inject */
     styles?: string[];
+    devScripts?: string[];
+    deferred?: DeferredData;
   }
 
   /**
    * Extended stream interface with allReady promise
    */
   export interface SolarflareStream extends ReadableStream<Uint8Array> {
-    /** Resolves when all content has been rendered */
     allReady: Promise<void>;
   }
 
   /**
    * Initialize server-side store with request context
-   * Must be called before rendering to set up signal context
    */
   export function initServerContext(options: StreamRenderOptions): void;
 
   /**
    * Render a VNode to a streaming response with automatic asset injection
-   * Uses preact-render-to-string/stream for progressive HTML streaming
    */
   export function renderToStream(
     vnode: VNode<any>,
     options?: StreamRenderOptions,
   ): Promise<SolarflareStream>;
 
-  /**
-   * Render to stream and wait for all content (no streaming benefits, but simpler)
-   * Useful for error pages or when you need the full HTML string
-   */
-  export function renderToStreamString(
-    vnode: VNode<any>,
-    options?: StreamRenderOptions,
-  ): Promise<string>;
-
-  // Re-export store utilities for use in server components
-  export {
-    initStore,
-    setParams,
-    setServerData,
-    setPathname,
-    resetStore,
-    serializeStoreForHydration,
-    params,
-    serverData,
-    pathname,
-  } from "./store";
+  // Store utilities
+  export const params: ReadonlySignal<Record<string, string>>;
+  export const serverData: ReadonlySignal<ServerData<unknown>>;
+  export const pathname: ReadonlySignal<string>;
+  export function initStore(config?: StoreConfig): void;
+  export function setParams(newParams: Record<string, string>): void;
+  export function setServerData<T>(data: T): void;
+  export function setPathname(path: string): void;
+  export function resetStore(): void;
+  export function serializeStoreForHydration(): string;
+  export function serializeDataIsland(id: string, data: unknown): string;
 }
 
 declare module "solarflare/worker" {
@@ -456,549 +495,4 @@ declare module "solarflare/worker" {
   const worker: (request: Request, env: Env) => Promise<Response>;
 
   export default worker;
-}
-
-declare module "solarflare/store" {
-  import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
-
-  /**
-   * Server-rendered data passed to components
-   */
-  export interface ServerData<T = unknown> {
-    /** The actual data payload */
-    data: T;
-    /** Whether data is still loading (for streaming) */
-    loading: boolean;
-    /** Error if data fetch failed */
-    error: Error | null;
-  }
-
-  /**
-   * Store configuration
-   */
-  export interface StoreConfig {
-    /** Initial route params */
-    params?: Record<string, string>;
-    /** Initial server data */
-    serverData?: unknown;
-  }
-
-  /**
-   * Route parameters signal (readonly)
-   */
-  export const params: ReadonlySignal<Record<string, string>>;
-
-  /**
-   * Server data signal (readonly)
-   */
-  export const serverData: ReadonlySignal<ServerData<unknown>>;
-
-  /**
-   * Current pathname signal (readonly)
-   */
-  export const pathname: ReadonlySignal<string>;
-
-  /**
-   * Set route parameters
-   */
-  export function setParams(newParams: Record<string, string>): void;
-
-  /**
-   * Set server data
-   */
-  export function setServerData<T>(data: T): void;
-
-  /**
-   * Set server data loading state
-   */
-  export function setServerDataLoading(loading: boolean): void;
-
-  /**
-   * Set server data error
-   */
-  export function setServerDataError(error: Error): void;
-
-  /**
-   * Set current pathname
-   */
-  export function setPathname(path: string): void;
-
-  /**
-   * Batch multiple store updates
-   */
-  export function batchUpdate(fn: () => void): void;
-
-  /**
-   * Initialize store with config
-   */
-  export function initStore(config?: StoreConfig): void;
-
-  /**
-   * Reset store to initial state
-   */
-  export function resetStore(): void;
-
-  /**
-   * Get a specific param value
-   */
-  export function getParam(name: string): string | undefined;
-
-  /**
-   * Create a computed signal that extracts a specific param
-   */
-  export function computedParam(name: string): ReadonlySignal<string | undefined>;
-
-  /**
-   * Create a computed signal for typed server data
-   */
-  export function computedData<T>(): ReadonlySignal<T | null>;
-
-  /**
-   * Create a computed signal for loading state
-   */
-  export function isLoading(): ReadonlySignal<boolean>;
-
-  /**
-   * Create a computed signal for error state
-   */
-  export function hasError(): ReadonlySignal<Error | null>;
-
-  /**
-   * Run an effect when params change
-   */
-  export function onParamsChange(callback: (params: Record<string, string>) => void | (() => void)): () => void;
-
-  /**
-   * Run an effect when server data changes
-   */
-  export function onServerDataChange<T>(callback: (data: ServerData<T>) => void | (() => void)): () => void;
-
-  /**
-   * Serialize store state for client hydration
-   */
-  export function serializeStoreForHydration(): string;
-
-  /**
-   * Hydrate store from serialized state (client-side)
-   */
-  export function hydrateStore(): void;
-
-  // Data Islands
-
-  /**
-   * Serialize data to a script tag for progressive hydration
-   * Uses devalue to preserve complex types (Date, Map, Set, etc.)
-   */
-  export function serializeDataIsland(id: string, data: unknown): string;
-
-  /**
-   * Extract and parse data from a data island script tag (client-side)
-   * Reconstructs complex types using devalue's parse
-   */
-  export function extractDataIsland<T = unknown>(id: string): T | null;
-
-  // Hydration Coordinator
-
-  /**
-   * Register a component for progressive hydration
-   */
-  export function registerForHydration(tag: string, Component: any): void;
-
-  /**
-   * Get a registered component by tag
-   */
-  export function getRegisteredComponent(tag: string): any | undefined;
-
-  /**
-   * Hydrate a component when its data island arrives
-   */
-  export function hydrateComponent(tag: string, dataIslandId?: string): void;
-
-  /**
-   * Initialize the global hydration trigger
-   */
-  export function initHydrationCoordinator(): void;
-
-  /**
-   * Clean up hydration coordinator
-   */
-  export function cleanupHydrationCoordinator(): void;
-
-  // Re-exports from signals-core
-  export { signal, computed, effect, batch };
-  export type { ReadonlySignal, Signal };
-}
-
-declare module "solarflare/ast" {
-  import ts from "typescript";
-
-  /**
-   * Compiler options for Solarflare TypeScript analysis
-   */
-  export const COMPILER_OPTIONS: ts.CompilerOptions;
-
-  /**
-   * Create a shared TypeScript program for analyzing multiple files
-   */
-  export function createProgram(files: string[]): ts.Program;
-
-  /**
-   * Module kind based on file naming convention
-   */
-  export type ModuleKind = "server" | "client" | "layout" | "unknown";
-
-  /**
-   * Parsed path information with AST-validated metadata
-   */
-  export interface ParsedPath {
-    /** Original file path */
-    original: string;
-    /** Normalized path (without leading ./) */
-    normalized: string;
-    /** Module kind based on file suffix */
-    kind: ModuleKind;
-    /** Route segments */
-    segments: string[];
-    /** Dynamic parameter names (from $param) */
-    params: string[];
-    /** Whether this is an index/root route */
-    isIndex: boolean;
-    /** Whether this is a private file (_prefixed) */
-    isPrivate: boolean;
-    /** URLPattern pathname */
-    pattern: string;
-    /** Custom element tag name */
-    tag: string;
-    /** Route specificity score */
-    specificity: number;
-  }
-
-  /**
-   * Information about a module's default export
-   */
-  export interface ExportInfo {
-    /** The TypeScript type of the export */
-    type: ts.Type;
-    /** Call signatures if the export is callable */
-    signatures: readonly ts.Signature[];
-    /** String representation of the type */
-    typeString: string;
-    /** Whether the export is a function */
-    isFunction: boolean;
-    /** Parameter types if it's a function */
-    parameters: ParameterInfo[];
-    /** Return type if it's a function */
-    returnType: string | null;
-  }
-
-  /**
-   * Information about a function parameter
-   */
-  export interface ParameterInfo {
-    name: string;
-    type: string;
-    optional: boolean;
-    properties: string[];
-  }
-
-  /**
-   * Validation result for a module
-   */
-  export interface ValidationResult {
-    file: string;
-    kind: ModuleKind;
-    valid: boolean;
-    errors: string[];
-    warnings: string[];
-    exportInfo: ExportInfo | null;
-  }
-
-  /**
-   * Module entry for code generation
-   */
-  export interface ModuleEntry {
-    path: string;
-    parsed: ParsedPath;
-    validation: ValidationResult | null;
-  }
-
-  /**
-   * Parse a file path into structured metadata
-   */
-  export function parsePath(filePath: string): ParsedPath;
-
-  /**
-   * Determine module kind from file path
-   */
-  export function getModuleKind(filePath: string): ModuleKind;
-
-  /**
-   * Get detailed information about a module's default export
-   */
-  export function getDefaultExportInfo(
-    checker: ts.TypeChecker,
-    sourceFile: ts.SourceFile,
-  ): ExportInfo | null;
-
-  /**
-   * Validate a module against expected patterns
-   */
-  export function validateModule(
-    program: ts.Program,
-    filePath: string,
-    baseDir?: string,
-  ): ValidationResult;
-
-  /**
-   * Find paired modules for a given path
-   */
-  export function findPairedModules(
-    filePath: string,
-    availableModules: string[],
-  ): {
-    client: string | null;
-    server: string | null;
-    layouts: string[];
-  };
-
-  /**
-   * Generate a complete type-safe modules file
-   */
-  export function generateTypedModulesFile(entries: ModuleEntry[]): {
-    content: string;
-    errors: string[];
-  };
-
-  /**
-   * Validate generated code by parsing it
-   */
-  export function validateGeneratedCode(
-    code: string,
-    filename?: string,
-  ): {
-    valid: boolean;
-    errors: ts.Diagnostic[];
-  };
-}
-
-// ============================================================================
-// Router Module
-// ============================================================================
-
-/**
- * Client-side SPA Router for build-time routes
- */
-declare module "solarflare/router" {
-  import { FunctionComponent, VNode } from "preact";
-  import { ReadonlySignal } from "@preact/signals";
-
-  /**
-   * Route definition from build-time manifest
-   */
-  export interface RouteManifestEntry {
-    /** URL pattern pathname (e.g., '/blog/:slug') */
-    pattern: string;
-    /** Custom element tag name */
-    tag: string;
-    /** Chunk path for this route's JS */
-    chunk?: string;
-    /** CSS stylesheets for this route */
-    styles?: string[];
-    /** Route type */
-    type: "client" | "server";
-    /** Dynamic parameter names */
-    params: string[];
-  }
-
-  /**
-   * Build-time routes manifest
-   */
-  export interface RoutesManifest {
-    routes: RouteManifestEntry[];
-    /** Base path for all routes */
-    base?: string;
-  }
-
-  /**
-   * Route match result
-   */
-  export interface RouteMatch {
-    /** Matched manifest entry */
-    entry: RouteManifestEntry;
-    /** Extracted URL parameters */
-    params: Record<string, string>;
-    /** The matched URL */
-    url: URL;
-  }
-
-  /**
-   * Navigation options
-   */
-  export interface NavigateOptions {
-    /** Replace current history entry instead of pushing */
-    replace?: boolean;
-    /** State to associate with the history entry */
-    state?: unknown;
-    /** Skip view transition entirely */
-    skipTransition?: boolean;
-  }
-
-  /**
-   * Router configuration
-   */
-  export interface RouterConfig {
-    /** Base path for all routes */
-    base?: string;
-    /** Enable view transitions (default: true if supported) */
-    viewTransitions?: boolean;
-    /** Scroll behavior after navigation */
-    scrollBehavior?: "auto" | "smooth" | "instant" | false;
-    /** Called when no route matches */
-    onNotFound?: (url: URL) => void;
-    /** Called after navigation completes */
-    onNavigate?: (match: RouteMatch) => void;
-  }
-
-  /** Check if View Transitions API is supported */
-  export function supportsViewTransitions(): boolean;
-
-  /** Check if Navigation API is supported */
-  export function supportsNavigation(): boolean;
-
-  /**
-   * Client-side SPA Router
-   */
-  export class Router {
-    /** Reactive current match */
-    readonly current: import("@preact/signals").Signal<RouteMatch | null>;
-    /** Reactive params derived from current match */
-    readonly params: ReadonlySignal<Record<string, string>>;
-
-    constructor(manifest: RoutesManifest, config?: RouterConfig);
-
-    /** Match a URL against routes */
-    match(url: URL): RouteMatch | null;
-
-    /** Navigate to a URL */
-    navigate(to: string | URL, options?: NavigateOptions): Promise<void>;
-
-    /** Start intercepting navigation */
-    start(): this;
-
-    /** Stop the router */
-    stop(): this;
-
-    // Navigation helpers
-    back(): void;
-    forward(): void;
-    go(delta: number): void;
-  }
-
-  /**
-   * Create a router from a build-time routes manifest
-   */
-  export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router;
-
-  /** Router context */
-  export const RouterContext: import("preact").Context<Router | null>;
-
-  /** Hook to access the router instance */
-  export function useRouter(): Router;
-
-  /** Hook to get current route match (reactive via signals) */
-  export function useRoute(): RouteMatch | null;
-
-  /** Hook to get current route params (reactive via signals) */
-  export function useParams(): Record<string, string>;
-
-  /** Hook for programmatic navigation */
-  export function useNavigate(): (to: string | URL, options?: NavigateOptions) => Promise<void>;
-
-  /** Hook to check if a path matches the current route */
-  export function useIsActive(path: string, exact?: boolean): boolean;
-
-  /** Link component props */
-  export interface LinkProps {
-    /** Target URL */
-    to: string;
-    /** Navigation options */
-    options?: NavigateOptions;
-    /** Link children */
-    children?: VNode | VNode[] | string;
-    /** Additional class names */
-    class?: string;
-    /** Active class name when link matches current route */
-    activeClass?: string;
-    /** Whether to match exactly */
-    exact?: boolean;
-    /** Additional HTML attributes */
-    [key: string]: unknown;
-  }
-
-  /**
-   * Link component for SPA navigation with view transitions
-   */
-  export const Link: FunctionComponent<LinkProps>;
-
-  /** Router provider props */
-  export interface RouterProviderProps {
-    /** Router instance */
-    router: Router;
-    /** Children to render */
-    children?: VNode | VNode[];
-  }
-
-  /**
-   * Router provider component
-   */
-  export const RouterProvider: FunctionComponent<RouterProviderProps>;
-}
-
-// ============================================================================
-// Virtual Modules - Generated at build time
-// ============================================================================
-
-/**
- * Virtual module: Routes manifest
- * Generated at build time and compiled to dist/routes.json
- *
- * @example
- * ```ts
- * import manifest from 'solarflare:routes'
- * import { createRouter } from 'solarflare/router'
- *
- * const router = createRouter(manifest)
- * ```
- */
-declare module "solarflare:routes" {
-  import type { RoutesManifest } from "solarflare/router";
-  const manifest: RoutesManifest;
-  export default manifest;
-}
-
-/**
- * Virtual module: Route type definitions
- * Generated at build time for type-safe route navigation
- *
- * @example
- * ```ts
- * import type { Routes, RoutePath, RouteParams } from 'solarflare:routes/types'
- *
- * function navigate<P extends RoutePath>(path: P, params: RouteParams<P>) { ... }
- * ```
- */
-declare module "solarflare:routes/types" {
-  /**
-   * Type-safe route definitions
-   * Maps route patterns to their parameter types
-   */
-  export interface Routes {
-    [pattern: string]: { params: Record<string, string> | Record<string, never> };
-  }
-
-  /** All available route paths */
-  export type RoutePath = keyof Routes;
-
-  /** Extract params type for a specific route */
-  export type RouteParams<T extends RoutePath> = Routes[T]["params"];
 }

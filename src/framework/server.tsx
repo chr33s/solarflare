@@ -109,19 +109,6 @@ export interface ModuleMap {
 }
 
 /**
- * Flatten a structured ModuleMap into a flat record
- */
-export function flattenModules(
-  modules: ModuleMap,
-): Record<string, () => Promise<{ default: unknown }>> {
-  return {
-    ...modules.server,
-    ...modules.client,
-    ...modules.layout,
-  };
-}
-
-/**
  * Create router from structured module map
  * Returns a sorted array of routes for linear URLPattern matching
  * Filters out _prefixed files, sorts by specificity using parsed pattern metadata
@@ -597,33 +584,6 @@ function createDeferredStream(
   });
   
   return stream;
-}
-
-/**
- * Render to stream and wait for all content (no streaming benefits, but simpler)
- * Useful for error pages or when you need the full HTML string
- */
-export async function renderToStreamString(
-  vnode: VNode<any>,
-  options: StreamRenderOptions = {},
-): Promise<string> {
-  const stream = await renderToStream(vnode, options);
-
-  // Wait for all content
-  await stream.allReady;
-
-  // Read full stream to string
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let html = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    html += decoder.decode(value, { stream: true });
-  }
-
-  return html + decoder.decode();
 }
 
 // Re-export store utilities for use in server components

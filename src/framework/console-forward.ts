@@ -313,36 +313,3 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
 })();
 `;
 }
-
-/**
- * Generate a script tag with the console forward script
- */
-export function generateScriptTag(options: ConsoleForwardOptions = {}): string {
-  const script = generateClientScript(options);
-  return `<script>${script}</script>`;
-}
-
-/**
- * Middleware wrapper for the console forward endpoint
- * Use this to wrap your worker fetch handler
- */
-export function withConsoleForward(
-  handler: (request: Request) => Response | Promise<Response>,
-  options: ConsoleForwardOptions = {},
-): (request: Request) => Response | Promise<Response> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-
-  if (!opts.enabled) {
-    return handler;
-  }
-
-  return async (request: Request) => {
-    // Check if this is a console forward request
-    if (isConsoleRequest(request, opts)) {
-      return processConsoleLogs(request);
-    }
-
-    // Otherwise, pass to the original handler
-    return handler(request);
-  };
-}

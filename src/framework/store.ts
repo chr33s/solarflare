@@ -91,38 +91,10 @@ export function setServerData<T>(data: T): void {
 }
 
 /**
- * Set server data loading state
- */
-export function setServerDataLoading(loading: boolean): void {
-  _serverData.value = {
-    ..._serverData.value,
-    loading,
-  };
-}
-
-/**
- * Set server data error
- */
-export function setServerDataError(error: Error): void {
-  _serverData.value = {
-    data: null,
-    loading: false,
-    error,
-  };
-}
-
-/**
  * Set current pathname
  */
 export function setPathname(path: string): void {
   _pathname.value = path;
-}
-
-/**
- * Batch multiple store updates
- */
-export function batchUpdate(fn: () => void): void {
-  batch(fn);
 }
 
 /**
@@ -153,63 +125,6 @@ export function resetStore(): void {
     _serverData.value = { data: null, loading: false, error: null };
     _pathname.value = "";
   });
-}
-
-/**
- * Get a specific param value
- */
-export function getParam(name: string): string | undefined {
-  return _params.value[name];
-}
-
-// ============================================================================
-// Computed Helpers
-// ============================================================================
-
-/**
- * Create a computed signal that extracts a specific param
- */
-export function computedParam(name: string): ReadonlySignal<string | undefined> {
-  return computed(() => _params.value[name]);
-}
-
-/**
- * Create a computed signal for typed server data
- */
-export function computedData<T>(): ReadonlySignal<T | null> {
-  return computed(() => _serverData.value.data as T | null);
-}
-
-/**
- * Create a computed signal for loading state
- */
-export function isLoading(): ReadonlySignal<boolean> {
-  return computed(() => _serverData.value.loading);
-}
-
-/**
- * Create a computed signal for error state
- */
-export function hasError(): ReadonlySignal<Error | null> {
-  return computed(() => _serverData.value.error);
-}
-
-// ============================================================================
-// Effect Helpers
-// ============================================================================
-
-/**
- * Run an effect when params change
- */
-export function onParamsChange(callback: (params: Record<string, string>) => void | (() => void)): () => void {
-  return effect(() => callback(_params.value));
-}
-
-/**
- * Run an effect when server data changes
- */
-export function onServerDataChange<T>(callback: (data: ServerData<T>) => void | (() => void)): () => void {
-  return effect(() => callback(_serverData.value as ServerData<T>));
 }
 
 // ============================================================================
@@ -316,26 +231,6 @@ export function extractDataIsland<T = unknown>(id: string): T | null {
 // ============================================================================
 
 /**
- * Component registry for progressive hydration
- */
-const componentRegistry = new Map<string, any>();
-
-/**
- * Register a component for progressive hydration
- * Called automatically by the generated entry files
- */
-export function registerForHydration(tag: string, Component: any): void {
-  componentRegistry.set(tag, Component);
-}
-
-/**
- * Get a registered component by tag
- */
-export function getRegisteredComponent(tag: string): any | undefined {
-  return componentRegistry.get(tag);
-}
-
-/**
  * Hydrate a component when its data island arrives
  * Called by the injected hydration script after streaming
  * Updates element attributes to trigger preact-custom-element re-render
@@ -388,14 +283,4 @@ export function initHydrationCoordinator(): void {
   
   // Expose global hydration trigger for streaming scripts
   (window as any).__SF_HYDRATE__ = hydrateComponent;
-}
-
-/**
- * Clean up hydration coordinator
- */
-export function cleanupHydrationCoordinator(): void {
-  if (typeof window === "undefined") return;
-  
-  componentRegistry.clear();
-  delete (window as any).__SF_HYDRATE__;
 }

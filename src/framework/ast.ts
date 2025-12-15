@@ -119,13 +119,6 @@ export function getDefaultExportInfo(
   };
 }
 
-/**
- * Extract property names from a type (e.g., for Props interface)
- */
-export function extractTypeProperties(_checker: ts.TypeChecker, type: ts.Type): string[] {
-  return type.getProperties().map((p) => p.getName());
-}
-
 // ============================================================================
 // Module Validation
 // ============================================================================
@@ -141,17 +134,6 @@ export interface ValidationResult {
   warnings: string[];
   exportInfo: ExportInfo | null;
 }
-
-/**
- * Expected signatures for each module kind
- */
-export const EXPECTED_SIGNATURES: Record<ModuleKind, string> = {
-  server:
-    "(request: Request, params?: Record<string, string>, env?: Env) => Response | Promise<Response> | Record<string, unknown> | Promise<Record<string, unknown>>",
-  client: "(props: Record<string, unknown>) => VNode",
-  layout: "(props: { children: VNode }) => VNode",
-  unknown: "unknown",
-};
 
 /**
  * Validate a module against expected patterns
@@ -273,64 +255,6 @@ function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo):
 }
 
 // ============================================================================
-// Module Pairing
-// ============================================================================
-
-/**
- * Paired module information
- */
-export interface PairedModules {
-  client: string | null;
-  server: string | null;
-  layouts: string[];
-}
-
-/**
- * Find paired modules for a given path using AST-based path analysis
- */
-export function findPairedModules(filePath: string, availableModules: string[]): PairedModules {
-  const parsed = parsePath(filePath);
-  const moduleSet = new Set(availableModules);
-
-  // Find client/server pair
-  let client: string | null = null;
-  let server: string | null = null;
-
-  if (parsed.kind === "client") {
-    client = filePath;
-    const serverPath = filePath.replace(".client.", ".server.");
-    server = moduleSet.has(serverPath) ? serverPath : null;
-  } else if (parsed.kind === "server") {
-    server = filePath;
-    const clientPath = filePath.replace(".server.", ".client.");
-    client = moduleSet.has(clientPath) ? clientPath : null;
-  }
-
-  // Find layouts
-  const layouts: string[] = [];
-  const segments = parsed.normalized.split("/").slice(0, -1);
-
-  // Check root layout
-  const rootLayout = "./_layout.tsx";
-  if (moduleSet.has(rootLayout)) {
-    layouts.push(rootLayout);
-  }
-
-  // Walk path segments
-  let current = ".";
-  for (const segment of segments) {
-    if (!segment) continue;
-    current += `/${segment}`;
-    const layoutPath = `${current}/_layout.tsx`;
-    if (moduleSet.has(layoutPath)) {
-      layouts.push(layoutPath);
-    }
-  }
-
-  return { client, server, layouts };
-}
-
-// ============================================================================
 // Code Generation
 // ============================================================================
 
@@ -341,76 +265,6 @@ export interface ModuleEntry {
   path: string;
   parsed: ParsedPath;
   validation: ValidationResult | null;
-}
-
-/**
- * Generate a type-safe import statement
- */
-export function generateImport(
-  modulePath: string,
-  importName: string,
-  isDefault: boolean = true,
-): string {
-  if (isDefault) {
-    return `import ${importName} from '${modulePath}'`;
-  }
-  return `import { ${importName} } from '${modulePath}'`;
-}
-
-/**
- * Generate a dynamic import expression
- */
-export function generateDynamicImport(modulePath: string): string {
-  return `() => import('${modulePath}')`;
-}
-
-/**
- * Generate module map entry with type annotations
- */
-export function generateModuleMapEntry(entry: ModuleEntry): string {
-  return `  '${entry.path}': ${generateDynamicImport(entry.path)}`;
-}
-
-/**
- * Validate generated code by parsing it
- */
-export function validateGeneratedCode(
-  code: string,
-  filename: string = "generated.ts",
-): {
-  valid: boolean;
-  errors: ts.Diagnostic[];
-} {
-  const sourceFile = ts.createSourceFile(
-    filename,
-    code,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-
-  // Check for syntax errors
-  const errors: ts.Diagnostic[] = [];
-
-  // Use a simple parse check
-  const program = ts.createProgram({
-    rootNames: [filename],
-    options: COMPILER_OPTIONS,
-    host: {
-      ...ts.createCompilerHost(COMPILER_OPTIONS),
-      getSourceFile: (name) => (name === filename ? sourceFile : undefined),
-      fileExists: (name) => name === filename,
-      readFile: (name) => (name === filename ? code : undefined),
-    },
-  });
-
-  const syntacticDiagnostics = program.getSyntacticDiagnostics(sourceFile);
-  errors.push(...syntacticDiagnostics);
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
 }
 
 // ============================================================================
