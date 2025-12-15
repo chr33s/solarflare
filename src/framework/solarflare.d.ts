@@ -459,7 +459,7 @@ declare module "solarflare/worker" {
 }
 
 declare module "solarflare/store" {
-  import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals-core";
+  import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
 
   /**
    * Server-rendered data passed to components

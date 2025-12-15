@@ -3,7 +3,6 @@
  * Web component registration, hydration & signal-based state
  */
 import { type FunctionComponent } from "preact";
-import { useEffect, useState } from "preact/hooks";
 import register from "preact-custom-element";
 import { parsePath } from "./paths";
 import {
@@ -42,17 +41,8 @@ export function useParams(): Record<string, string> {
   // Try to get params from router first (client-side)
   try {
     const router = getRouter();
-    // Subscribe to signal changes and re-render
-    const [params, setParams] = useState(router.params.value);
-
-    useEffect(() => {
-      // Return cleanup function from effect subscription
-      return router.subscribe(() => {
-        setParams(router.params.value);
-      });
-    }, []);
-
-    return params;
+    // With @preact/signals, reading .value auto-subscribes
+    return router.params.value;
   } catch {
     // Fallback to signal store (SSR or before router init)
     return paramsSignal.value;
@@ -74,19 +64,8 @@ export function useParams(): Record<string, string> {
  * ```
  */
 export function useServerData<T>(): ServerData<T> {
-  const [state, setState] = useState<ServerData<T>>(
-    serverDataSignal.value as ServerData<T>
-  );
-
-  useEffect(() => {
-    // Use effect to subscribe - signals-core effect returns cleanup
-    const { effect } = require("@preact/signals-core");
-    return effect(() => {
-      setState(serverDataSignal.value as ServerData<T>);
-    });
-  }, []);
-
-  return state;
+  // With @preact/signals, reading .value auto-subscribes the component
+  return serverDataSignal.value as ServerData<T>;
 }
 
 /**

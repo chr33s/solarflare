@@ -4,7 +4,7 @@
  * Uses signals-core for reactive state without Preact dependency
  */
 
-import { signal, computed, effect, type ReadonlySignal } from "@preact/signals-core";
+import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "diff-dom-streaming";
 
 // ============================================================================

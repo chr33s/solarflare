@@ -371,9 +371,8 @@ async function extractAllCssImports(
  * HMR Implementation:
  * - Uses wrapper component pattern to overcome customElements.define() limitation
  * - Wrapper holds mutable reference to actual component (CurrentComponent)
- * - Event listener triggers re-renders when component updates
+ * - Signals trigger re-renders when component updates
  * - Note: import.meta.hot code is included but may be stripped during bundling
- * - Manual HMR testing: window.dispatchEvent(new CustomEvent('sf:hmr:TAG_NAME'))
  */
 function generateChunkedClientEntry(meta: ComponentMeta): string {
   return `/**
@@ -381,7 +380,7 @@ function generateChunkedClientEntry(meta: ComponentMeta): string {
  * HMR-enabled wrapper for ${meta.tag}
  */
 import { h } from 'preact'
-import { useState, useEffect } from 'preact/hooks'
+import { signal, useSignal, useSignalEffect } from '@preact/signals'
 import register from 'preact-custom-element'
 import { initRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client'
 import BaseComponent from '../src/app/${meta.file}'
@@ -392,14 +391,16 @@ initHydrationCoordinator()
 // Mutable reference for HMR - updated when module is hot-replaced
 let CurrentComponent = BaseComponent
 
+// Module-level signal for HMR updates (shared across all instances)
+const hmrVersion = signal(0)
+
 // HMR Support - allows component updates without re-registering custom element
 if (import.meta.hot) {
   import.meta.hot.accept('../src/app/${meta.file}', (newModule) => {
     if (newModule?.default) {
       CurrentComponent = newModule.default
       console.log('[HMR] Updated <${meta.tag}>')
-      // Notify all instances of this component to re-render
-      window.dispatchEvent(new CustomEvent('sf:hmr:${meta.tag}'))
+      hmrVersion.value++
     }
   })
   
@@ -411,69 +412,58 @@ if (import.meta.hot) {
 // Initialize router once globally
 function ensureRouter() {
   if (typeof window === 'undefined') return null
-  
-  // Use existing router if available
   if (window.__SF_ROUTER__) return window.__SF_ROUTER__
-  
-  // Create router from manifest (must be pre-loaded or inlined)
   if (window.__SF_ROUTES__) {
     window.__SF_ROUTER__ = initRouter(window.__SF_ROUTES__).start()
     return window.__SF_ROUTER__
   }
-  
   return null
 }
 
-// HMR Wrapper Component - re-renders when CurrentComponent changes
+// Load router manifest (fire-and-forget)
+let routerLoading = false
+function loadRouter() {
+  if (routerLoading || window.__SF_ROUTER__) return
+  routerLoading = true
+  fetch('/routes.json')
+    .then(res => res.json())
+    .then(manifest => {
+      window.__SF_ROUTES__ = manifest
+      ensureRouter()
+    })
+    .catch(() => {})
+}
+
+// HMR Wrapper Component
 function Component(props) {
-  const [ready, setReady] = useState(!!window.__SF_ROUTER__)
-  const [, forceUpdate] = useState(0)
-  const [deferredProps, setDeferredProps] = useState(null)
+  // Local signal for deferred props (component-scoped)
+  const deferredProps = useSignal(null)
+  
+  // Subscribe to HMR updates by reading module-level signal
+  const _ = hmrVersion.value
 
-  // Listen for HMR updates specific to this component
-  useEffect(() => {
-    const handler = () => forceUpdate(n => n + 1)
-    window.addEventListener('sf:hmr:${meta.tag}', handler)
-    return () => window.removeEventListener('sf:hmr:${meta.tag}', handler)
-  }, [])
-
-  // Check for deferred data on mount
-  useEffect(() => {
+  // One-time setup for hydration and router
+  useSignalEffect(() => {
     const el = document.querySelector('${meta.tag}')
     
-    // Check for data stored by hydration coordinator (SSR streaming case)
+    // Check for deferred SSR data
     if (el?._sfDeferred) {
-      const data = el._sfDeferred
+      deferredProps.value = el._sfDeferred
       delete el._sfDeferred
-      setDeferredProps(data)
     } else {
-      // On client navigation, check if there's a data island we should read
       const data = extractDataIsland('${meta.tag}-deferred')
-      if (data) {
-        setDeferredProps(data)
-      }
+      if (data) deferredProps.value = data
     }
     
-    // Also listen for future hydration events
-    const handler = (e) => setDeferredProps(e.detail)
+    // Listen for streaming hydration events
+    const handler = (e) => { deferredProps.value = e.detail }
     el?.addEventListener('sf:hydrate', handler)
-    return () => el?.removeEventListener('sf:hydrate', handler)
-  }, [])
-
-  // Router initialization
-  useEffect(() => {
-    if (ready) return
     
-    // Load manifest and create router
-    fetch('/routes.json')
-      .then(res => res.json())
-      .then(manifest => {
-        window.__SF_ROUTES__ = manifest
-        ensureRouter()
-        setReady(true)
-      })
-      .catch(() => setReady(true)) // Render anyway on error
-  }, [ready])
+    // Load router
+    loadRouter()
+    
+    return () => el?.removeEventListener('sf:hydrate', handler)
+  })
 
   // Clean props - filter out "undefined" strings from unset attributes
   const cleanProps = {}
@@ -484,9 +474,10 @@ function Component(props) {
   }
 
   // Merge deferred props (they override initial props)
-  const finalProps = deferredProps ? { ...cleanProps, ...deferredProps } : cleanProps
+  const finalProps = deferredProps.value 
+    ? { ...cleanProps, ...deferredProps.value } 
+    : cleanProps
 
-  // Render current (possibly HMR-updated) component
   return h(CurrentComponent, finalProps)
 }
 

@@ -85,7 +85,7 @@ src/framework/
     "./worker": "./src/framework/worker.tsx"
   },
   "dependencies": {
-    "@preact/signals-core": "^1.8.0",
+    "@preact/signals": "^1.3.0",
     "diff-dom-streaming": "^0.6.6",
     "preact": "^10.28.0",
     "preact-custom-element": "^4.6.0",

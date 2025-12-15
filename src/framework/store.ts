@@ -1,10 +1,10 @@
 /**
  * Solarflare Store
- * Signal-based reactive state management using @preact/signals-core
+ * Signal-based reactive state management using @preact/signals
  * Provides context for route params, server data, and shared state
  */
 
-import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals-core";
+import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
 import { stringify, parse } from "devalue";
 
 // ============================================================================
