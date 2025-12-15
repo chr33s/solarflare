@@ -12,8 +12,15 @@ export function PostForm({ action }: { action: string }) {
           .catch(console.error)
           .finally(() => form.reset());
       }}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+        marginTop: "16px",
+      }}
     >
-      <input type="text" name="input" />
+      <label htmlFor="input">Input:</label>
+      <input type="text" name="input" id="input" />
       <button type="submit">Submit</button>
     </form>
   );

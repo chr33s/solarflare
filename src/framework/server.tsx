@@ -403,6 +403,7 @@ export function initServerContext(options: StreamRenderOptions): void {
 /**
  * Transform a ReadableStream to inject assets and store hydration
  * Replaces the ASSETS_MARKER with actual asset tags and appends store script
+ * Also injects <!DOCTYPE html> before the root <html> tag
  */
 function createAssetInjectionTransformer(
   script?: string,
@@ -411,11 +412,21 @@ function createAssetInjectionTransformer(
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   let buffer = "";
+  let doctypeInjected = false;
   const marker = `<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`;
 
   return new TransformStream({
     transform(chunk, controller) {
       buffer += decoder.decode(chunk, { stream: true });
+
+      // Inject <!DOCTYPE html> before the root <html> tag (only once)
+      if (!doctypeInjected) {
+        const htmlIndex = buffer.indexOf("<html");
+        if (htmlIndex !== -1) {
+          buffer = buffer.slice(0, htmlIndex) + "<!DOCTYPE html>" + buffer.slice(htmlIndex);
+          doctypeInjected = true;
+        }
+      }
 
       // Check if we have the complete marker
       const markerIndex = buffer.indexOf(marker);
@@ -440,6 +451,13 @@ function createAssetInjectionTransformer(
     flush(controller) {
       // Flush any remaining content
       if (buffer) {
+        // Inject doctype if not done yet (edge case: small document)
+        if (!doctypeInjected) {
+          const htmlIndex = buffer.indexOf("<html");
+          if (htmlIndex !== -1) {
+            buffer = buffer.slice(0, htmlIndex) + "<!DOCTYPE html>" + buffer.slice(htmlIndex);
+          }
+        }
         // Final check for marker in remaining content
         const markerIndex = buffer.indexOf(marker);
         if (markerIndex !== -1) {

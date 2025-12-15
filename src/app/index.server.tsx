@@ -10,6 +10,6 @@ export default async function server(request: Request, params: Record<string, st
   return {
     string: "World",
     async: await new Promise((resolve) => resolve(env.HELLO ?? "world")), // <-- blocks
-    defer: new Promise((resolve) => setTimeout(() => resolve(env.HELLO ?? "world"), 2_500)) // <-- non-blocking
+    defer: new Promise((resolve) => setTimeout(() => resolve(env.HELLO ?? "world"), 500)) // <-- non-blocking
   };
 }

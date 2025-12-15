@@ -7,7 +7,7 @@ export default function Index(props: { async?: string, defer?: string; string?: 
   console.log(props);
   return (
     <main>
-      <img src={logo} alt="Logo" />
+      <img alt="Logo" height="231.25" src={logo} width="200"/>
       <h1>Hello {props.string}</h1>
       <h2>Async: {props.async}</h2>
       <h3>{props.defer ? `Deferred: ${props.defer}` : "Loading..."}</h3>
