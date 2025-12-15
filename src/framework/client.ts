@@ -5,43 +5,7 @@
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths";
-import { params as paramsSignal, hydrateStore, initHydrationCoordinator } from "./store";
-import { getRouter } from "./router";
-
-/**
- * Hook to access current route params
- * Uses signals internally for reactivity with web components
- *
- * @example
- * ```tsx
- * function BlogPost() {
- *   const params = useParams();
- *   return <h1>Post: {params.slug}</h1>;
- * }
- * ```
- *
- * For signal-based reactive access, use:
- * ```tsx
- * import { getRouter } from "solarflare/client";
- *
- * function BlogPost() {
- *   const router = getRouter();
- *   // router.params is a ReadonlySignal<Record<string, string>>
- *   return <h1>Post: {router.params.value.slug}</h1>;
- * }
- * ```
- */
-export function useParams(): Record<string, string> {
-  // Try to get params from router first (client-side)
-  try {
-    const router = getRouter();
-    // With @preact/signals, reading .value auto-subscribes
-    return router.params.value;
-  } catch {
-    // Fallback to signal store (SSR or before router init)
-    return paramsSignal.value;
-  }
-}
+import { hydrateStore, initHydrationCoordinator } from "./store";
 
 /**
  * Initialize client-side store from SSR hydration data

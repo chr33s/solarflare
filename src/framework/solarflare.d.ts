@@ -144,13 +144,6 @@ declare module "solarflare/client" {
   ): FunctionComponent<P>;
 
   /**
-   * Hook to access current route params
-   * Uses signals internally for reactivity with web components
-   * @see getRouter().params for signal-based reactive access
-   */
-  export function useParams(): Record<string, string>;
-
-  /**
    * Initialize client-side store from SSR hydration data
    */
   export function initClient(): void;

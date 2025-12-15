@@ -57,6 +57,37 @@ async function safeRename(src: string, dest: string): Promise<boolean> {
 }
 
 /**
+ * Auto-scaffold missing template files
+ * Creates index.ts, _error.tsx, and _layout.tsx if they don't exist
+ */
+async function scaffoldTemplates(): Promise<void> {
+  const templates: Record<string, string> = {
+    "index.ts": `import worker from "#solarflare/worker";
+export default { fetch: worker };
+`,
+    "_error.tsx": `export default function Error({ error }: { error: Error }) {
+  return <div><h1>Error</h1><p>{error.message}</p></div>;
+}
+`,
+    "_layout.tsx": `import type { VNode } from "preact";
+import { Assets } from "../framework/server";
+
+export default function Layout({ children }: { children: VNode }) {
+  return <html><head><Assets /></head><body>{children}</body></html>;
+}
+`,
+  };
+
+  for (const [filename, content] of Object.entries(templates)) {
+    const filepath = join(APP_DIR, filename);
+    const file = Bun.file(filepath);
+    if (!(await file.exists())) {
+      await Bun.write(filepath, content);
+    }
+  }
+}
+
+/**
  * Validate all route files and report errors/warnings using AST analysis
  */
 async function validateRoutes(routeFiles: string[], layoutFiles: string[]): Promise<boolean> {
@@ -912,6 +943,9 @@ async function build() {
   if (args.clean) {
     await clean();
   }
+
+  // Auto-scaffold missing template files
+  await scaffoldTemplates();
 
   const clientManifest = await buildClient();
   await buildServer(clientManifest);
