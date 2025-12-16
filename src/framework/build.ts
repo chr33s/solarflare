@@ -2,7 +2,8 @@
 /** Solarflare build script for client and server bundles. */
 import { Glob } from "bun";
 import { watch } from "fs";
-import { join } from "path";
+import { exists, mkdir } from "fs/promises";
+import { dirname, join } from "path";
 import { parseArgs } from "util";
 import ts from "typescript";
 import {
@@ -591,21 +592,20 @@ async function buildClient() {
     }
   }
 
-  if (await Bun.file(PUBLIC_DIR).exists()) {
-    const publicFiles = await scanFiles("**/*", PUBLIC_DIR);
+  if (await exists(PUBLIC_DIR)) {
+    const glob = new Glob("**/*");
+    const publicFiles: string[] = [];
+    for await (const file of glob.scan({ cwd: PUBLIC_DIR, dot: true })) {
+      publicFiles.push(file);
+    }
     for (const file of publicFiles) {
       const src = join(PUBLIC_DIR, file);
+      const dest = join(DIST_CLIENT, file);
 
-      const content = await Bun.file(src).arrayBuffer();
-      const hash = generateHash(Buffer.from(content).toString());
+      // Ensure the directory structure exists
+      const destDir = dirname(dest);
+      await mkdir(destDir, { recursive: true });
 
-      const normalizedFile = normalizeAssetPath(file);
-      const parts = normalizedFile.split(".");
-      const ext = parts.pop();
-      const base = parts.join(".");
-      const hashedName = ext ? `${base}.${hash}.${ext}` : `${base}.${hash}`;
-
-      const dest = join(DIST_CLIENT, hashedName);
       await Bun.write(dest, Bun.file(src));
     }
   }
