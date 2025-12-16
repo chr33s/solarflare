@@ -29,7 +29,6 @@ const PUBLIC_DIR = join(ROOT_DIR, "public");
 const MODULES_PATH = join(DIST_DIR, ".modules.generated.ts");
 const CHUNKS_PATH = join(DIST_DIR, ".chunks.generated.json");
 const ROUTES_TYPE_PATH = join(DIST_DIR, "routes.d.ts");
-const ROUTES_MANIFEST_PATH = join(DIST_CLIENT, "routes.json");
 
 /** Safe unlink that ignores ENOENT errors. */
 async function safeUnlink(path: string): Promise<void> {
@@ -379,13 +378,28 @@ async function extractAllCssImports(
   return allCss;
 }
 
+/** Route manifest structure for client-side routing. */
+interface RoutesManifest {
+  routes: Array<{
+    pattern: string;
+    tag: string;
+    chunk?: string;
+    styles?: string[];
+    type: "client";
+    params: string[];
+  }>;
+}
+
 /** Generates virtual client entry for a single component with HMR support. */
-function generateChunkedClientEntry(meta: ComponentMeta): string {
+function generateChunkedClientEntry(meta: ComponentMeta, routesManifest: RoutesManifest): string {
   const debugImports = args.debug
     ? `import 'preact/debug'
 import '@preact/signals-debug'
 `
     : "";
+
+  // Inline the routes manifest to avoid fetch
+  const inlinedRoutes = JSON.stringify(routesManifest);
 
   return /* js */ `/**
  * Auto-generated Client Chunk: ${meta.chunk}
@@ -421,6 +435,9 @@ if (import.meta.hot) {
   });
 }
 
+// Inlined routes manifest - no fetch required
+window.__SF_ROUTES__ = ${inlinedRoutes};
+
 // Initialize router once globally
 function ensureRouter() {
   if (typeof window === 'undefined') return null;
@@ -430,46 +447,6 @@ function ensureRouter() {
     return window.__SF_ROUTER__;
   }
   return null;
-}
-
-// Fetch with retry for transient failures
-async function fetchWithRetry(url, maxRetries = 3, baseDelay = 1000) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const res = await fetch(url);
-      if (res.ok || res.status < 500) return res;
-    } catch (e) {
-      if (attempt === maxRetries) throw e;
-    }
-    if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
-    }
-  }
-  throw new Error('Fetch failed after retries');
-}
-
-// Load router manifest when browser is idle
-let routerLoading = false;
-function loadRouter() {
-  if (routerLoading || window.__SF_ROUTER__) return;
-  routerLoading = true;
-  
-  const doLoad = () => {
-    fetchWithRetry('/routes.json', 2, 500)
-      .then(res => res.json())
-      .then(manifest => {
-        window.__SF_ROUTES__ = manifest;
-        ensureRouter();
-      })
-      .catch(() => {});
-  }
-  
-  // Defer to idle time, fallback to setTimeout for Safari
-  if ('requestIdleCallback' in window) {
-    requestIdleCallback(doLoad, { timeout: 2000 });
-  } else {
-    setTimeout(doLoad, 1);
-  }
 }
 
 /** @description HMR-enabled wrapper component with deferred data hydration. */
@@ -508,7 +485,7 @@ function Component(props) {
     };
     window.addEventListener('sf:navigate', navHandler);
     
-    loadRouter();
+    ensureRouter();
     
     return () => {
       el.removeEventListener('sf:hydrate', hydrateHandler);
@@ -660,12 +637,24 @@ async function buildClient() {
     console.log("   Generated console-forward.js (dev mode)");
   }
 
+  // Pre-compute routes manifest to inline in client entries (avoids fetch for /routes.json)
+  const inlineRoutesManifest: RoutesManifest = {
+    routes: metas.map((meta) => ({
+      pattern: meta.parsed.pattern,
+      tag: meta.tag,
+      chunk: `/${meta.chunk}`,
+      styles: undefined, // Will be populated after CSS processing
+      type: "client" as const,
+      params: meta.parsed.params,
+    })),
+  };
+
   // Generate individual entry files for each component
   const entryPaths: string[] = [];
   const entryToMeta: Record<string, ComponentMeta> = {};
 
   for (const meta of metas) {
-    const entryContent = generateChunkedClientEntry(meta);
+    const entryContent = generateChunkedClientEntry(meta, inlineRoutesManifest);
     const entryPath = join(DIST_DIR, `.entry-${meta.chunk.replace(".js", "")}.generated.tsx`);
     await Bun.write(entryPath, entryContent);
     entryPaths.push(entryPath);
@@ -771,17 +760,6 @@ async function buildClient() {
 
   await Bun.write(CHUNKS_PATH, JSON.stringify(manifest, null, 2));
 
-  const routesManifest = {
-    routes: metas.map((meta) => ({
-      pattern: meta.parsed.pattern,
-      tag: meta.tag,
-      chunk: manifest.chunks[meta.parsed.pattern],
-      styles: manifest.styles[meta.parsed.pattern],
-      type: "client" as const,
-      params: meta.parsed.params,
-    })),
-  };
-
   console.log(`   Generated ${metas.length} chunk(s)`);
 
   for (const entryPath of entryPaths) {
@@ -789,21 +767,10 @@ async function buildClient() {
   }
 
   console.log("✅ Client build complete");
-
-  return routesManifest;
 }
 
 /** Builds the server bundle. */
-async function buildServer(clientRoutesManifest: {
-  routes: Array<{
-    pattern: string;
-    tag: string;
-    chunk?: string;
-    styles?: string[];
-    type: "client";
-    params: string[];
-  }>;
-}) {
+async function buildServer() {
   console.log("🔍 Scanning for route modules...");
   const routeFiles = await findRouteModules();
   const layoutFiles = await findLayouts();
@@ -866,26 +833,7 @@ async function buildServer(clientRoutesManifest: {
     process.exit(1);
   }
 
-  const serverRoutes = routeFiles
-    .filter((f) => f.includes(".server.") && !f.includes("/_"))
-    .map((file) => {
-      const parsed = parsePath(file);
-      const hasClientRoute = clientRoutesManifest.routes.some((r) => r.pattern === parsed.pattern);
-      return { file, parsed, hasClientRoute };
-    })
-    .filter(({ hasClientRoute }) => !hasClientRoute)
-    .map(({ parsed }) => ({
-      pattern: parsed.pattern,
-      tag: parsed.tag,
-      type: "server" as const,
-      params: parsed.params,
-    }));
-
-  const combinedManifest = {
-    routes: [...clientRoutesManifest.routes, ...serverRoutes],
-  };
-
-  await Bun.write(ROUTES_MANIFEST_PATH, JSON.stringify(combinedManifest, null, 2));
+  // Note: routes.json is no longer written since routes are inlined in client chunks
 
   console.log("✅ Server build complete");
 }
@@ -913,8 +861,8 @@ async function build() {
 
   await scaffoldTemplates();
 
-  const clientManifest = await buildClient();
-  await buildServer(clientManifest);
+  await buildClient();
+  await buildServer();
 
   const duration = ((performance.now() - startTime) / 1000).toFixed(2);
   console.log(`\n🚀 Build completed in ${duration}s\n`);
