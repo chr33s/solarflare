@@ -23,7 +23,7 @@ const binaries: Record<string, string> = {
   "darwin-arm64": "solarflare-macos-arm64",
   "linux-x64": "solarflare-linux-x64",
   "linux-arm64": "solarflare-linux-arm64",
-  // "win32-x64": "solarflare-windows-x64.exe",
+  "win32-x64": "solarflare-windows-x64.exe",
 };
 
 const key = `${platform}-${arch}`;
