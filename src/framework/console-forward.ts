@@ -229,15 +229,9 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
   }
 
   async function sendLogs(logs) {
-    try {
-      await fetch("${endpoint}", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logs }),
-      });
-    } catch {
-      // Fail silently
-    }
+    const payload = JSON.stringify({ logs });
+    const blob = new Blob([payload], { type: "application/json" });
+    navigator.sendBeacon("${endpoint}", blob);
   }
 
   function flushLogs() {
