@@ -87,7 +87,10 @@ export function resetStore(): void {
   });
 }
 
-/** Serializes store state for client hydration. */
+/** Data island ID for store hydration. */
+const STORE_ISLAND_ID = "sf-store";
+
+/** Serializes store state for client hydration using a data island. */
 export async function serializeStoreForHydration(): Promise<string> {
   const state = {
     params: _params.value,
@@ -95,24 +98,20 @@ export async function serializeStoreForHydration(): Promise<string> {
     pathname: _pathname.value,
   };
 
-  const serialized = await serializeToString(state);
-  const escaped = JSON.stringify(serialized);
-
-  return /* html */ `<script>window.__SF_STORE__=${escaped}</script>`;
+  return serializeDataIsland(STORE_ISLAND_ID, state);
 }
 
 /** Hydrates store from serialized state (client-side). */
 export async function hydrateStore(): Promise<void> {
-  if (typeof window === "undefined") return;
+  if (typeof document === "undefined") return;
 
-  const serialized = (window as any).__SF_STORE__;
-  if (!serialized) return;
-
-  const state = await parseFromString<{
+  const state = await extractDataIsland<{
     params: Record<string, string>;
     serverData: unknown;
     pathname: string;
-  }>(serialized);
+  }>(STORE_ISLAND_ID);
+
+  if (!state) return;
 
   initStore({
     params: state.params,
@@ -121,7 +120,9 @@ export async function hydrateStore(): Promise<void> {
 
   setPathname(state.pathname);
 
-  delete (window as any).__SF_STORE__;
+  // Clean up the data island after extraction
+  const script = document.querySelector(`script[data-island="${STORE_ISLAND_ID}"]`);
+  script?.remove();
 }
 
 export { signal, computed, effect, batch };
@@ -174,19 +175,50 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
   }
 }
 
-/** Initializes the global hydration trigger. */
-export function initHydrationCoordinator(): void {
-  if (typeof window === "undefined") return;
+/** Module-level hydration state (avoids window pollution). */
+let hydrationReady = false;
+const hydrationQueue: [string, string][] = [];
+let eventListenerAttached = false;
 
-  const queue = (window as any).__SF_HYDRATE_QUEUE__ as [string, string][] | undefined;
-  if (queue) {
-    for (const [tag, dataIslandId] of queue) {
-      // Skip stale entries for elements no longer in the DOM
-      if (!document.querySelector(tag)) continue;
-      void hydrateComponent(tag, dataIslandId);
-    }
-    delete (window as any).__SF_HYDRATE_QUEUE__;
+/** Handler for hydration queue events from streaming SSR. */
+function handleQueueHydrateEvent(e: Event): void {
+  const { tag, id } = (e as CustomEvent<{ tag: string; id: string }>).detail;
+  queueHydration(tag, id);
+}
+
+/** Queue a hydration call or execute immediately if coordinator is ready. */
+export function queueHydration(tag: string, dataIslandId: string): void {
+  if (hydrationReady) {
+    void hydrateComponent(tag, dataIslandId);
+  } else {
+    hydrationQueue.push([tag, dataIslandId]);
+  }
+}
+
+/** Check if hydration coordinator is initialized. */
+export function isHydrationReady(): boolean {
+  return hydrationReady;
+}
+
+/** Initializes the hydration coordinator. */
+export function initHydrationCoordinator(): void {
+  if (typeof document === "undefined") return;
+
+  // Attach event listener for streaming SSR hydration triggers (only once)
+  if (!eventListenerAttached) {
+    document.addEventListener("sf:queue-hydrate", handleQueueHydrateEvent);
+    eventListenerAttached = true;
   }
 
-  (window as any).__SF_HYDRATE__ = hydrateComponent;
+  if (hydrationReady) return;
+
+  // Process any queued hydration calls
+  for (const [tag, dataIslandId] of hydrationQueue) {
+    // Skip stale entries for elements no longer in the DOM
+    if (!document.querySelector(tag)) continue;
+    void hydrateComponent(tag, dataIslandId);
+  }
+  hydrationQueue.length = 0;
+
+  hydrationReady = true;
 }

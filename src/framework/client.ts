@@ -215,6 +215,8 @@ export {
   // Hydration coordinator
   hydrateComponent,
   initHydrationCoordinator,
+  queueHydration,
+  isHydrationReady,
   // Re-exports from signals-core
   signal,
   computed,

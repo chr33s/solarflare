@@ -506,7 +506,8 @@ function createDeferredStream(
           const data = await promise;
           const dataIslandId = `${tag}-deferred`;
           const dataIsland = await serializeDataIsland(dataIslandId, data);
-          const hydrationScript = `<script>requestAnimationFrame(()=>window.__SF_HYDRATE__?window.__SF_HYDRATE__("${tag}","${dataIslandId}"):(window.__SF_HYDRATE_QUEUE__??=[]).push(["${tag}","${dataIslandId}"]))</script>`;
+          // Dispatch a custom event that the hydration coordinator listens for
+          const hydrationScript = `<script>requestAnimationFrame(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:{tag:"${tag}",id:"${dataIslandId}"}})))</script>`;
           controller.enqueue(encoder.encode(dataIsland + hydrationScript));
         } catch (err) {
           const errorScript = `<script>console.error("[solarflare] Deferred error:", ${JSON.stringify((err as Error).message)})</script>`;

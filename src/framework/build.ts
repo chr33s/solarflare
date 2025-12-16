@@ -408,7 +408,7 @@ import '@preact/signals-debug'
 ${debugImports}import { h } from 'preact';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
-import { initRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client';
+import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client';
 import BaseComponent from '../src/app/${meta.file}';
 
 // Initialize hydration coordinator for streaming SSR
@@ -435,18 +435,18 @@ if (import.meta.hot) {
   });
 }
 
-// Inlined routes manifest - no fetch required
-window.__SF_ROUTES__ = ${inlinedRoutes};
+// Routes manifest (inlined at build time)
+const routesManifest = ${inlinedRoutes};
 
-// Initialize router once globally
+// Module-level router initialization (no window pollution)
+let routerInitialized = false;
 function ensureRouter() {
-  if (typeof window === 'undefined') return null;
-  if (window.__SF_ROUTER__) return window.__SF_ROUTER__;
-  if (window.__SF_ROUTES__) {
-    window.__SF_ROUTER__ = initRouter(window.__SF_ROUTES__).start();
-    return window.__SF_ROUTER__;
+  if (typeof document === 'undefined') return null;
+  if (routerInitialized) {
+    try { return getRouter(); } catch { return null; }
   }
-  return null;
+  routerInitialized = true;
+  return initRouter(routesManifest).start();
 }
 
 /** @description HMR-enabled wrapper component with deferred data hydration. */

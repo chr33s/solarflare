@@ -316,15 +316,14 @@ export class Router {
       }
 
       // Delay to allow component mount before triggering hydration
+      // Use custom event to communicate with hydration coordinator (no window pollution)
       setTimeout(() => {
         requestAnimationFrame(() => {
-          const hydrateFn = (window as any).__SF_HYDRATE__;
-          if (hydrateFn) {
-            hydrateFn(tag, dataIslandId);
-          } else {
-            const queue = ((window as any).__SF_HYDRATE_QUEUE__ ??= []);
-            queue.push([tag, dataIslandId]);
-          }
+          document.dispatchEvent(
+            new CustomEvent("sf:queue-hydrate", {
+              detail: { tag, id: dataIslandId },
+            }),
+          );
         });
       }, 0);
     }

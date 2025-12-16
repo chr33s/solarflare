@@ -8,13 +8,6 @@ interface ImportMeta {
   ): Record<string, () => Promise<T>>;
 }
 
-/**
- * Extend Window with Solarflare router
- */
-interface Window {
-  __SF_ROUTER__?: import("./router").Router;
-}
-
 declare module "*.css" {
   const classNames: Record<string, string>;
   export default classNames;
