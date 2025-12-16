@@ -432,6 +432,22 @@ function ensureRouter() {
   return null
 }
 
+// Fetch with retry for transient failures
+async function fetchWithRetry(url, maxRetries = 3, baseDelay = 1000) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url)
+      if (res.ok || res.status < 500) return res
+    } catch (e) {
+      if (attempt === maxRetries) throw e
+    }
+    if (attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)))
+    }
+  }
+  throw new Error('Fetch failed after retries')
+}
+
 // Load router manifest when browser is idle
 let routerLoading = false
 function loadRouter() {
@@ -439,7 +455,7 @@ function loadRouter() {
   routerLoading = true
   
   const doLoad = () => {
-    fetch('/routes.json')
+    fetchWithRetry('/routes.json', 2, 500)
       .then(res => res.json())
       .then(manifest => {
         window.__SF_ROUTES__ = manifest
