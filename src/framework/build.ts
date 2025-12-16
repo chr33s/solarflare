@@ -79,8 +79,27 @@ export default function Layout({ children }: { children: VNode }) {
 `,
   };
 
+  const rootTemplates: Record<string, string> = {
+    "wrangler.json": `{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "assets": { "directory": "./dist/client" },
+  "dev": { "port": 8080 },
+  "main": "./dist/server/index.js",
+  "name": "solarflare"
+}
+`,
+  };
+
   for (const [filename, content] of Object.entries(templates)) {
     const filepath = join(APP_DIR, filename);
+    const file = Bun.file(filepath);
+    if (!(await file.exists())) {
+      await Bun.write(filepath, content);
+    }
+  }
+
+  for (const [filename, content] of Object.entries(rootTemplates)) {
+    const filepath = join(ROOT_DIR, filename);
     const file = Bun.file(filepath);
     if (!(await file.exists())) {
       await Bun.write(filepath, content);
