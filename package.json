@@ -1,23 +1,20 @@
 {
   "name": "solarflare",
-  "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "private": true,
   "license": "MIT",
-  "bin": {
-    "solarflare": "./bin/solarflare.ts"
-  },
-  "engines": {
-    "node": ">=22.18.0"
+  "type": "module",
+  "imports": {
+    "#app/*": "./src/app/*",
+    "#solarflare/*": "./src/framework/*"
   },
   "exports": {
     "./client": "./src/framework/client.tsx",
     "./server": "./src/framework/server.tsx",
     "./worker": "./src/framework/worker.tsx"
   },
-  "imports": {
-    "#app/*": "./src/app/*",
-    "#solarflare/*": "./src/framework/*"
+  "bin": {
+    "solarflare": "./bin/solarflare.ts"
   },
   "scripts": {
     "build": "bun ./src/framework/build.ts",
@@ -45,5 +42,8 @@
     "oxlint-tsgolint": "^0.9.1",
     "typescript": "~5.9.3",
     "wrangler": "^4.54.0"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }

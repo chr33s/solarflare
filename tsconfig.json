@@ -12,7 +12,7 @@
       "#app/*": ["./src/app/*"],
       "#solarflare/*": ["./src/framework/*"],
       "solarflare:routes": ["./dist/routes.json"],
-      "solarflare:routes/types": ["./dist/routes.d.ts"],
+      "solarflare:routes/types": ["./dist/routes.d.ts"]
     },
     "noEmit": true,
     "noFallthroughCasesInSwitch": true,
@@ -21,7 +21,7 @@
     "noUnusedParameters": true,
     "skipLibCheck": true,
     "strict": true,
-    "target": "es2022",
+    "target": "es2022"
   },
-  "include": ["./src", "./worker-configuration.d.ts"],
+  "include": ["./src", "./worker-configuration.d.ts"]
 }

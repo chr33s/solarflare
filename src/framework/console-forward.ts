@@ -253,13 +253,16 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
   }
 
   // Patch console methods
-  ${levels.map((level) => `
+  ${levels
+    .map(
+      (level) => `
   console.${level} = function(...args) {
     originalMethods.${level}(...args);
     const entry = createLogEntry("${level}", args);
     addToBuffer(entry);
   };`,
-    ).join("\n")}
+    )
+    .join("\n")}
 
   window.addEventListener("beforeunload", flushLogs);
   setInterval(flushLogs, 10000);

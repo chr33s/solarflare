@@ -246,9 +246,9 @@ export class Router {
         this.#config.onNotFound(url);
       }
       this.#handleScroll(url);
-      
+
       // Dispatch navigation event for components to re-extract deferred data
-      window.dispatchEvent(new CustomEvent('sf:navigate', { detail: { url, match } }));
+      window.dispatchEvent(new CustomEvent("sf:navigate", { detail: { url, match } }));
     } catch (error) {
       this.#handleError(error instanceof Error ? error : new Error(String(error)), url);
     }
