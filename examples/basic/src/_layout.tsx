@@ -1,5 +1,5 @@
 import type { VNode } from "preact";
-import { Assets } from "../framework/server";
+import { Assets } from "@chr33s/solarflare/server";
 import { Nav } from "./_components/nav";
 
 export default function Layout({ children }: { children: VNode }) {

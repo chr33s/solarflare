@@ -1,4 +1,4 @@
-import { navigate } from "#solarflare/client";
+import { navigate } from "@chr33s/solarflare/client";
 import { CountButton } from "#app/_components/count-button";
 import { PostForm } from "#app/_components/post-form";
 

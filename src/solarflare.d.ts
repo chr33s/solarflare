@@ -51,7 +51,7 @@ declare module "*.svg" {
 /**
  * Solarflare Framework Types
  */
-declare module "solarflare/client" {
+declare module "@chr33s/solarflare/client" {
   import { FunctionComponent } from "preact";
   import { ReadonlySignal, Signal } from "@preact/signals";
 
@@ -235,7 +235,7 @@ declare module "solarflare/client" {
   export function isActive(path: string, exact?: boolean): boolean;
 }
 
-declare module "solarflare/server" {
+declare module "@chr33s/solarflare/server" {
   import { VNode, FunctionComponent } from "preact";
   import { ReadonlySignal } from "@preact/signals";
 
@@ -495,8 +495,8 @@ declare module "solarflare/server" {
   export function serializeDataIsland(id: string, data: unknown): Promise<string>;
 }
 
-declare module "solarflare/worker" {
-  import { ModuleMap } from "solarflare/server";
+declare module "@chr33s/solarflare/worker" {
+  import { ModuleMap } from "@chr33s/solarflare/server";
 
   /**
    * Cloudflare Worker fetch handler

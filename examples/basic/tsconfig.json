@@ -1,0 +1,9 @@
+{
+  "extends": "@chr33s/solarflare/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "#app/*": ["./src/*"]
+    }
+  },
+  "include": ["./src", "./worker-configuration.d.ts"]
+}

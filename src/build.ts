@@ -17,10 +17,10 @@ import {
 import { parsePath } from "./paths";
 import { generateClientScript } from "./console-forward";
 
-// Resolve paths relative to project root (two levels up from src/framework/)
-// Use process.cwd() for compiled binary, import.meta.dir for development
-const ROOT_DIR = join(process.cwd());
-const APP_DIR = join(ROOT_DIR, "src/app");
+// Resolve paths relative to current working directory (where solarflare is invoked)
+// e.g. running from ./examples/basic will use ./examples/basic/src and ./examples/basic/dist
+const ROOT_DIR = process.cwd();
+const APP_DIR = join(ROOT_DIR, "src");
 const DIST_DIR = join(ROOT_DIR, "dist");
 const DIST_CLIENT = join(DIST_DIR, "client");
 const DIST_SERVER = join(DIST_DIR, "server");
@@ -53,7 +53,7 @@ async function safeRename(src: string, dest: string): Promise<boolean> {
 /** Auto-scaffolds missing template files. */
 async function scaffoldTemplates(): Promise<void> {
   const templates: Record<string, string> = {
-    "index.ts": `import worker from "#solarflare/worker";
+    "index.ts": `import worker from "@chr33s/solarflare/worker";
 export default { fetch: worker };
 `,
     "_error.tsx": `export default function Error({ error }: { error: Error }) {
@@ -61,7 +61,7 @@ export default { fetch: worker };
 }
 `,
     "_layout.tsx": `import type { VNode } from "preact";
-import { Assets } from "../framework/server";
+import { Assets } from "@chr33s/solarflare/server";
 
 export default function Layout({ children }: { children: VNode }) {
   return <html><head><Assets /></head><body>{children}</body></html>;
@@ -71,11 +71,16 @@ export default function Layout({ children }: { children: VNode }) {
 
   const rootTemplates: Record<string, string> = {
     "wrangler.json": `{
-  "$schema": "./node_modules/wrangler/config-schema.json",
   "assets": { "directory": "./dist/client" },
+  "compatibility_date": "2025-12-10",
   "dev": { "port": 8080 },
   "main": "./dist/server/index.js",
   "name": "solarflare"
+}
+`,
+    "tsconfig.json": `{
+  "extends": "@chr33s/solarflare/tsconfig.json",
+  "include": ["./src", "./worker-configuration.d.ts"]
 }
 `,
   };
@@ -284,7 +289,7 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
   const imports: string[] = [];
 
   // Match import statements for local .tsx/.ts files (starting with ./ or ../)
-  // Also match #app/* and #solarflare/* aliases
+  // Also match #app/* aliases
   const importRegex = /import\s+(?:{[^}]+}|\w+)\s+from\s+['"]([^'"]+)['"]/g;
   let match;
   while ((match = importRegex.exec(content)) !== null) {
@@ -406,8 +411,8 @@ import '@preact/signals-debug'
 ${debugImports}import { h } from 'preact';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
-import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client';
-import BaseComponent from '../src/app/${meta.file}';
+import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland } from '@chr33s/solarflare/client';
+import BaseComponent from '../src/${meta.file}';
 
 // Initialize hydration coordinator for streaming SSR
 initHydrationCoordinator();
@@ -417,7 +422,7 @@ const hmrVersion = signal(0);
 
 // HMR support
 if (import.meta.hot) {
-  import.meta.hot.accept('../src/app/${meta.file}', (newModule) => {
+  import.meta.hot.accept('../src/${meta.file}', (newModule) => {
     if (newModule?.default) {
       CurrentComponent = newModule.default;
       console.log('[HMR] Updated <${meta.tag}>');
@@ -524,6 +529,53 @@ interface ChunkManifest {
   tags: Record<string, string>;
   styles: Record<string, string[]>;
   devScripts?: string[];
+}
+
+/** Helper to resolve a path with extension fallback. */
+async function resolveWithExtensions(basePath: string): Promise<string> {
+  const extensions = [".tsx", ".ts", ".jsx", ".js"];
+  // If already has an extension, return as-is
+  if (extensions.some((ext) => basePath.endsWith(ext))) {
+    return basePath;
+  }
+  // Try each extension
+  for (const ext of extensions) {
+    const fullPath = basePath + ext;
+    if (await Bun.file(fullPath).exists()) {
+      return fullPath;
+    }
+  }
+  // Also try /index.tsx, /index.ts
+  for (const ext of extensions) {
+    const indexPath = join(basePath, `index${ext}`);
+    if (await Bun.file(indexPath).exists()) {
+      return indexPath;
+    }
+  }
+  return basePath; // Return original if nothing found
+}
+
+/** Bun build plugin to resolve #app/* aliases. */
+function createAliasPlugin(): import("bun").BunPlugin {
+  return {
+    name: "resolve-aliases",
+    setup(build) {
+      // Resolve #app/* to the project's src directory
+      build.onResolve({ filter: /^#app\// }, async (args) => {
+        const relativePath = args.path.replace("#app/", "");
+        const resolved = await resolveWithExtensions(join(APP_DIR, relativePath));
+        return { path: resolved };
+      });
+      // Resolve generated files from solarflare package to project's dist directory
+      // These imports in worker.ts reference ../../dist/ relative to solarflare source
+      build.onResolve({ filter: /\.modules\.generated/ }, () => {
+        return { path: join(DIST_DIR, ".modules.generated.ts") };
+      });
+      build.onResolve({ filter: /\.chunks\.generated\.json/ }, () => {
+        return { path: join(DIST_DIR, ".chunks.generated.json") };
+      });
+    },
+  };
 }
 
 /** Builds the client bundle with per-route code splitting. */
@@ -644,9 +696,16 @@ async function buildClient() {
   const result = await Bun.build({
     entrypoints: entryPaths,
     outdir: DIST_CLIENT,
+    root: DIST_DIR,
     target: "browser",
     splitting: false, // Bun bundler issue: splitting + minify = unminified shared chunks
     minify: args.production,
+    plugins: [createAliasPlugin()],
+    jsx: {
+      runtime: "automatic",
+      importSource: "preact",
+      development: false,
+    },
   });
 
   if (!result.success) {
@@ -794,7 +853,23 @@ async function buildServer() {
     target: "bun",
     naming: "[dir]/index.[ext]",
     minify: args.production,
-    external: ["cloudflare:workers"],
+    external: [
+      "cloudflare:workers",
+      // Keep Preact ecosystem external to avoid duplicate instances
+      "preact",
+      "preact/hooks",
+      "preact/compat",
+      "@preact/signals",
+      "@preact/signals-core",
+      "preact-render-to-string",
+      "preact-render-to-string/stream",
+    ],
+    plugins: [createAliasPlugin()],
+    jsx: {
+      runtime: "automatic",
+      importSource: "preact",
+      development: false,
+    },
   });
 
   if (!result.success) {

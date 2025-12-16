@@ -201,7 +201,7 @@ This ensures optimal performance and clear data flow in your application.
 Components are auto-registered, but you can customize:
 
 ```tsx
-import { define } from 'solarflare/client'
+import { define } from '@chr33s/solarflare/client'
 
 function BlogPost({ title }: Props) {
   return <h1>{title}</h1>

@@ -1,0 +1,20 @@
+{
+  "name": "@chr33s/solarflare-examples-basic",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#app/*": "./src/*"
+  },
+  "scripts": {
+    "build": "solarflare",
+    "dev": "solarflare --serve --watch",
+    "deploy": "solarflare --production && wrangler deploy"
+  },
+  "dependencies": {
+    "@chr33s/solarflare": "file:../../"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}

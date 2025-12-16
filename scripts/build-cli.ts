@@ -12,7 +12,7 @@ const buildAll = args.includes("--all");
 const current = !buildAll;
 
 const outDir = "./bin";
-const entrypoint = "./src/framework/build.ts";
+const entrypoint = "./src/build.ts";
 
 // Platform configurations
 const platforms: Array<{ target: Target; name: string }> = [
@@ -46,7 +46,7 @@ for (const { target, name } of targetsToBuild) {
       compile: {
         target,
         // Enable runtime loading of tsconfig.json and package.json
-        // This allows the compiled binary to resolve path aliases like #app/* and #solarflare/*
+        // This allows the compiled binary to resolve path aliases like #app/*/*
         autoloadTsconfig: true,
         autoloadPackageJson: true,
         outfile: outfilePath,

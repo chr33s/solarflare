@@ -256,15 +256,14 @@ export function generateTypedModulesFile(entries: ModuleEntry[]): {
     }
   }
 
+  // Import paths are relative from dist/ to src/
   const generateEntries = (modules: ModuleEntry[]) =>
     modules
-      .map(
-        (m) => `    './${m.parsed.normalized}': () => import('../src/app/${m.parsed.normalized}')`,
-      )
+      .map((m) => `    './${m.parsed.normalized}': () => import('../src/${m.parsed.normalized}')`)
       .join(",\n");
 
   const errorEntry = errorModule
-    ? `() => import('../src/app/${errorModule.parsed.normalized}')`
+    ? `() => import('../src/${errorModule.parsed.normalized}')`
     : "undefined";
 
   const content = `/**
