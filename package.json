@@ -31,11 +31,11 @@
   },
   "dependencies": {
     "@preact/signals": "^2.5.1",
-    "devalue": "^5.6.1",
     "diff-dom-streaming": "^0.6.6",
     "preact": "^10.28.0",
     "preact-custom-element": "^4.6.0",
-    "preact-render-to-string": "^6.6.4"
+    "preact-render-to-string": "^6.6.4",
+    "turbo-stream": "^3.1.0"
   },
   "devDependencies": {
     "@preact/signals-debug": "^1.0.3",

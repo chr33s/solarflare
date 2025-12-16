@@ -44,8 +44,8 @@ export function cancelIdle(handle: number): void {
  * Initialize client-side store from SSR hydration data
  * Call this early in your client entry point
  */
-export function initClient(): void {
-  hydrateStore();
+export async function initClient(): Promise<void> {
+  await hydrateStore();
   initHydrationCoordinator();
 }
 

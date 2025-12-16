@@ -460,6 +460,7 @@ export function initServerContext(options: StreamRenderOptions): void {
  * Also injects <!DOCTYPE html> before the root <html> tag
  */
 function createAssetInjectionTransformer(
+  storeScript: string,
   script?: string,
   styles?: string[],
   devScripts?: string[],
@@ -488,7 +489,6 @@ function createAssetInjectionTransformer(
       if (markerIndex !== -1) {
         // Generate replacement content
         const assetTags = generateAssetTags(script, styles, devScripts);
-        const storeScript = serializeStoreForHydration();
 
         // Replace marker with assets + store hydration
         buffer = buffer.replace(marker, assetTags + storeScript);
@@ -517,7 +517,6 @@ function createAssetInjectionTransformer(
         const markerIndex = buffer.indexOf(marker);
         if (markerIndex !== -1) {
           const assetTags = generateAssetTags(script, styles, devScripts);
-          const storeScript = serializeStoreForHydration();
           buffer = buffer.replace(marker, assetTags + storeScript);
         }
         controller.enqueue(encoder.encode(buffer));
@@ -562,11 +561,15 @@ export async function renderToStream(
   // Initialize server context with signals
   initServerContext(options);
 
+  // Pre-serialize store for hydration (async with turbo-stream)
+  const storeScript = await serializeStoreForHydration();
+
   // Render to streaming response
   const stream = renderToReadableStream(vnode) as RenderStream;
 
-  // Create asset injection transformer
+  // Create asset injection transformer with pre-serialized store
   const transformer = createAssetInjectionTransformer(
+    storeScript,
     options.script,
     options.styles,
     options.devScripts,
@@ -629,7 +632,7 @@ function createDeferredStream(
         try {
           const data = await promise;
           const dataIslandId = `${tag}-deferred`;
-          const dataIsland = serializeDataIsland(dataIslandId, data);
+          const dataIsland = await serializeDataIsland(dataIslandId, data);
           // Queue hydration call if coordinator isn't ready yet, otherwise call directly
           // Use requestAnimationFrame to ensure DOM is fully parsed before querySelector
           // Note: Push a tuple [tag, dataIslandId] to the queue, not two separate elements

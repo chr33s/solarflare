@@ -5,7 +5,7 @@
  */
 
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
-import { stringify, parse } from "devalue";
+import { serializeToString, parseFromString } from "./serialize";
 
 // ============================================================================
 // Types
@@ -132,35 +132,42 @@ export function resetStore(): void {
 // ============================================================================
 
 /**
- * Serialize store state for client hydration using devalue
+ * Serialize store state for client hydration using turbo-stream
  * Injects a script tag with the initial state
- * Supports complex types: Date, Map, Set, RegExp, BigInt, etc.
+ * Supports complex types: Date, Map, Set, RegExp, BigInt, Promises, etc.
  */
-export function serializeStoreForHydration(): string {
+export async function serializeStoreForHydration(): Promise<string> {
   const state = {
     params: _params.value,
     serverData: _serverData.value.data,
     pathname: _pathname.value,
   };
 
-  // Use devalue for safe serialization of complex types
-  const serialized = stringify(state);
+  // Use turbo-stream for safe serialization of complex types
+  const serialized = await serializeToString(state);
+  // JSON.stringify to properly escape for embedding in a JS string literal
+  // This handles quotes, newlines, backslashes, etc.
+  const escaped = JSON.stringify(serialized);
 
-  return `<script>window.__SF_STORE__=${serialized}</script>`;
+  return `<script>window.__SF_STORE__=${escaped}</script>`;
 }
 
 /**
  * Hydrate store from serialized state (client-side)
- * Uses devalue's parse for complex type reconstruction
+ * Uses turbo-stream's decode for complex type reconstruction
  */
-export function hydrateStore(): void {
+export async function hydrateStore(): Promise<void> {
   if (typeof window === "undefined") return;
 
   const serialized = (window as any).__SF_STORE__;
   if (!serialized) return;
 
-  // Parse with devalue to reconstruct complex types
-  const state = typeof serialized === "string" ? parse(serialized) : serialized;
+  // Parse with turbo-stream to reconstruct complex types
+  const state = await parseFromString<{
+    params: Record<string, string>;
+    serverData: unknown;
+    pathname: string;
+  }>(serialized);
 
   initStore({
     params: state.params,
@@ -186,40 +193,40 @@ export type { ReadonlySignal, Signal };
 
 /**
  * Serialize data to a script tag for progressive hydration
- * Uses devalue to preserve complex types (Date, Map, Set, etc.)
+ * Uses turbo-stream to preserve complex types (Date, Map, Set, etc.)
  *
  * @example
  * ```tsx
- * const island = serializeDataIsland('sf-blog-slug-data', {
+ * const island = await serializeDataIsland('sf-blog-slug-data', {
  *   title: 'Hello',
  *   createdAt: new Date(),
  * });
  * // <script type="application/json" data-island="sf-blog-slug-data">[...]</script>
  * ```
  */
-export function serializeDataIsland(id: string, data: unknown): string {
-  const serialized = stringify(data);
+export async function serializeDataIsland(id: string, data: unknown): Promise<string> {
+  const serialized = await serializeToString(data);
   return `<script type="application/json" data-island="${id}">${serialized}</script>`;
 }
 
 /**
  * Extract and parse data from a data island script tag (client-side)
- * Reconstructs complex types using devalue's parse
+ * Reconstructs complex types using turbo-stream's decode
  *
  * @example
  * ```tsx
- * const data = extractDataIsland<BlogPost>('sf-blog-slug-data');
+ * const data = await extractDataIsland<BlogPost>('sf-blog-slug-data');
  * console.log(data?.createdAt instanceof Date); // true
  * ```
  */
-export function extractDataIsland<T = unknown>(id: string): T | null {
+export async function extractDataIsland<T = unknown>(id: string): Promise<T | null> {
   if (typeof document === "undefined") return null;
 
   const script = document.querySelector(`script[data-island="${id}"]`);
   if (!script?.textContent) return null;
 
   try {
-    return parse(script.textContent) as T;
+    return await parseFromString<T>(script.textContent);
   } catch {
     console.error(`[solarflare] Failed to parse data island "${id}"`);
     return null;
@@ -235,7 +242,7 @@ export function extractDataIsland<T = unknown>(id: string): T | null {
  * Called by the injected hydration script after streaming
  * Updates element attributes to trigger preact-custom-element re-render
  */
-export function hydrateComponent(tag: string, dataIslandId?: string): void {
+export async function hydrateComponent(tag: string, dataIslandId?: string): Promise<void> {
   if (typeof document === "undefined") return;
 
   const element = document.querySelector(tag) as HTMLElement & {
@@ -249,7 +256,7 @@ export function hydrateComponent(tag: string, dataIslandId?: string): void {
 
   // Get data from island if specified
   const islandId = dataIslandId ?? `${tag}-data`;
-  const data = extractDataIsland<Record<string, unknown>>(islandId);
+  const data = await extractDataIsland<Record<string, unknown>>(islandId);
 
   if (data && typeof data === "object") {
     // Remove loading state
@@ -281,7 +288,7 @@ export function initHydrationCoordinator(): void {
   const queue = (window as any).__SF_HYDRATE_QUEUE__ as [string, string][] | undefined;
   if (queue) {
     for (const [tag, dataIslandId] of queue) {
-      hydrateComponent(tag, dataIslandId);
+      void hydrateComponent(tag, dataIslandId);
     }
     delete (window as any).__SF_HYDRATE_QUEUE__;
   }

@@ -146,7 +146,7 @@ declare module "solarflare/client" {
   /**
    * Initialize client-side store from SSR hydration data
    */
-  export function initClient(): void;
+  export function initClient(): Promise<void>;
 
   // Signals
   export const params: ReadonlySignal<Record<string, string>>;
@@ -158,15 +158,15 @@ declare module "solarflare/client" {
   export function setParams(newParams: Record<string, string>): void;
   export function setServerData<T>(data: T): void;
   export function setPathname(path: string): void;
-  export function hydrateStore(): void;
+  export function hydrateStore(): Promise<void>;
   export function resetStore(): void;
 
   // Data islands
-  export function serializeDataIsland(id: string, data: unknown): string;
-  export function extractDataIsland<T = unknown>(id: string): T | null;
+  export function serializeDataIsland(id: string, data: unknown): Promise<string>;
+  export function extractDataIsland<T = unknown>(id: string): Promise<T | null>;
 
   // Hydration coordinator
-  export function hydrateComponent(tag: string, dataIslandId?: string): void;
+  export function hydrateComponent(tag: string, dataIslandId?: string): Promise<void>;
   export function initHydrationCoordinator(): void;
 
   // Re-exports from signals
@@ -498,8 +498,8 @@ declare module "solarflare/server" {
   export function setServerData<T>(data: T): void;
   export function setPathname(path: string): void;
   export function resetStore(): void;
-  export function serializeStoreForHydration(): string;
-  export function serializeDataIsland(id: string, data: unknown): string;
+  export function serializeStoreForHydration(): Promise<string>;
+  export function serializeDataIsland(id: string, data: unknown): Promise<string>;
 }
 
 declare module "solarflare/worker" {
