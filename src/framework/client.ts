@@ -8,6 +8,39 @@ import { parsePath } from "./paths";
 import { hydrateStore, initHydrationCoordinator } from "./store";
 
 /**
+ * Schedule work during browser idle time
+ * Falls back to setTimeout for browsers without requestIdleCallback (Safari)
+ */
+export function scheduleIdle(
+  callback: () => void,
+  options?: { timeout?: number }
+): number {
+  if (typeof window === "undefined") {
+    return -1;
+  }
+
+  if ("requestIdleCallback" in window) {
+    return requestIdleCallback(callback, options);
+  }
+
+  // Fallback: use setTimeout with minimal delay
+  return setTimeout(callback, 1) as unknown as number;
+}
+
+/**
+ * Cancel a scheduled idle callback
+ */
+export function cancelIdle(handle: number): void {
+  if (typeof window === "undefined" || handle === -1) return;
+
+  if ("cancelIdleCallback" in window) {
+    cancelIdleCallback(handle);
+  } else {
+    clearTimeout(handle);
+  }
+}
+
+/**
  * Initialize client-side store from SSR hydration data
  * Call this early in your client entry point
  */

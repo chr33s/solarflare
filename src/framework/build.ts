@@ -471,18 +471,28 @@ function ensureRouter() {
   return null
 }
 
-// Load router manifest (fire-and-forget)
+// Load router manifest when browser is idle
 let routerLoading = false
 function loadRouter() {
   if (routerLoading || window.__SF_ROUTER__) return
   routerLoading = true
-  fetch('/routes.json')
-    .then(res => res.json())
-    .then(manifest => {
-      window.__SF_ROUTES__ = manifest
-      ensureRouter()
-    })
-    .catch(() => {})
+  
+  const doLoad = () => {
+    fetch('/routes.json')
+      .then(res => res.json())
+      .then(manifest => {
+        window.__SF_ROUTES__ = manifest
+        ensureRouter()
+      })
+      .catch(() => {})
+  }
+  
+  // Defer to idle time, fallback to setTimeout for Safari
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(doLoad, { timeout: 2000 })
+  } else {
+    setTimeout(doLoad, 1)
+  }
 }
 
 // HMR Wrapper Component
