@@ -10,6 +10,7 @@ import {
   wrapWithLayouts,
   renderComponent,
   renderToStream,
+  renderErrorPage,
   type ModuleMap,
 } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward";
@@ -103,117 +104,165 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     return processConsoleLogs(request, logLevel);
   }
 
-  // Match route using URLPattern - prefers client routes for SSR
-  const match = matchRoute(router, url);
+  try {
+    // Match route using URLPattern - prefers client routes for SSR
+    const match = matchRoute(router, url);
 
-  if (!match) {
-    return new Response("Not Found", { status: 404 });
-  }
+    if (!match) {
+      // Render 404 error page wrapped in layouts
+      const notFoundError = new Error(`Page not found: ${url.pathname}`);
+      const errorContent = await renderErrorPage(notFoundError, url, typedModules, 404);
+      
+      // Get stylesheets for error page (use root layout styles)
+      const stylesheets = getStylesheets("/");
+      const devScripts = getDevScripts();
+      
+      const stream = await renderToStream(errorContent, {
+        pathname: url.pathname,
+        styles: stylesheets,
+        devScripts,
+      });
 
-  const { route, params } = match;
-
-  // If this is a server-only route (no paired client), return Response directly
-  if (route.type === "server") {
-    const pairedClientPath = findPairedModule(route.path);
-    if (!pairedClientPath) {
-      // No paired client component - this is an API route
-      const mod = await route.loader();
-      const handler = mod.default as (request: Request) => Response | Promise<Response>;
-      return handler(request);
+      return new Response(stream, {
+        status: 404,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Transfer-Encoding": "chunked",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
     }
-  }
 
-  // Determine the server and client paths
-  let serverPath: string | null = null;
-  let clientPath: string;
+    const { route, params } = match;
 
-  if (route.type === "server") {
-    serverPath = route.path;
-    clientPath = route.path.replace(".server.", ".client.");
-  } else {
-    clientPath = route.path;
-    serverPath = findPairedModule(route.path);
-  }
-
-  // Load props from server loader if available
-  let shellData: Record<string, unknown> = {};
-  let deferredPromise: Promise<Record<string, unknown>> | null = null;
-
-  if (serverPath && serverPath in typedModules.server) {
-    const serverMod = await typedModules.server[serverPath]();
-    const loader = serverMod.default as ServerLoader;
-    const result = await loader(request, params);
-
-    // Auto-detect Promise values in the result
-    // Immediate values go to shellData, Promise values become deferred
-    const immediateData: Record<string, unknown> = {};
-    const deferredData: Record<string, Promise<unknown>> = {};
-
-    for (const [key, value] of Object.entries(result)) {
-      if (value instanceof Promise) {
-        deferredData[key] = value;
-      } else {
-        immediateData[key] = value;
+    // If this is a server-only route (no paired client), return Response directly
+    if (route.type === "server") {
+      const pairedClientPath = findPairedModule(route.path);
+      if (!pairedClientPath) {
+        // No paired client component - this is an API route
+        const mod = await route.loader();
+        const handler = mod.default as (request: Request) => Response | Promise<Response>;
+        return handler(request);
       }
     }
 
-    shellData = immediateData;
+    // Determine the server and client paths
+    let serverPath: string | null = null;
+    let clientPath: string;
 
-    // If there are deferred promises, combine them into a single promise
-    const deferredKeys = Object.keys(deferredData);
-    if (deferredKeys.length > 0) {
-      deferredPromise = (async () => {
-        const resolved: Record<string, unknown> = {};
-        const entries = await Promise.all(
-          deferredKeys.map(async (key) => [key, await deferredData[key]]),
-        );
-        for (const [key, value] of entries) {
-          resolved[key as string] = value;
-        }
-        return resolved;
-      })();
+    if (route.type === "server") {
+      serverPath = route.path;
+      clientPath = route.path.replace(".server.", ".client.");
+    } else {
+      clientPath = route.path;
+      serverPath = findPairedModule(route.path);
     }
+
+    // Load props from server loader if available
+    let shellData: Record<string, unknown> = {};
+    let deferredPromise: Promise<Record<string, unknown>> | null = null;
+
+    if (serverPath && serverPath in typedModules.server) {
+      const serverMod = await typedModules.server[serverPath]();
+      const loader = serverMod.default as ServerLoader;
+      const result = await loader(request, params);
+
+      // Auto-detect Promise values in the result
+      // Immediate values go to shellData, Promise values become deferred
+      const immediateData: Record<string, unknown> = {};
+      const deferredData: Record<string, Promise<unknown>> = {};
+
+      for (const [key, value] of Object.entries(result)) {
+        if (value instanceof Promise) {
+          deferredData[key] = value;
+        } else {
+          immediateData[key] = value;
+        }
+      }
+
+      shellData = immediateData;
+
+      // If there are deferred promises, combine them into a single promise
+      const deferredKeys = Object.keys(deferredData);
+      if (deferredKeys.length > 0) {
+        deferredPromise = (async () => {
+          const resolved: Record<string, unknown> = {};
+          const entries = await Promise.all(
+            deferredKeys.map(async (key) => [key, await deferredData[key]]),
+          );
+          for (const [key, value] of entries) {
+            resolved[key as string] = value;
+          }
+          return resolved;
+        })();
+      }
+    }
+
+    // Combine params and shell data as initial props
+    const props: Record<string, unknown> = { ...params, ...shellData };
+
+    // Load the client component
+    const clientMod = await typedModules.client[clientPath]();
+    const Component = clientMod.default as FunctionComponent<any>;
+
+    // Render component wrapped in custom element tag
+    let content = renderComponent(Component, route.tag, props);
+
+    // Find and apply layouts
+    const layouts = findLayouts(route.path, typedModules);
+    if (layouts.length > 0) {
+      content = await wrapWithLayouts(content, layouts);
+    }
+
+    // Get the script and styles for this route's chunk
+    const scriptPath = getScriptPath(route.tag);
+    const stylesheets = getStylesheets(route.parsedPattern.pathname);
+    const devScripts = getDevScripts();
+
+    // Render to streaming response with signal context
+    const stream = await renderToStream(content, {
+      params,
+      serverData: shellData,
+      pathname: url.pathname,
+      script: scriptPath,
+      styles: stylesheets,
+      devScripts,
+      deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } catch (error) {
+    // Render 500 error page wrapped in layouts
+    const serverError = error instanceof Error ? error : new Error(String(error));
+    console.error("[solarflare] Server error:", serverError);
+    
+    const errorContent = await renderErrorPage(serverError, url, typedModules, 500);
+    
+    // Get stylesheets for error page (use root layout styles)
+    const stylesheets = getStylesheets("/");
+    const devScripts = getDevScripts();
+    
+    const stream = await renderToStream(errorContent, {
+      pathname: url.pathname,
+      styles: stylesheets,
+      devScripts,
+    });
+
+    return new Response(stream, {
+      status: 500,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
-
-  // Combine params and shell data as initial props
-  const props: Record<string, unknown> = { ...params, ...shellData };
-
-  // Load the client component
-  const clientMod = await typedModules.client[clientPath]();
-  const Component = clientMod.default as FunctionComponent<any>;
-
-  // Render component wrapped in custom element tag
-  let content = renderComponent(Component, route.tag, props);
-
-  // Find and apply layouts
-  const layouts = findLayouts(route.path, typedModules);
-  if (layouts.length > 0) {
-    content = await wrapWithLayouts(content, layouts);
-  }
-
-  // Get the script and styles for this route's chunk
-  const scriptPath = getScriptPath(route.tag);
-  const stylesheets = getStylesheets(route.parsedPattern.pathname);
-  const devScripts = getDevScripts();
-
-  // Render to streaming response with signal context
-  const stream = await renderToStream(content, {
-    params,
-    serverData: shellData,
-    pathname: url.pathname,
-    script: scriptPath,
-    styles: stylesheets,
-    devScripts,
-    deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Transfer-Encoding": "chunked",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
 }
 
 export default worker;

@@ -266,6 +266,14 @@ async function findLayouts(): Promise<string[]> {
 }
 
 /**
+ * Find the error file in the app directory
+ */
+async function findErrorFile(): Promise<string | null> {
+  const files = await scanFiles("_error.tsx");
+  return files.length > 0 ? files[0] : null;
+}
+
+/**
  * Find all client components in the app directory
  */
 async function findClientComponents(): Promise<string[]> {
@@ -537,8 +545,14 @@ function generateModulesFile(
   program: ts.Program,
   routeFiles: string[],
   layoutFiles: string[],
+  errorFile: string | null,
 ): { content: string; errors: string[] } {
   const allFiles = [...layoutFiles, ...routeFiles];
+  
+  // Include error file if it exists
+  if (errorFile) {
+    allFiles.push(errorFile);
+  }
 
   // Create module entries with parsed path info and validation
   const entries: ModuleEntry[] = allFiles.map((file) => ({
@@ -832,7 +846,8 @@ async function buildServer(clientRoutesManifest: {
   console.log("🔍 Scanning for route modules...");
   const routeFiles = await findRouteModules();
   const layoutFiles = await findLayouts();
-  console.log(`   Found ${routeFiles.length} route(s) and ${layoutFiles.length} layout(s)`);
+  const errorFile = await findErrorFile();
+  console.log(`   Found ${routeFiles.length} route(s), ${layoutFiles.length} layout(s)${errorFile ? ", and error page" : ""}`);
 
   // Validate routes and layouts
   console.log("🔎 Validating route types...");
@@ -851,6 +866,7 @@ async function buildServer(clientRoutesManifest: {
   const allModuleFiles = [
     ...routeFiles.map((f) => join(APP_DIR, f)),
     ...layoutFiles.map((f) => join(APP_DIR, f)),
+    ...(errorFile ? [join(APP_DIR, errorFile)] : []),
   ];
   const moduleProgram = createProgram(allModuleFiles);
 
@@ -860,6 +876,7 @@ async function buildServer(clientRoutesManifest: {
     moduleProgram,
     routeFiles,
     layoutFiles,
+    errorFile,
   );
 
   // Report any module analysis errors

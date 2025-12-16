@@ -282,6 +282,8 @@ export function getTypeDeclaration(kind: ModuleKind): string {
       return '(props: any) => import("preact").VNode';
     case "layout":
       return '(props: { children: import("preact").VNode }) => import("preact").VNode';
+    case "error":
+      return '(props: { error: Error; url?: URL; statusCode?: number; reset?: () => void }) => import("preact").VNode';
     default:
       return "unknown";
   }
@@ -300,6 +302,7 @@ export function generateTypedModulesFile(entries: ModuleEntry[]): {
   const serverModules = entries.filter((e) => e.parsed.kind === "server");
   const clientModules = entries.filter((e) => e.parsed.kind === "client");
   const layoutModules = entries.filter((e) => e.parsed.kind === "layout");
+  const errorModule = entries.find((e) => e.parsed.kind === "error");
 
   // Check for validation errors
   for (const entry of entries) {
@@ -317,6 +320,10 @@ export function generateTypedModulesFile(entries: ModuleEntry[]): {
       )
       .join(",\n");
 
+  const errorEntry = errorModule
+    ? `() => import('../src/app/${errorModule.parsed.normalized}')`
+    : "undefined";
+
   const content = `/**
  * Auto-generated route modules
  * Pre-resolved imports for Cloudflare Workers compatibility
@@ -325,16 +332,19 @@ export function generateTypedModulesFile(entries: ModuleEntry[]): {
  * - Server modules: ${serverModules.length}
  * - Client modules: ${clientModules.length}
  * - Layout modules: ${layoutModules.length}
+ * - Error module: ${errorModule ? "yes" : "no"}
  */
 
 type ServerLoader = ${getTypeDeclaration("server")}
 type ClientComponent = ${getTypeDeclaration("client")}
 type LayoutComponent = ${getTypeDeclaration("layout")}
+type ErrorComponent = ${getTypeDeclaration("error")}
 
 interface ModuleMap {
   server: Record<string, () => Promise<{ default: ServerLoader }>>
   client: Record<string, () => Promise<{ default: ClientComponent }>>
   layout: Record<string, () => Promise<{ default: LayoutComponent }>>
+  error?: () => Promise<{ default: ErrorComponent }>
 }
 
 const modules: ModuleMap = {
@@ -347,6 +357,7 @@ ${generateEntries(clientModules)}
   layout: {
 ${generateEntries(layoutModules)}
   },
+  error: ${errorEntry},
 }
 
 export default modules

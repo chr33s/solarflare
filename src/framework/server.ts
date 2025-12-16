@@ -106,6 +106,7 @@ export interface ModuleMap {
   server: Record<string, () => Promise<{ default: unknown }>>;
   client: Record<string, () => Promise<{ default: unknown }>>;
   layout: Record<string, () => Promise<{ default: unknown }>>;
+  error?: () => Promise<{ default: unknown }>;
 }
 
 /**
@@ -346,6 +347,58 @@ export function renderComponent(
     }
   }
   return h(tag, attrs, h(Component, props));
+}
+
+// ============================================================================
+// Error Page Rendering
+// ============================================================================
+
+/**
+ * Error page props interface
+ */
+export interface ErrorPageProps {
+  error: Error;
+  url?: URL;
+  statusCode?: number;
+  reset?: () => void;
+}
+
+/**
+ * Render an error page wrapped in layouts
+ * Uses the app's _error.tsx component
+ */
+export async function renderErrorPage(
+  error: Error,
+  url: URL,
+  modules: ModuleMap,
+  statusCode = 500,
+): Promise<VNode<any>> {
+  // Load the error component
+  let ErrorComponent: FunctionComponent<ErrorPageProps>;
+  if (modules.error) {
+    const mod = await modules.error();
+    ErrorComponent = mod.default as FunctionComponent<ErrorPageProps>;
+  } else {
+    // Fallback error component if _error.tsx doesn't exist
+    ErrorComponent = ({ error, url, statusCode }: ErrorPageProps) =>
+      h("div", { class: "error-page" },
+        h("h1", null, statusCode === 404 ? "Not Found" : "Something went wrong"),
+        h("p", null, error.message),
+        url && h("p", { class: "error-url" }, `Failed to load: ${url.pathname}`),
+        h("a", { href: "/" }, "Go home")
+      );
+  }
+
+  // Create the error page content
+  const errorContent = h(ErrorComponent, { error, url, statusCode });
+
+  // Find and apply root layout
+  const layouts = findLayoutHierarchy("./_error.tsx", modules.layout).layouts;
+  if (layouts.length > 0) {
+    return wrapWithLayouts(errorContent, layouts);
+  }
+
+  return errorContent;
 }
 
 // ============================================================================

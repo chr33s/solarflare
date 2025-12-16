@@ -339,7 +339,28 @@ declare module "solarflare/server" {
     server: Record<string, () => Promise<{ default: unknown }>>;
     client: Record<string, () => Promise<{ default: unknown }>>;
     layout: Record<string, () => Promise<{ default: unknown }>>;
+    error?: () => Promise<{ default: unknown }>;
   }
+
+  /**
+   * Error page props interface
+   */
+  export interface ErrorPageProps {
+    error: Error;
+    url?: URL;
+    statusCode?: number;
+    reset?: () => void;
+  }
+
+  /**
+   * Render an error page wrapped in layouts
+   */
+  export function renderErrorPage(
+    error: Error,
+    url: URL,
+    modules: ModuleMap,
+    statusCode?: number,
+  ): Promise<VNode<any>>;
 
   /**
    * Parse file path into structured pattern metadata

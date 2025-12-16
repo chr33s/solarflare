@@ -174,14 +174,20 @@ export class Router {
   #handleError(error: Error, url: URL): void {
     this.#config.onError(error, url);
 
-    // Render error UI in #app
+    // Render error UI in #app - this uses the same CSS classes as _error.tsx
+    // The server will return the full error page on next navigation
     const app = document.querySelector("#app");
     if (app) {
+      // Escape error message for safe HTML insertion
+      const escapeHtml = (str: string) =>
+        str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
+      
       app.innerHTML = `
         <div class="error-page">
           <h1>Something went wrong</h1>
-          <p>${error.message}</p>
-          <p class="error-url">Failed to load: ${url.pathname}</p>
+          <p>${escapeHtml(error.message)}</p>
+          <p class="error-url">Failed to load: ${escapeHtml(url.pathname)}</p>
+          <button type="button" onclick="location.reload()">Try again</button>
           <a href="/">Go home</a>
         </div>
       `;

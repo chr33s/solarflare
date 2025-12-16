@@ -11,7 +11,7 @@
 /**
  * Module kind based on file naming convention
  */
-export type ModuleKind = "server" | "client" | "layout" | "unknown";
+export type ModuleKind = "server" | "client" | "layout" | "error" | "unknown";
 
 /**
  * Parsed path information with validated metadata
@@ -46,6 +46,7 @@ export function getModuleKind(filePath: string): ModuleKind {
   if (filePath.includes(".server.")) return "server";
   if (filePath.includes(".client.")) return "client";
   if (filePath.includes("_layout.")) return "layout";
+  if (filePath.includes("_error.")) return "error";
   return "unknown";
 }
 
