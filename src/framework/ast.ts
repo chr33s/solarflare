@@ -1,18 +1,9 @@
-/**
- * Solarflare AST Utilities
- * Unified TypeScript Compiler API utilities for path parsing, type validation, and code generation
- */
+/** TypeScript Compiler API utilities for validation and code generation. */
 import { join } from "path";
 import ts from "typescript";
 import { parsePath, type ParsedPath, type ModuleKind } from "./paths";
 
-// ============================================================================
-// Program & Type Checker Utilities
-// ============================================================================
-
-/**
- * Compiler options for Solarflare TypeScript analysis
- */
+/** Compiler options for TypeScript analysis. */
 export const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.Latest,
   module: ts.ModuleKind.ESNext,
@@ -21,30 +12,20 @@ export const COMPILER_OPTIONS: ts.CompilerOptions = {
   strict: true,
   skipLibCheck: true,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
-  noEmit: true, // Don't emit any files during analysis
+  noEmit: true,
 };
 
-/**
- * Create a shared TypeScript program for analyzing multiple files
- */
+/** Creates a TypeScript program for analyzing multiple files. */
 export function createProgram(files: string[]): ts.Program {
   return ts.createProgram(files, COMPILER_OPTIONS);
 }
 
-/**
- * Get the type checker from a program
- */
+/** Returns the type checker from a program. */
 export function getChecker(program: ts.Program): ts.TypeChecker {
   return program.getTypeChecker();
 }
 
-// ============================================================================
-// Export Analysis
-// ============================================================================
-
-/**
- * Information about a module's default export
- */
+/** Information about a module's default export. */
 export interface ExportInfo {
   /** The TypeScript type of the export */
   type: ts.Type;
@@ -60,9 +41,7 @@ export interface ExportInfo {
   returnType: string | null;
 }
 
-/**
- * Information about a function parameter
- */
+/** Information about a function parameter. */
 export interface ParameterInfo {
   name: string;
   type: string;
@@ -70,9 +49,7 @@ export interface ParameterInfo {
   properties: string[];
 }
 
-/**
- * Get detailed information about a module's default export
- */
+/** Gets detailed information about a module's default export. */
 export function getDefaultExportInfo(
   checker: ts.TypeChecker,
   sourceFile: ts.SourceFile,
@@ -119,13 +96,7 @@ export function getDefaultExportInfo(
   };
 }
 
-// ============================================================================
-// Module Validation
-// ============================================================================
-
-/**
- * Validation result for a module
- */
+/** Validation result for a module. */
 export interface ValidationResult {
   file: string;
   kind: ModuleKind;
@@ -135,9 +106,7 @@ export interface ValidationResult {
   exportInfo: ExportInfo | null;
 }
 
-/**
- * Validate a module against expected patterns
- */
+/** Validates a module against expected patterns. */
 export function validateModule(
   program: ts.Program,
   filePath: string,
@@ -188,9 +157,7 @@ export function validateModule(
   return result;
 }
 
-/**
- * Validate a server module
- */
+/** Validates a server module. */
 function validateServerModule(result: ValidationResult, exportInfo: ExportInfo): void {
   if (!exportInfo.isFunction) {
     result.valid = false;
@@ -209,9 +176,7 @@ function validateServerModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-/**
- * Validate a client module
- */
+/** Validates a client module. */
 function validateClientModule(result: ValidationResult, exportInfo: ExportInfo): void {
   if (!exportInfo.isFunction) {
     result.valid = false;
@@ -232,9 +197,7 @@ function validateClientModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-/**
- * Validate a layout module
- */
+/** Validates a layout module. */
 function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo): void {
   if (!exportInfo.isFunction) {
     result.valid = false;
@@ -254,26 +217,14 @@ function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-// ============================================================================
-// Code Generation
-// ============================================================================
-
-/**
- * Module entry for code generation
- */
+/** Module entry for code generation. */
 export interface ModuleEntry {
   path: string;
   parsed: ParsedPath;
   validation: ValidationResult | null;
 }
 
-// ============================================================================
-// Type Declarations
-// ============================================================================
-
-/**
- * Generate TypeScript type declaration for a module kind
- */
+/** Generates a TypeScript type declaration for a module kind. */
 export function getTypeDeclaration(kind: ModuleKind): string {
   switch (kind) {
     case "server":
@@ -289,9 +240,7 @@ export function getTypeDeclaration(kind: ModuleKind): string {
   }
 }
 
-/**
- * Generate a complete type-safe modules file
- */
+/** Generates a type-safe modules file. */
 export function generateTypedModulesFile(entries: ModuleEntry[]): {
   content: string;
   errors: string[];

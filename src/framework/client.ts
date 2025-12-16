@@ -1,16 +1,10 @@
-/**
- * Solarflare Client
- * Web component registration, hydration & signal-based state
- */
+/** Web component registration, hydration, and signal-based state. */
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths";
 import { hydrateStore, initHydrationCoordinator } from "./store";
 
-/**
- * Schedule work during browser idle time
- * Falls back to setTimeout for browsers without requestIdleCallback (Safari)
- */
+/** Schedules work during browser idle time (falls back to setTimeout). */
 export function scheduleIdle(
   callback: () => void,
   options?: { timeout?: number }
@@ -27,9 +21,7 @@ export function scheduleIdle(
   return setTimeout(callback, 1) as unknown as number;
 }
 
-/**
- * Cancel a scheduled idle callback
- */
+/** Cancels a scheduled idle callback. */
 export function cancelIdle(handle: number): void {
   if (typeof window === "undefined" || handle === -1) return;
 
@@ -40,18 +32,13 @@ export function cancelIdle(handle: number): void {
   }
 }
 
-/**
- * Initialize client-side store from SSR hydration data
- * Call this early in your client entry point
- */
+/** Initializes client-side store from SSR hydration data. */
 export async function initClient(): Promise<void> {
   await hydrateStore();
   initHydrationCoordinator();
 }
 
-/**
- * Parsed tag metadata from file path
- */
+/** Parsed tag metadata from file path. */
 export interface TagMeta {
   /** Generated custom element tag name */
   tag: string;
@@ -67,9 +54,7 @@ export interface TagMeta {
   type: "client" | "server" | "unknown";
 }
 
-/**
- * Validation result for tag generation
- */
+/** Validation result for tag generation. */
 export interface TagValidation {
   /** Whether the tag is valid */
   valid: boolean;
@@ -79,10 +64,7 @@ export interface TagValidation {
   warnings: string[];
 }
 
-/**
- * Parse file path into structured tag metadata
- * Delegates to parsePath from ast.ts for unified path handling
- */
+/** Parses file path into structured tag metadata. */
 export function parseTagMeta(path: string): TagMeta {
   const parsed = parsePath(path);
 
@@ -100,9 +82,7 @@ export function parseTagMeta(path: string): TagMeta {
   };
 }
 
-/**
- * Validate a generated tag against web component naming rules
- */
+/** Validates a tag against web component naming rules. */
 export function validateTag(meta: TagMeta): TagValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -171,26 +151,7 @@ export interface DefineOptions {
   validate?: boolean;
 }
 
-/**
- * Build-time macro that registers a Preact component as a web component
- * Extracts observed attributes from the component's props type
- *
- * @example
- * ```tsx
- * import { define } from "solarflare/client" with { type: "macro" };
- *
- * interface Props {
- *   slug: string;
- *   title: string;
- * }
- *
- * function BlogPost({ slug, title }: Props) {
- *   return <article><h1>{title}</h1></article>;
- * }
- *
- * export default define(BlogPost);
- * ```
- */
+/** Registers a Preact component as a web component (build-time macro). */
 export function define<P extends Record<string, any>>(
   Component: FunctionComponent<P>,
   options?: DefineOptions,
@@ -238,9 +199,7 @@ export function define<P extends Record<string, any>>(
   return Component;
 }
 
-/**
- * Re-export store for signal-based state management
- */
+// Store re-exports
 export {
   // Signals
   params,
@@ -271,22 +230,15 @@ export {
   type Signal,
 } from "./store";
 
-/**
- * Re-export router for client-side SPA navigation
- */
+// Router re-exports
 export {
-  // Factory functions
   createRouter,
   initRouter,
   getRouter,
-  // Feature detection
   supportsViewTransitions,
-  // Router class
   Router,
-  // Convenience functions
   navigate,
   isActive,
-  // Types
   type RouteManifestEntry,
   type RoutesManifest,
   type RouteMatch,

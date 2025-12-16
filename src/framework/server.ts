@@ -1,8 +1,4 @@
-/**
- * Solarflare Server
- * Server utilities: createRouter(), findLayouts(), matchRoute(), wrapWithLayouts()
- * Streaming SSR with preact-render-to-string/stream
- */
+/** Server utilities for routing and streaming SSR. */
 import { type VNode, h } from "preact";
 import { type FunctionComponent } from "preact";
 import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
@@ -15,24 +11,15 @@ import {
   resetStore,
 } from "./store";
 
-/**
- * Marker for asset injection - will be replaced with actual script/style tags
- */
+/** Marker for asset injection during streaming. */
 export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
 
-/**
- * Assets placeholder component
- * Place this in your root layout's <head> to inject route-specific CSS
- * and at the end of <body> for the script
- */
+/** Assets placeholder component for layout injection. */
 export function Assets(): VNode<any> {
-  // Render a special comment marker that will be replaced with actual assets
   return h("solarflare-assets", { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } });
 }
 
-/**
- * Route parameter definition extracted from pattern
- */
+/** Route parameter definition. */
 export interface RouteParamDef {
   /** Parameter name (e.g., "slug" from ":slug") */
   name: string;
@@ -42,9 +29,7 @@ export interface RouteParamDef {
   segment: string;
 }
 
-/**
- * Parsed route pattern with type information
- */
+/** Parsed route pattern with type information. */
 export interface ParsedPattern {
   /** Original file path */
   filePath: string;
@@ -58,9 +43,7 @@ export interface ParsedPattern {
   specificity: number;
 }
 
-/**
- * Route definition with parsed pattern metadata
- */
+/** Route definition with parsed pattern metadata. */
 export interface Route {
   /** URLPattern for matching requests */
   pattern: URLPattern;
@@ -76,10 +59,7 @@ export interface Route {
   type: "client" | "server";
 }
 
-/**
- * Convert file path to URLPattern pathname with parsed metadata
- * Delegates to parsePath from ast.ts for unified path handling
- */
+/** Converts file path to URLPattern with parsed metadata. */
 export function parsePattern(filePath: string): ParsedPattern {
   const parsed = parsePath(filePath);
 
@@ -99,9 +79,7 @@ export function parsePattern(filePath: string): ParsedPattern {
   };
 }
 
-/**
- * Structured module map with typed categories
- */
+/** Structured module map with typed categories. */
 export interface ModuleMap {
   server: Record<string, () => Promise<{ default: unknown }>>;
   client: Record<string, () => Promise<{ default: unknown }>>;
@@ -109,11 +87,7 @@ export interface ModuleMap {
   error?: () => Promise<{ default: unknown }>;
 }
 
-/**
- * Create router from structured module map
- * Returns a sorted array of routes for linear URLPattern matching
- * Filters out _prefixed files, sorts by specificity using parsed pattern metadata
- */
+/** Creates router from module map, returning sorted routes array. */
 export function createRouter(modules: ModuleMap): Route[] {
   // Combine server and client modules for routing (layouts are handled separately)
   const routeModules = { ...modules.server, ...modules.client };
@@ -143,9 +117,7 @@ export function createRouter(modules: ModuleMap): Route[] {
   return routes;
 }
 
-/**
- * Layout definition with hierarchy information
- */
+/** Layout definition with hierarchy information. */
 export interface Layout {
   /** Layout file path */
   path: string;
@@ -157,9 +129,7 @@ export interface Layout {
   directory: string;
 }
 
-/**
- * Layout hierarchy result with validation metadata
- */
+/** Layout hierarchy result with validation metadata. */
 export interface LayoutHierarchy {
   /** Ordered layouts from root to leaf */
   layouts: Layout[];
@@ -169,11 +139,7 @@ export interface LayoutHierarchy {
   checkedPaths: string[];
 }
 
-/**
- * Find all ancestor layouts for a route path with hierarchy metadata
- * Returns layouts from root to leaf order with validation info
- * e.g., "./blog/$slug.server.tsx" → { layouts: [...], segments: ["blog"], ... }
- */
+/** Finds all ancestor layouts for a route path, root to leaf order. */
 export function findLayoutHierarchy(
   routePath: string,
   modules: Record<string, () => Promise<{ default: unknown }>>,
@@ -217,19 +183,12 @@ export function findLayoutHierarchy(
   return { layouts, segments, checkedPaths };
 }
 
-/**
- * Find all ancestor layouts for a route path using structured module map
- * Returns layouts from root to leaf order
- * e.g., "./blog/$slug.server.tsx" → ["./_layout.tsx", "./blog/_layout.tsx"]
- */
+/** Finds ancestor layouts for a route using structured module map. */
 export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
-  // Use the layout category from the structured module map
   return findLayoutHierarchy(routePath, modules.layout).layouts;
 }
 
-/**
- * Validated route match with type-safe params
- */
+/** Validated route match with type-safe params. */
 export interface RouteMatch {
   /** Matched route */
   route: Route;
@@ -241,10 +200,7 @@ export interface RouteMatch {
   complete: boolean;
 }
 
-/**
- * Match URL against routes using URLPattern
- * Linear search through sorted routes array (fast enough for modern browsers)
- */
+/** Matches URL against routes using URLPattern. */
 export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   for (const route of routes) {
     const result = route.pattern.exec(url);
@@ -268,23 +224,15 @@ export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   return null;
 }
 
-/**
- * Layout props - just children, assets are injected separately
- */
+/** Layout props interface. */
 export interface LayoutProps {
   children: VNode<any>;
 }
 
-/**
- * Wrap content in nested layouts (innermost first)
- * Layouts are applied from root to leaf
- * @param content - The content to wrap
- * @param layouts - The layouts to apply
- */
+/** Wraps content in nested layouts (root to leaf order). */
 export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>> {
   let wrapped: VNode<any> = content;
 
-  // Apply layouts from leaf to root (reverse order)
   for (let i = layouts.length - 1; i >= 0; i--) {
     const { loader } = layouts[i];
     const mod = await loader();
@@ -295,9 +243,7 @@ export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): P
   return wrapped;
 }
 
-/**
- * Generate asset HTML tags for injection
- */
+/** Generates asset HTML tags for injection. */
 export function generateAssetTags(
   script?: string,
   styles?: string[],
@@ -327,20 +273,14 @@ export function generateAssetTags(
   return html;
 }
 
-/**
- * Render a component with its tag wrapper for hydration
- */
+/** Renders a component with its tag wrapper for hydration. */
 export function renderComponent(
   Component: FunctionComponent<any>,
   tag: string,
   props: Record<string, unknown>,
 ): VNode<any> {
-  // Create the custom element wrapper with props as attributes
-  // The SSR content goes inside the custom element
-  // Convert props to string attributes for the custom element
   const attrs: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
-    // Only serialize primitive types to avoid "[object Object]" strings
     const type = typeof value;
     if (type === "string" || type === "number" || type === "boolean") {
       attrs[key] = String(value);
@@ -349,13 +289,7 @@ export function renderComponent(
   return h(tag, attrs, h(Component, props));
 }
 
-// ============================================================================
-// Error Page Rendering
-// ============================================================================
-
-/**
- * Error page props interface
- */
+/** Error page props interface. */
 export interface ErrorPageProps {
   error: Error;
   url?: URL;
@@ -363,23 +297,18 @@ export interface ErrorPageProps {
   reset?: () => void;
 }
 
-/**
- * Render an error page wrapped in layouts
- * Uses the app's _error.tsx component
- */
+/** Renders an error page wrapped in layouts. */
 export async function renderErrorPage(
   error: Error,
   url: URL,
   modules: ModuleMap,
   statusCode = 500,
 ): Promise<VNode<any>> {
-  // Load the error component
   let ErrorComponent: FunctionComponent<ErrorPageProps>;
   if (modules.error) {
     const mod = await modules.error();
     ErrorComponent = mod.default as FunctionComponent<ErrorPageProps>;
   } else {
-    // Fallback error component if _error.tsx doesn't exist
     ErrorComponent = ({ error, url, statusCode }: ErrorPageProps) =>
       h("div", { class: "error-page" },
         h("h1", null, statusCode === 404 ? "Not Found" : "Something went wrong"),
@@ -389,10 +318,8 @@ export async function renderErrorPage(
       );
   }
 
-  // Create the error page content
   const errorContent = h(ErrorComponent, { error, url, statusCode });
 
-  // Find and apply root layout
   const layouts = findLayoutHierarchy("./_error.tsx", modules.layout).layouts;
   if (layouts.length > 0) {
     return wrapWithLayouts(errorContent, layouts);
@@ -401,13 +328,7 @@ export async function renderErrorPage(
   return errorContent;
 }
 
-// ============================================================================
-// Streaming SSR with Signals Context
-// ============================================================================
-
-/**
- * Deferred data configuration for streaming
- */
+/** Deferred data configuration for streaming. */
 export interface DeferredData {
   /** Component tag to hydrate */
   tag: string;
@@ -415,9 +336,7 @@ export interface DeferredData {
   promise: Promise<Record<string, unknown>>;
 }
 
-/**
- * Options for streaming rendering
- */
+/** Options for streaming rendering. */
 export interface StreamRenderOptions {
   /** Route parameters */
   params?: Record<string, string>;
@@ -435,15 +354,10 @@ export interface StreamRenderOptions {
   deferred?: DeferredData;
 }
 
-/**
- * Initialize server-side store with request context
- * Must be called before rendering to set up signal context
- */
+/** Initializes server-side store with request context. */
 export function initServerContext(options: StreamRenderOptions): void {
-  // Reset store for clean SSR (important for Cloudflare Workers reuse)
   resetStore();
 
-  // Initialize store with request-specific data
   initStore({
     params: options.params,
     serverData: options.serverData,
@@ -454,11 +368,7 @@ export function initServerContext(options: StreamRenderOptions): void {
   }
 }
 
-/**
- * Transform a ReadableStream to inject assets and store hydration
- * Replaces the ASSETS_MARKER with actual asset tags and appends store script
- * Also injects <!DOCTYPE html> before the root <html> tag
- */
+/** Transforms stream to inject assets and store hydration. */
 function createAssetInjectionTransformer(
   storeScript: string,
   script?: string,
@@ -525,49 +435,22 @@ function createAssetInjectionTransformer(
   });
 }
 
-/**
- * Extended stream interface with allReady promise
- */
+/** Extended stream interface with allReady promise. */
 export interface SolarflareStream extends ReadableStream<Uint8Array> {
   /** Resolves when all content has been rendered */
   allReady: Promise<void>;
 }
 
-/**
- * Render a VNode to a streaming response with automatic asset injection
- * Uses preact-render-to-string/stream for progressive HTML streaming
- *
- * @example
- * ```tsx
- * const stream = await renderToStream(
- *   <Layout><Page /></Layout>,
- *   {
- *     params: { slug: 'hello-world' },
- *     serverData: await loader(request),
- *     script: '/chunk.js',
- *     styles: ['/style.css'],
- *   }
- * );
- *
- * return new Response(stream, {
- *   headers: { 'Content-Type': 'text/html; charset=utf-8' },
- * });
- * ```
- */
+/** Renders a VNode to a streaming response with asset injection. */
 export async function renderToStream(
   vnode: VNode<any>,
   options: StreamRenderOptions = {},
 ): Promise<SolarflareStream> {
-  // Initialize server context with signals
   initServerContext(options);
 
-  // Pre-serialize store for hydration (async with turbo-stream)
   const storeScript = await serializeStoreForHydration();
-
-  // Render to streaming response
   const stream = renderToReadableStream(vnode) as RenderStream;
 
-  // Create asset injection transformer with pre-serialized store
   const transformer = createAssetInjectionTransformer(
     storeScript,
     options.script,
@@ -575,10 +458,8 @@ export async function renderToStream(
     options.devScripts,
   );
 
-  // Pipe through transformer
   const transformedStream = stream.pipeThrough(transformer);
 
-  // If we have deferred data, we need to manually handle the stream
   if (options.deferred) {
     const { tag, promise } = options.deferred;
     const resultStream = createDeferredStream(transformedStream, tag, promise);
@@ -591,13 +472,7 @@ export async function renderToStream(
   return resultStream;
 }
 
-/**
- * Create a stream that sends HTML immediately (complete document),
- * then appends deferred data script when the promise resolves.
- *
- * The key insight: we flush complete HTML first, THEN wait for deferred.
- * Browser renders immediately, deferred script updates DOM when it arrives.
- */
+/** Creates stream that flushes HTML immediately, then appends deferred data. */
 function createDeferredStream(
   inputStream: ReadableStream<Uint8Array>,
   tag: string,
@@ -611,11 +486,9 @@ function createDeferredStream(
     start(ctrl) {
       controller = ctrl;
 
-      // Start async pipeline (non-blocking)
       void (async () => {
         const reader = inputStream.getReader();
 
-        // 1. Pipe all HTML chunks immediately
         try {
           while (true) {
             const { done, value } = await reader.read();
@@ -627,15 +500,10 @@ function createDeferredStream(
           return;
         }
 
-        // 2. HTML is now fully sent - browser starts rendering
-        // Now wait for deferred data (this doesn't block the HTML)
         try {
           const data = await promise;
           const dataIslandId = `${tag}-deferred`;
           const dataIsland = await serializeDataIsland(dataIslandId, data);
-          // Queue hydration call if coordinator isn't ready yet, otherwise call directly
-          // Use requestAnimationFrame to ensure DOM is fully parsed before querySelector
-          // Note: Push a tuple [tag, dataIslandId] to the queue, not two separate elements
           const hydrationScript = `<script>requestAnimationFrame(()=>window.__SF_HYDRATE__?window.__SF_HYDRATE__("${tag}","${dataIslandId}"):(window.__SF_HYDRATE_QUEUE__??=[]).push(["${tag}","${dataIslandId}"]))</script>`;
           controller.enqueue(encoder.encode(dataIsland + hydrationScript));
         } catch (err) {

@@ -1,21 +1,9 @@
-/**
- * Solarflare Path Utilities
- * Pure path parsing without TypeScript compiler dependency
- * Safe to import in client-side code
- */
+/** Pure path parsing utilities, safe for client-side use. */
 
-// ============================================================================
-// Path Analysis
-// ============================================================================
-
-/**
- * Module kind based on file naming convention
- */
+/** Module kind based on file naming convention. */
 export type ModuleKind = "server" | "client" | "layout" | "error" | "unknown";
 
-/**
- * Parsed path information with validated metadata
- */
+/** Parsed path information with validated metadata. */
 export interface ParsedPath {
   /** Original file path */
   original: string;
@@ -39,9 +27,7 @@ export interface ParsedPath {
   specificity: number;
 }
 
-/**
- * Determine module kind from file path
- */
+/** Determines module kind from file path. */
 export function getModuleKind(filePath: string): ModuleKind {
   if (filePath.includes(".server.")) return "server";
   if (filePath.includes(".client.")) return "client";
@@ -50,29 +36,18 @@ export function getModuleKind(filePath: string): ModuleKind {
   return "unknown";
 }
 
-/**
- * Parse a file path into structured metadata
- * This provides a unified approach to path analysis
- */
+/** Parses a file path into structured metadata. */
 export function parsePath(filePath: string): ParsedPath {
-  // Normalize path
   const normalized = filePath.replace(/^\.\//, "").replace(/^.*\/app\//, "");
-
-  // Determine module kind
   const kind = getModuleKind(normalized);
-
-  // Check if private
   const isPrivate = normalized.includes("/_") || normalized.startsWith("_");
 
-  // Remove extension for processing - handle compound extensions like .client.tsx, .server.tsx
   const withoutExt = normalized
-    .replace(/\.(client|server)\.tsx?$/, "") // Remove .client.tsx/.ts or .server.tsx/.ts
-    .replace(/\.tsx?$/, ""); // Remove .ts or .tsx
+    .replace(/\.(client|server)\.tsx?$/, "")
+    .replace(/\.tsx?$/, "");
 
-  // Extract segments
   const segments = withoutExt.split("/").filter(Boolean);
 
-  // Extract dynamic parameters (from $param segments)
   const params: string[] = [];
   for (const segment of segments) {
     const match = segment.match(/^\$(.+)$/);
@@ -81,10 +56,8 @@ export function parsePath(filePath: string): ParsedPath {
     }
   }
 
-  // Check if index
   const isIndex = withoutExt === "index" || withoutExt.endsWith("/index") || withoutExt === "";
 
-  // Generate URLPattern pathname
   const pattern =
     "/" +
       withoutExt
@@ -92,7 +65,6 @@ export function parsePath(filePath: string): ParsedPath {
         .replace(/^index$/, "")
         .replace(/\$([^/]+)/g, ":$1") || "";
 
-  // Generate custom element tag
   const tag =
     "sf-" +
       withoutExt
@@ -102,7 +74,6 @@ export function parsePath(filePath: string): ParsedPath {
         .replace(/-index$/, "")
         .toLowerCase() || "sf-root";
 
-  // Calculate specificity
   const staticSegments = segments.filter((s) => !s.startsWith("$")).length;
   const dynamicSegments = segments.filter((s) => s.startsWith("$")).length;
   const specificity =

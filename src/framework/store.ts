@@ -1,19 +1,9 @@
-/**
- * Solarflare Store
- * Signal-based reactive state management using @preact/signals
- * Provides context for route params, server data, and shared state
- */
+/** Signal-based reactive state management using @preact/signals. */
 
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
 import { serializeToString, parseFromString } from "./serialize";
 
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Server-rendered data passed to components
- */
+/** Server-rendered data passed to components. */
 export interface ServerData<T = unknown> {
   /** The actual data payload */
   data: T;
@@ -23,9 +13,7 @@ export interface ServerData<T = unknown> {
   error: Error | null;
 }
 
-/**
- * Store configuration
- */
+/** Store configuration. */
 export interface StoreConfig {
   /** Initial route params */
   params?: Record<string, string>;
@@ -33,55 +21,34 @@ export interface StoreConfig {
   serverData?: unknown;
 }
 
-// ============================================================================
-// Global Signals Store
-// ============================================================================
-
-/**
- * Internal signals for the store
- * These are module-level singletons for both SSR and client
- */
+/** Internal route params signal. */
 const _params = signal<Record<string, string>>({});
+
+/** Internal server data signal. */
 const _serverData = signal<ServerData<unknown>>({
   data: null,
   loading: false,
   error: null,
 });
+
+/** Internal pathname signal. */
 const _pathname = signal<string>("");
 
-/**
- * Route parameters signal (readonly)
- * Use getRouter().params for reactive access in components
- */
+/** Route parameters signal (readonly). */
 export const params: ReadonlySignal<Record<string, string>> = _params;
 
-/**
- * Server data signal (readonly)
- * Contains data loaded by server components
- */
+/** Server data signal (readonly). */
 export const serverData: ReadonlySignal<ServerData<unknown>> = _serverData;
 
-/**
- * Current pathname signal (readonly)
- */
+/** Current pathname signal (readonly). */
 export const pathname: ReadonlySignal<string> = _pathname;
 
-// ============================================================================
-// Store API
-// ============================================================================
-
-/**
- * Set route parameters
- * Called by the router on navigation
- */
+/** Sets route parameters. */
 export function setParams(newParams: Record<string, string>): void {
   _params.value = newParams;
 }
 
-/**
- * Set server data
- * Called during SSR or after server component loads
- */
+/** Sets server data. */
 export function setServerData<T>(data: T): void {
   _serverData.value = {
     data,
@@ -90,17 +57,12 @@ export function setServerData<T>(data: T): void {
   };
 }
 
-/**
- * Set current pathname
- */
+/** Sets current pathname. */
 export function setPathname(path: string): void {
   _pathname.value = path;
 }
 
-/**
- * Initialize store with config
- * Called on SSR and client hydration
- */
+/** Initializes store with config. */
 export function initStore(config: StoreConfig = {}): void {
   batch(() => {
     if (config.params) {
@@ -116,9 +78,7 @@ export function initStore(config: StoreConfig = {}): void {
   });
 }
 
-/**
- * Reset store to initial state
- */
+/** Resets store to initial state. */
 export function resetStore(): void {
   batch(() => {
     _params.value = {};
@@ -127,15 +87,7 @@ export function resetStore(): void {
   });
 }
 
-// ============================================================================
-// SSR Context Injection
-// ============================================================================
-
-/**
- * Serialize store state for client hydration using turbo-stream
- * Injects a script tag with the initial state
- * Supports complex types: Date, Map, Set, RegExp, BigInt, Promises, etc.
- */
+/** Serializes store state for client hydration. */
 export async function serializeStoreForHydration(): Promise<string> {
   const state = {
     params: _params.value,
@@ -143,26 +95,19 @@ export async function serializeStoreForHydration(): Promise<string> {
     pathname: _pathname.value,
   };
 
-  // Use turbo-stream for safe serialization of complex types
   const serialized = await serializeToString(state);
-  // JSON.stringify to properly escape for embedding in a JS string literal
-  // This handles quotes, newlines, backslashes, etc.
   const escaped = JSON.stringify(serialized);
 
   return `<script>window.__SF_STORE__=${escaped}</script>`;
 }
 
-/**
- * Hydrate store from serialized state (client-side)
- * Uses turbo-stream's decode for complex type reconstruction
- */
+/** Hydrates store from serialized state (client-side). */
 export async function hydrateStore(): Promise<void> {
   if (typeof window === "undefined") return;
 
   const serialized = (window as any).__SF_STORE__;
   if (!serialized) return;
 
-  // Parse with turbo-stream to reconstruct complex types
   const state = await parseFromString<{
     params: Record<string, string>;
     serverData: unknown;
@@ -176,49 +121,19 @@ export async function hydrateStore(): Promise<void> {
 
   setPathname(state.pathname);
 
-  // Clean up
   delete (window as any).__SF_STORE__;
 }
-
-// ============================================================================
-// Re-exports for convenience
-// ============================================================================
 
 export { signal, computed, effect, batch };
 export type { ReadonlySignal, Signal };
 
-// ============================================================================
-// Data Islands
-// ============================================================================
-
-/**
- * Serialize data to a script tag for progressive hydration
- * Uses turbo-stream to preserve complex types (Date, Map, Set, etc.)
- *
- * @example
- * ```tsx
- * const island = await serializeDataIsland('sf-blog-slug-data', {
- *   title: 'Hello',
- *   createdAt: new Date(),
- * });
- * // <script type="application/json" data-island="sf-blog-slug-data">[...]</script>
- * ```
- */
+/** Serializes data to a script tag for progressive hydration. */
 export async function serializeDataIsland(id: string, data: unknown): Promise<string> {
   const serialized = await serializeToString(data);
   return `<script type="application/json" data-island="${id}">${serialized}</script>`;
 }
 
-/**
- * Extract and parse data from a data island script tag (client-side)
- * Reconstructs complex types using turbo-stream's decode
- *
- * @example
- * ```tsx
- * const data = await extractDataIsland<BlogPost>('sf-blog-slug-data');
- * console.log(data?.createdAt instanceof Date); // true
- * ```
- */
+/** Extracts and parses data from a data island script tag (client-side). */
 export async function extractDataIsland<T = unknown>(id: string): Promise<T | null> {
   if (typeof document === "undefined") return null;
 
@@ -233,15 +148,7 @@ export async function extractDataIsland<T = unknown>(id: string): Promise<T | nu
   }
 }
 
-// ============================================================================
-// Hydration Coordinator
-// ============================================================================
-
-/**
- * Hydrate a component when its data island arrives
- * Called by the injected hydration script after streaming
- * Updates element attributes to trigger preact-custom-element re-render
- */
+/** Hydrates a component when its data island arrives. */
 export async function hydrateComponent(tag: string, dataIslandId?: string): Promise<void> {
   if (typeof document === "undefined") return;
 
@@ -254,20 +161,13 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
     return;
   }
 
-  // Get data from island if specified
   const islandId = dataIslandId ?? `${tag}-data`;
   const data = await extractDataIsland<Record<string, unknown>>(islandId);
 
   if (data && typeof data === "object") {
-    // Remove loading state
     element.removeAttribute("data-loading");
-
-    // Always store deferred data on element for component to read
-    // This handles the case where hydration runs before component mounts
     element._sfDeferred = data;
 
-    // If component is already mounted, also dispatch event to trigger re-render
-    // The component listens for this event to handle late-arriving data
     element.dispatchEvent(
       new CustomEvent("sf:hydrate", {
         detail: data,
@@ -277,14 +177,10 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
   }
 }
 
-/**
- * Initialize the global hydration trigger
- * Called during client initialization
- */
+/** Initializes the global hydration trigger. */
 export function initHydrationCoordinator(): void {
   if (typeof window === "undefined") return;
 
-  // Process any queued hydration calls that arrived before JS loaded
   const queue = (window as any).__SF_HYDRATE_QUEUE__ as [string, string][] | undefined;
   if (queue) {
     for (const [tag, dataIslandId] of queue) {
@@ -293,6 +189,5 @@ export function initHydrationCoordinator(): void {
     delete (window as any).__SF_HYDRATE_QUEUE__;
   }
 
-  // Expose global hydration trigger for streaming scripts
   (window as any).__SF_HYDRATE__ = hydrateComponent;
 }

@@ -1,14 +1,6 @@
-/**
- * Wrangler Console Forward Plugin
- * Forwards browser console logs to the wrangler dev server console
- *
- * Inspired by mitsuhiko/vite-console-forward-plugin
- */
+/** Forwards browser console logs to the wrangler dev server. */
 
-/**
- * Log levels matching wrangler's --log-level options
- * Order matters: lower index = more verbose
- */
+/** Log levels matching wrangler's --log-level options. */
 export type LogLevel = "debug" | "info" | "log" | "warn" | "error" | "none";
 
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
@@ -20,18 +12,14 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   none: 5,
 };
 
-/**
- * Check if a log level should be shown given the current threshold
- */
+/** Checks if a log level should be shown given the threshold. */
 function shouldLog(level: string, threshold: LogLevel): boolean {
   const levelPriority = LOG_LEVEL_PRIORITY[level as LogLevel] ?? LOG_LEVEL_PRIORITY.log;
   const thresholdPriority = LOG_LEVEL_PRIORITY[threshold];
   return levelPriority >= thresholdPriority;
 }
 
-/**
- * Log entry from the browser
- */
+/** Log entry from the browser. */
 interface LogEntry {
   level: string;
   message: string;
@@ -41,16 +29,12 @@ interface LogEntry {
   extra?: unknown[];
 }
 
-/**
- * Request payload from client
- */
+/** Request payload from client. */
 interface ClientLogRequest {
   logs: LogEntry[];
 }
 
-/**
- * Plugin options
- */
+/** Plugin options. */
 export interface ConsoleForwardOptions {
   /**
    * Whether to enable console forwarding (default: true in dev mode)
@@ -90,9 +74,7 @@ const colors = {
   gray: "\x1b[90m",
 };
 
-/**
- * Get color for log level
- */
+/** Gets color for log level. */
 function getLevelColor(level: string): string {
   switch (level) {
     case "error":
@@ -108,9 +90,7 @@ function getLevelColor(level: string): string {
   }
 }
 
-/**
- * Format log message for terminal output
- */
+/** Formats log message for terminal output. */
 function formatLogMessage(log: LogEntry): string {
   const color = getLevelColor(log.level);
   const prefix = `${color}[browser:${log.level}]${colors.reset}`;
@@ -144,11 +124,7 @@ function formatLogMessage(log: LogEntry): string {
   return message;
 }
 
-/**
- * Process console logs from the client
- * @param request - The incoming request with log data
- * @param logLevel - The minimum log level to display (matches wrangler --log-level)
- */
+/** Processes console logs from the client. */
 export async function processConsoleLogs(
   request: Request,
   logLevel: LogLevel = "log",
@@ -176,18 +152,14 @@ export async function processConsoleLogs(
   }
 }
 
-/**
- * Check if request is a console forward request
- */
+/** Checks if request is a console forward request. */
 export function isConsoleRequest(request: Request, options: ConsoleForwardOptions = {}): boolean {
   const { endpoint } = { ...DEFAULT_OPTIONS, ...options };
   const url = new URL(request.url);
   return url.pathname === endpoint && request.method === "POST";
 }
 
-/**
- * Generate the client-side script that patches console methods
- */
+/** Generates client-side script that patches console methods. */
 export function generateClientScript(options: ConsoleForwardOptions = {}): string {
   const { endpoint, levels, includeStacks } = { ...DEFAULT_OPTIONS, ...options };
 

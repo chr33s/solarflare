@@ -1,19 +1,9 @@
-/**
- * Solarflare Client Router
- * Lean SPA navigation using native URLPattern, Navigation API, and View Transitions
- * Uses signals-core for reactive state without Preact dependency
- */
+/** Client-side SPA router using URLPattern, Navigation API, and View Transitions. */
 
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "diff-dom-streaming";
 
-// ============================================================================
-// Types
-// ============================================================================
-
-/**
- * Route definition from build-time manifest
- */
+/** Route definition from build-time manifest. */
 export interface RouteManifestEntry {
   /** URL pattern pathname (e.g., '/blog/:slug') */
   pattern: string;
@@ -29,26 +19,20 @@ export interface RouteManifestEntry {
   params: string[];
 }
 
-/**
- * Build-time routes manifest
- */
+/** Build-time routes manifest. */
 export interface RoutesManifest {
   routes: RouteManifestEntry[];
   /** Base path for all routes */
   base?: string;
 }
 
-/**
- * Internal route representation
- */
+/** Internal route representation. */
 interface Route {
   pattern: URLPattern;
   entry: RouteManifestEntry;
 }
 
-/**
- * Route match result
- */
+/** Route match result. */
 export interface RouteMatch {
   /** Matched manifest entry */
   entry: RouteManifestEntry;
@@ -58,9 +42,7 @@ export interface RouteMatch {
   url: URL;
 }
 
-/**
- * Navigation options
- */
+/** Navigation options. */
 export interface NavigateOptions {
   /** Replace current history entry instead of pushing */
   replace?: boolean;
@@ -70,9 +52,7 @@ export interface NavigateOptions {
   skipTransition?: boolean;
 }
 
-/**
- * Router configuration
- */
+/** Router configuration. */
 export interface RouterConfig {
   /** Base path for all routes */
   base?: string;
@@ -88,33 +68,15 @@ export interface RouterConfig {
   onError?: (error: Error, url: URL) => void;
 }
 
-/**
- * Subscription callback for route changes
- */
+/** Subscription callback for route changes. */
 export type RouteSubscriber = (match: RouteMatch | null) => void;
 
-// ============================================================================
-// Feature Detection
-// ============================================================================
-
-/** Check if View Transitions API is supported */
+/** Checks if View Transitions API is supported. */
 export function supportsViewTransitions(): boolean {
   return typeof document !== "undefined" && "startViewTransition" in document;
 }
 
-// ============================================================================
-// Router Class
-// ============================================================================
-
-/**
- * Client-side SPA Router for build-time routes
- *
- * Uses native browser APIs:
- * - URLPattern for route matching
- * - Navigation API for intercepting navigation
- * - View Transitions API for smooth page transitions
- * - Signals for reactive state (framework-agnostic)
- */
+/** Client-side SPA router using native browser APIs. */
 export class Router {
   #routes: Route[] = [];
   #config: Required<RouterConfig>;
@@ -149,10 +111,9 @@ export class Router {
     this.#loadManifest(manifest);
   }
 
-  /** Load routes from build-time manifest */
+  /** Loads routes from build-time manifest. */
   #loadManifest(manifest: RoutesManifest): void {
     for (const entry of manifest.routes) {
-      // Only register client routes for SPA navigation
       if (entry.type !== "client") continue;
 
       const pathname = this.#config.base + entry.pattern;
@@ -162,7 +123,6 @@ export class Router {
       });
     }
 
-    // Sort by specificity (static segments first)
     this.#routes.sort((a, b) => {
       const aStatic = (a.entry.pattern.match(/[^:*]+/g) || []).join("").length;
       const bStatic = (b.entry.pattern.match(/[^:*]+/g) || []).join("").length;
@@ -170,15 +130,12 @@ export class Router {
     });
   }
 
-  /** Handle navigation errors */
+  /** Handles navigation errors. */
   #handleError(error: Error, url: URL): void {
     this.#config.onError(error, url);
 
-    // Render error UI in #app - this uses the same CSS classes as _error.tsx
-    // The server will return the full error page on next navigation
     const app = document.querySelector("#app");
     if (app) {
-      // Escape error message for safe HTML insertion
       const escapeHtml = (str: string) =>
         str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
       
@@ -194,7 +151,7 @@ export class Router {
     }
   }
 
-  /** Match a URL against routes */
+  /** Matches a URL against routes. */
   match(url: URL): RouteMatch | null {
     for (const { pattern, entry } of this.#routes) {
       const result = pattern.exec(url);
@@ -209,11 +166,10 @@ export class Router {
     return null;
   }
 
-  /** Navigate to a URL */
+  /** Navigates to a URL. */
   async navigate(to: string | URL, options: NavigateOptions = {}): Promise<void> {
     const url = typeof to === "string" ? new URL(to, location.origin) : to;
 
-    // Let Navigation API handle history mutations
     const nav = (window as any).navigation;
     if (nav) {
       await nav.navigate(url.href, {
@@ -223,7 +179,7 @@ export class Router {
     }
   }
 
-  /** Execute navigation with optional view transition */
+  /** Executes navigation with optional view transition. */
   async #executeNavigation(
     url: URL,
     match: RouteMatch | null,
@@ -247,11 +203,10 @@ export class Router {
     }
   }
 
-  /** Load route assets and swap page content */
+  /** Loads route assets and swaps page content. */
   async #loadRoute(match: RouteMatch, url: URL, useTransition: boolean): Promise<void> {
     const { entry } = match;
 
-    // Fetch the new page HTML from the server
     const response = await fetch(url.href, {
       headers: { Accept: "text/html" },
     });
@@ -260,12 +215,8 @@ export class Router {
       throw new Error(`Failed to fetch ${url.href}: ${response.status}`);
     }
 
-    // Use diff-dom-streaming to incrementally update DOM
-    // This preserves web component state and only mutates changed nodes
-    // Must diff against document (not #app) since response is full HTML
     await diff(document, response.body!, { transition: useTransition });
 
-    // Load any new CSS (ensure absolute URL)
     if (entry.styles?.length) {
       for (const href of entry.styles) {
         const absoluteHref = new URL(href, location.origin).href;
@@ -278,22 +229,19 @@ export class Router {
       }
     }
 
-    // Load JS chunk for web component registration (ensure absolute URL)
     if (entry.chunk) {
       const absoluteChunk = new URL(entry.chunk, location.origin).href;
       await import(absoluteChunk);
     }
   }
 
-  /** Handle scroll restoration */
+  /** Handles scroll restoration. */
   #handleScroll(url: URL): void {
     const behavior = this.#config.scrollBehavior;
     if (behavior === false) return;
 
-    // Map 'instant' to 'auto' for standard compliance
     const scrollBehavior: ScrollBehavior = behavior === "instant" ? "auto" : behavior;
 
-    // Scroll to hash target if present
     if (url.hash) {
       const target = document.querySelector(url.hash);
       if (target) {
@@ -302,17 +250,15 @@ export class Router {
       }
     }
 
-    // Scroll to top
     scrollTo({ top: 0, left: 0, behavior: scrollBehavior });
   }
 
-  /** Start intercepting navigation */
+  /** Starts intercepting navigation. */
   start(): this {
     if (this.#started) return this;
 
     this.#setupNavigationAPI();
 
-    // Set initial route match (don't fetch - page is already SSR'd)
     const url = new URL(location.href);
     const match = this.match(url);
     if (match) {
@@ -323,7 +269,7 @@ export class Router {
     return this;
   }
 
-  /** Stop the router and cleanup listeners */
+  /** Stops the router and cleans up listeners. */
   stop(): this {
     for (const cleanup of this.#cleanupFns) {
       cleanup();
@@ -333,7 +279,7 @@ export class Router {
     return this;
   }
 
-  /** Setup Navigation API interception */
+  /** Sets up Navigation API interception. */
   #setupNavigationAPI(): void {
     const nav = (window as any).navigation;
     const handler = (event: any) => {
@@ -355,23 +301,12 @@ export class Router {
     this.#cleanupFns.push(() => nav.removeEventListener("navigate", handler));
   }
 
-  // ============================================================================
-  // Subscription API (for non-signal consumers)
-  // ============================================================================
-
-  /**
-   * Subscribe to route changes
-   * Returns an unsubscribe function
-   */
+  /** Subscribes to route changes. Returns unsubscribe function. */
   subscribe(callback: RouteSubscriber): () => void {
     return effect(() => {
       callback(this.current.value);
     });
   }
-
-  // ============================================================================
-  // Navigation Helpers
-  // ============================================================================
 
   back(): void {
     history.back();
@@ -385,7 +320,7 @@ export class Router {
     history.go(delta);
   }
 
-  /** Check if a path matches the current route */
+  /** Checks if a path matches the current route. */
   isActive(path: string, exact = false): boolean {
     const match = this.current.value;
     if (!match) {
@@ -398,7 +333,7 @@ export class Router {
     return exact ? currentPath === path : currentPath.startsWith(path);
   }
 
-  /** Reactive isActive check (returns a computed signal) */
+  /** Returns a computed signal for reactive isActive check. */
   isActiveSignal(path: string, exact = false): ReadonlySignal<boolean> {
     return computed(() => {
       const match = this.current.value;
@@ -409,39 +344,14 @@ export class Router {
   }
 }
 
-// ============================================================================
-// Factory Function
-// ============================================================================
-
-/**
- * Create a router from a build-time routes manifest
- *
- * @example
- * ```ts
- * import manifest from 'solarflare:routes'
- *
- * const router = createRouter(manifest, {
- *   viewTransitions: true,
- *   onNavigate: (match) => console.log('Navigated to:', match.url.pathname)
- * })
- *
- * router.start()
- * ```
- */
+/** Creates a router from a build-time routes manifest. */
 export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
   return new Router(manifest, config);
 }
 
-// ============================================================================
-// Global Router Instance (optional singleton pattern)
-// ============================================================================
-
 let globalRouter: Router | null = null;
 
-/**
- * Get the global router instance
- * Throws if router hasn't been initialized
- */
+/** Gets the global router instance. Throws if not initialized. */
 export function getRouter(): Router {
   if (!globalRouter) {
     throw new Error("[solarflare] Router not initialized. Call initRouter() first.");
@@ -449,30 +359,18 @@ export function getRouter(): Router {
   return globalRouter;
 }
 
-/**
- * Initialize the global router instance
- * Returns the router for chaining
- */
+/** Initializes the global router instance. */
 export function initRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
   globalRouter = createRouter(manifest, config);
   return globalRouter;
 }
 
-// ============================================================================
-// Convenience Functions (use global router)
-// ============================================================================
-
-/**
- * Navigate using the global router
- * @example navigate('/blog/my-post')
- */
+/** Navigates using the global router. */
 export function navigate(to: string | URL, options?: NavigateOptions): Promise<void> {
   return getRouter().navigate(to, options);
 }
 
-/**
- * Check if path is active using global router
- */
+/** Checks if path is active using global router. */
 export function isActive(path: string, exact = false): boolean {
   return getRouter().isActive(path, exact);
 }

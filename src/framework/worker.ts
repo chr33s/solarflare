@@ -1,7 +1,4 @@
-/**
- * Solarflare Worker
- * Cloudflare Worker fetch handler with streaming SSR
- */
+/** Cloudflare Worker fetch handler with streaming SSR. */
 import { type FunctionComponent } from "preact";
 import {
   createRouter,
@@ -21,9 +18,7 @@ import chunkManifest from "../../dist/.chunks.generated.json";
 
 const typedModules = modules as ModuleMap;
 
-/**
- * Chunk manifest type
- */
+/** Chunk manifest type. */
 interface ChunkManifest {
   chunks: Record<string, string>; // pattern -> chunk filename
   tags: Record<string, string>; // tag -> chunk filename
@@ -33,42 +28,30 @@ interface ChunkManifest {
 
 const manifest = chunkManifest as ChunkManifest;
 
-/**
- * Get the script path for a route from the chunk manifest
- */
+/** Gets the script path for a route from the chunk manifest. */
 function getScriptPath(tag: string): string | undefined {
   return manifest.tags[tag];
 }
 
-/**
- * Get stylesheets for a route pattern from the chunk manifest
- */
+/** Gets stylesheets for a route pattern from the chunk manifest. */
 function getStylesheets(pattern: string): string[] {
   return manifest.styles[pattern] ?? [];
 }
 
-/**
- * Get dev mode scripts from the chunk manifest
- */
+/** Gets dev mode scripts from the chunk manifest. */
 function getDevScripts(): string[] | undefined {
   return manifest.devScripts;
 }
 
-/**
- * Server data loader function type
- * Returns props to pass to the paired client component
- */
+/** Server data loader function type. */
 type ServerLoader = (
   request: Request,
   params: Record<string, string>,
 ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 
-// Create router with sorted routes array
 const router = createRouter(typedModules);
 
-/**
- * Find paired module (server for client, or client for server)
- */
+/** Finds paired module (server for client, or client for server). */
 function findPairedModule(path: string): string | null {
   if (path.includes(".client.")) {
     const serverPath = path.replace(".client.", ".server.");
@@ -81,20 +64,14 @@ function findPairedModule(path: string): string | null {
   return null;
 }
 
-/**
- * Worker environment interface
- */
+/** Worker environment interface. */
 interface WorkerEnv {
   /** Console forward log level (matches wrangler --log-level) */
   WRANGLER_LOG?: LogLevel;
   [key: string]: unknown;
 }
 
-/**
- * Cloudflare Worker fetch handler
- * Routes are auto-discovered at build time
- * Uses streaming SSR for improved TTFB
- */
+/** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
 async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
 

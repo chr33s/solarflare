@@ -1,8 +1,5 @@
 #!/usr/bin/env bun
-/**
- * Solarflare Build Script
- * Auto-generates client and server entries, then builds both bundles
- */
+/** Solarflare build script for client and server bundles. */
 import { Glob } from "bun";
 import { watch } from "fs";
 import { join } from "path";
@@ -34,9 +31,7 @@ const CHUNKS_PATH = join(DIST_DIR, ".chunks.generated.json");
 const ROUTES_TYPE_PATH = join(DIST_DIR, "routes.d.ts");
 const ROUTES_MANIFEST_PATH = join(DIST_CLIENT, "routes.json");
 
-/**
- * Safe unlink that ignores ENOENT errors (file doesn't exist)
- */
+/** Safe unlink that ignores ENOENT errors. */
 async function safeUnlink(path: string): Promise<void> {
   const file = Bun.file(path);
   if (await file.exists()) {
@@ -44,9 +39,7 @@ async function safeUnlink(path: string): Promise<void> {
   }
 }
 
-/**
- * Safe rename (copy + delete) that ignores missing source files
- */
+/** Safe rename (copy + delete) that ignores missing source files. */
 async function safeRename(src: string, dest: string): Promise<boolean> {
   const srcFile = Bun.file(src);
   if (!(await srcFile.exists())) {
@@ -57,10 +50,7 @@ async function safeRename(src: string, dest: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Auto-scaffold missing template files
- * Creates index.ts, _error.tsx, and _layout.tsx if they don't exist
- */
+/** Auto-scaffolds missing template files. */
 async function scaffoldTemplates(): Promise<void> {
   const templates: Record<string, string> = {
     "index.ts": `import worker from "#solarflare/worker";
@@ -107,9 +97,7 @@ export default function Layout({ children }: { children: VNode }) {
   }
 }
 
-/**
- * Validate all route files and report errors/warnings using AST analysis
- */
+/** Validates all route files using AST analysis. */
 async function validateRoutes(routeFiles: string[], layoutFiles: string[]): Promise<boolean> {
   const allFiles = [
     ...routeFiles.map((f) => join(APP_DIR, f)),
@@ -143,10 +131,7 @@ async function validateRoutes(routeFiles: string[], layoutFiles: string[]): Prom
   return !hasErrors;
 }
 
-/**
- * Extract Props property names from a TypeScript file using the type checker
- * Uses Parameters<typeof DefaultExport>[0] to infer props from any function signature
- */
+/** Extracts props property names from a TypeScript file using the type checker. */
 function extractPropsFromProgram(program: ts.Program, filePath: string): string[] {
   const checker = program.getTypeChecker();
   const sourceFile = program.getSourceFile(filePath);
@@ -164,9 +149,7 @@ function extractPropsFromProgram(program: ts.Program, filePath: string): string[
   return properties.map((p) => p.getName());
 }
 
-/**
- * Generate typed routes file using AST-based path parsing
- */
+/** Generates typed routes file using AST-based path parsing. */
 function generateRoutesTypeFile(routeFiles: string[]): string {
   const clientRoutes = routeFiles.filter((f) => f.includes(".client."));
 
@@ -196,9 +179,7 @@ export type RouteParams<T extends RoutePath> = Routes[T]['params']
 `;
 }
 
-/**
- * Get component metadata for client entry generation
- */
+/** Component metadata for client entry generation. */
 interface ComponentMeta {
   file: string;
   tag: string;
@@ -210,29 +191,19 @@ interface ComponentMeta {
   hash?: string;
 }
 
-/**
- * Generate a short hash from content for cache busting
- */
+/** Generates a short hash from content for cache busting. */
 function generateHash(content: string): string {
   const hasher = new Bun.CryptoHasher("sha256");
   hasher.update(content);
   return hasher.digest("hex").slice(0, 8);
 }
 
-/**
- * Normalize asset path from nested directories to dot-separated
- * e.g., "_components/nav" → "_components.nav"
- * e.g., "blog/_layout" → "blog._layout"
- */
+/** Normalizes asset path from nested directories to dot-separated. */
 function normalizeAssetPath(path: string): string {
   return path.replace(/\//g, ".");
 }
 
-/**
- * Generate chunk filename from file path
- * e.g., "blog/$slug.client.tsx" → "blog.slug.js"
- * Note: $ is removed to avoid URL encoding issues
- */
+/** Generates chunk filename from file path. */
 function getChunkName(file: string, hash?: string): string {
   const base = file
     .replace(/\.client\.tsx?$/, "")
@@ -256,9 +227,7 @@ async function getComponentMeta(program: ts.Program, file: string): Promise<Comp
   return { file, tag: parsed.tag, props, parsed, chunk, hash };
 }
 
-/**
- * Scan files in a directory matching a glob pattern
- */
+/** Scans files in a directory matching a glob pattern. */
 async function scanFiles(pattern: string, dir: string = APP_DIR): Promise<string[]> {
   const glob = new Glob(pattern);
   const files: string[] = [];
@@ -270,38 +239,28 @@ async function scanFiles(pattern: string, dir: string = APP_DIR): Promise<string
   return files.sort();
 }
 
-/**
- * Find all route modules in the app directory
- */
+/** Finds all route modules in the app directory. */
 async function findRouteModules(): Promise<string[]> {
   return scanFiles("**/*.{client,server}.{ts,tsx}");
 }
 
-/**
- * Find all layout files in the app directory
- */
+/** Finds all layout files in the app directory. */
 async function findLayouts(): Promise<string[]> {
   return scanFiles("**/_layout.tsx");
 }
 
-/**
- * Find the error file in the app directory
- */
+/** Finds the error file in the app directory. */
 async function findErrorFile(): Promise<string | null> {
   const files = await scanFiles("_error.tsx");
   return files.length > 0 ? files[0] : null;
 }
 
-/**
- * Find all client components in the app directory
- */
+/** Finds all client components in the app directory. */
 async function findClientComponents(): Promise<string[]> {
   return scanFiles("**/*.client.tsx");
 }
 
-/**
- * Extract CSS import paths from a TypeScript/TSX file
- */
+/** Extracts CSS import paths from a TypeScript/TSX file. */
 async function extractCssImports(filePath: string): Promise<string[]> {
   const content = await Bun.file(filePath).text();
   const cssImports: string[] = [];
@@ -319,10 +278,7 @@ async function extractCssImports(filePath: string): Promise<string[]> {
   return cssImports;
 }
 
-/**
- * Extract component import paths from a TypeScript/TSX file
- * Returns relative paths to .tsx/.ts files
- */
+/** Extracts component import paths from a TypeScript/TSX file. */
 async function extractComponentImports(filePath: string): Promise<string[]> {
   const content = await Bun.file(filePath).text();
   const imports: string[] = [];
@@ -346,9 +302,7 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
   return imports;
 }
 
-/**
- * Resolve an import path to an absolute file path
- */
+/** Resolves an import path to an absolute file path. */
 async function resolveImportPath(importPath: string, fromFile: string): Promise<string | null> {
   const fromDir = fromFile.split("/").slice(0, -1).join("/");
 
@@ -385,10 +339,7 @@ async function resolveImportPath(importPath: string, fromFile: string): Promise<
   return null;
 }
 
-/**
- * Recursively extract all CSS imports from a file and its component dependencies
- * Returns CSS paths relative to APP_DIR
- */
+/** Recursively extracts all CSS imports from a file and its dependencies. */
 async function extractAllCssImports(
   filePath: string,
   visited: Set<string> = new Set(),
@@ -428,16 +379,7 @@ async function extractAllCssImports(
   return allCss;
 }
 
-/**
- * Generate virtual client entry for a single component (for chunked builds)
- * Includes router initialization and HMR support via wrapper pattern
- *
- * HMR Implementation:
- * - Uses wrapper component pattern to overcome customElements.define() limitation
- * - Wrapper holds mutable reference to actual component (CurrentComponent)
- * - Signals trigger re-renders when component updates
- * - Note: import.meta.hot code is included but may be stripped during bundling
- */
+/** Generates virtual client entry for a single component with HMR support. */
 function generateChunkedClientEntry(meta: ComponentMeta): string {
   const debugImports = args.debug
     ? `import 'preact/debug'
@@ -566,10 +508,7 @@ register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: fals
 `;
 }
 
-/**
- * Generate modules file using AST-based analysis
- * Delegates to generateTypedModulesFile from ast.ts for unified generation
- */
+/** Generates modules file using AST-based analysis. */
 function generateModulesFile(
   program: ts.Program,
   routeFiles: string[],
@@ -578,35 +517,28 @@ function generateModulesFile(
 ): { content: string; errors: string[] } {
   const allFiles = [...layoutFiles, ...routeFiles];
   
-  // Include error file if it exists
   if (errorFile) {
     allFiles.push(errorFile);
   }
 
-  // Create module entries with parsed path info and validation
   const entries: ModuleEntry[] = allFiles.map((file) => ({
     path: file,
     parsed: parsePath(file),
     validation: validateModule(program, file, APP_DIR),
   }));
 
-  // Use the unified generator from ast.ts
   return generateTypedModulesFile(entries);
 }
 
-/**
- * Chunk manifest mapping routes to their JS chunks and CSS
- */
+/** Chunk manifest mapping routes to their JS chunks and CSS. */
 interface ChunkManifest {
-  chunks: Record<string, string>; // pattern -> chunk filename
-  tags: Record<string, string>; // tag -> chunk filename
-  styles: Record<string, string[]>; // pattern -> CSS filenames
-  devScripts?: string[]; // dev mode scripts (e.g., console-forward.js)
+  chunks: Record<string, string>;
+  tags: Record<string, string>;
+  styles: Record<string, string[]>;
+  devScripts?: string[];
 }
 
-/**
- * Build the client bundle with per-route code splitting
- */
+/** Builds the client bundle with per-route code splitting. */
 async function buildClient() {
   console.log("🔍 Scanning for client components...");
   const clientFiles = await findClientComponents();
@@ -628,7 +560,6 @@ async function buildClient() {
 
   for (const layoutFile of layoutFiles) {
     const layoutPath = join(APP_DIR, layoutFile);
-    // Recursively extract all CSS from layout and its component dependencies
     const allCssImports = await extractAllCssImports(layoutPath);
 
     if (allCssImports.length > 0) {
@@ -636,13 +567,10 @@ async function buildClient() {
       const layoutDir = layoutFile.split("/").slice(0, -1).join("/");
 
       for (const cssImport of allCssImports) {
-        // Resolve CSS path - could be relative to layout or already relative to APP_DIR
         let cssSourcePath: string;
         if (cssImport.startsWith("./")) {
-          // Already relative to APP_DIR from extractAllCssImports
           cssSourcePath = join(APP_DIR, cssImport.replace("./", ""));
         } else {
-          // Relative to layout file
           cssSourcePath = join(APP_DIR, layoutDir, cssImport);
         }
 
@@ -650,18 +578,15 @@ async function buildClient() {
           continue;
         }
 
-        // Generate output filename with normalized path (dot-separated) and hash
         const cssRelativePath = cssSourcePath.replace(APP_DIR + "/", "");
         const cssContent = await Bun.file(cssSourcePath).text();
         const cssHash = generateHash(cssContent);
         const cssBase = normalizeAssetPath(cssRelativePath.replace(/\.css$/, ""));
         const cssOutputName = `${cssBase}.${cssHash}.css`;
 
-        // Copy CSS to dist with normalized filename
         const destPath = join(DIST_CLIENT, cssOutputName);
         await Bun.write(destPath, Bun.file(cssSourcePath));
 
-        // Avoid duplicates
         const outputPath = `/${cssOutputName}`;
         if (!cssOutputPaths.includes(outputPath)) {
           cssOutputPaths.push(outputPath);
@@ -669,9 +594,7 @@ async function buildClient() {
       }
 
       if (cssOutputPaths.length > 0) {
-        // Store by layout directory pattern (e.g., "/blog" or "/")
         const layoutPattern = layoutDir ? `/${layoutDir}` : "/";
-        // Merge with existing CSS for this pattern
         if (!layoutCssMap[layoutPattern]) {
           layoutCssMap[layoutPattern] = [];
         }
@@ -684,17 +607,14 @@ async function buildClient() {
     }
   }
 
-  // Copy public assets with content hashes if directory exists
   if (await Bun.file(PUBLIC_DIR).exists()) {
     const publicFiles = await scanFiles("**/*", PUBLIC_DIR);
     for (const file of publicFiles) {
       const src = join(PUBLIC_DIR, file);
 
-      // Generate hash for the asset
       const content = await Bun.file(src).arrayBuffer();
       const hash = generateHash(Buffer.from(content).toString());
 
-      // Normalize path and add hash to filename before extension
       const normalizedFile = normalizeAssetPath(file);
       const parts = normalizedFile.split(".");
       const ext = parts.pop();
@@ -706,7 +626,6 @@ async function buildClient() {
     }
   }
 
-  // Generate console forward script for dev mode only
   if (!args.production) {
     const consoleScript = generateClientScript();
     const consoleScriptPath = join(DIST_CLIENT, "console-forward.js");
@@ -786,21 +705,17 @@ async function buildClient() {
     }
   }
 
-  // Handle CSS outputs - rename them to match route names with hashes
   for (const output of result.outputs) {
     const outputPath = output.path;
     const outputName = outputPath.split("/").pop() || "";
 
-    // Handle CSS files generated from imports
     if (outputName.endsWith(".css") && outputName.startsWith(".entry-")) {
-      // Extract the route name and rename to a clean CSS name with hash
       const baseName = outputName.replace(".entry-", "").replace(".generated.css", "");
       const cssContent = await Bun.file(outputPath).text();
       const cssHash = generateHash(cssContent);
       const targetPath = join(DIST_CLIENT, `${baseName}.${cssHash}.css`);
       await safeRename(outputPath, targetPath);
 
-      // Update manifest with the hashed CSS filename
       for (const meta of metas) {
         const metaBase = getChunkName(meta.file).replace(/\.js$/, "");
         if (baseName === metaBase || baseName.includes(metaBase)) {
@@ -813,13 +728,10 @@ async function buildClient() {
     }
   }
 
-  // Add layout CSS to manifest based on route patterns
   for (const meta of metas) {
     const routeStyles: string[] = [];
 
-    // Check which layouts apply to this route and collect their CSS
     for (const [layoutPattern, cssFiles] of Object.entries(layoutCssMap)) {
-      // A layout applies if the route pattern starts with the layout's directory
       if (layoutPattern === "/" || meta.parsed.pattern.startsWith(layoutPattern)) {
         routeStyles.push(...cssFiles);
       }
@@ -830,11 +742,8 @@ async function buildClient() {
     }
   }
 
-  // Write chunk manifest for the server
   await Bun.write(CHUNKS_PATH, JSON.stringify(manifest, null, 2));
 
-  // Generate routes manifest for client-side router (client routes only for now)
-  // Server routes will be added in buildServer phase
   const routesManifest = {
     routes: metas.map((meta) => ({
       pattern: meta.parsed.pattern,
@@ -846,10 +755,8 @@ async function buildClient() {
     })),
   };
 
-  // Return manifest for server to augment with server routes
   console.log(`   Generated ${metas.length} chunk(s)`);
 
-  // Clean up temporary entry files
   for (const entryPath of entryPaths) {
     await safeUnlink(entryPath);
   }
@@ -859,9 +766,7 @@ async function buildClient() {
   return routesManifest;
 }
 
-/**
- * Build the server bundle
- */
+/** Builds the server bundle. */
 async function buildServer(clientRoutesManifest: {
   routes: Array<{
     pattern: string;
@@ -878,7 +783,6 @@ async function buildServer(clientRoutesManifest: {
   const errorFile = await findErrorFile();
   console.log(`   Found ${routeFiles.length} route(s), ${layoutFiles.length} layout(s)${errorFile ? ", and error page" : ""}`);
 
-  // Validate routes and layouts
   console.log("🔎 Validating route types...");
   const valid = await validateRoutes(routeFiles, layoutFiles);
   if (!valid) {
@@ -886,12 +790,10 @@ async function buildServer(clientRoutesManifest: {
     process.exit(1);
   }
 
-  // Generate route types file to dist (exposed as virtual module solarflare:routes/types)
   const routesTypeContent = generateRoutesTypeFile(routeFiles);
   await Bun.write(ROUTES_TYPE_PATH, routesTypeContent);
   console.log("   Generated route types");
 
-  // Create shared program for AST analysis of all modules
   const allModuleFiles = [
     ...routeFiles.map((f) => join(APP_DIR, f)),
     ...layoutFiles.map((f) => join(APP_DIR, f)),
@@ -899,7 +801,6 @@ async function buildServer(clientRoutesManifest: {
   ];
   const moduleProgram = createProgram(allModuleFiles);
 
-  // Generate modules file with AST-validated types
   console.log("🔬 Analyzing module exports via AST...");
   const { content: modulesContent, errors: moduleErrors } = generateModulesFile(
     moduleProgram,
@@ -908,7 +809,6 @@ async function buildServer(clientRoutesManifest: {
     errorFile,
   );
 
-  // Report any module analysis errors
   for (const error of moduleErrors) {
     console.error(`   ❌ ${error}`);
   }
@@ -917,7 +817,6 @@ async function buildServer(clientRoutesManifest: {
     process.exit(1);
   }
 
-  // Write generated modules file (imported by worker.tsx)
   await Bun.write(MODULES_PATH, modulesContent);
 
   console.log("📦 Building server bundle...");
@@ -938,12 +837,10 @@ async function buildServer(clientRoutesManifest: {
     process.exit(1);
   }
 
-  // Add server routes to the manifest (routes that aren't already covered by client routes)
   const serverRoutes = routeFiles
     .filter((f) => f.includes(".server.") && !f.includes("/_"))
     .map((file) => {
       const parsed = parsePath(file);
-      // Check if there's a matching client route
       const hasClientRoute = clientRoutesManifest.routes.some((r) => r.pattern === parsed.pattern);
       return { file, parsed, hasClientRoute };
     })
@@ -955,20 +852,16 @@ async function buildServer(clientRoutesManifest: {
       params: parsed.params,
     }));
 
-  // Combine client and server routes
   const combinedManifest = {
     routes: [...clientRoutesManifest.routes, ...serverRoutes],
   };
 
-  // Write the combined routes manifest to client dist (for client-side router)
   await Bun.write(ROUTES_MANIFEST_PATH, JSON.stringify(combinedManifest, null, 2));
 
   console.log("✅ Server build complete");
 }
 
-/**
- * Clean the dist directory
- */
+/** Cleans the dist directory. */
 async function clean() {
   const { rm } = await import("fs/promises");
   try {
@@ -979,9 +872,7 @@ async function clean() {
   }
 }
 
-/**
- * Main build function
- */
+/** Main build function. */
 async function build() {
   const startTime = performance.now();
 
@@ -991,7 +882,6 @@ async function build() {
     await clean();
   }
 
-  // Auto-scaffold missing template files
   await scaffoldTemplates();
 
   const clientManifest = await buildClient();
@@ -1013,20 +903,16 @@ const { values: args } = parseArgs({
   },
 });
 
-/**
- * Watch mode - rebuilds on file changes, optionally starts dev server
- */
+/** Watch mode - rebuilds on file changes and optionally starts dev server. */
 async function watchMode() {
   console.log("\n⚡ Solarflare Dev Mode\n");
 
-  // Initial build
   try {
     await build();
   } catch (err) {
     console.error("❌ Initial build failed:", err);
   }
 
-  // Start wrangler dev server as child process (after initial build)
   let wranglerProc: Bun.Subprocess | null = null;
 
   if (args.serve) {
@@ -1035,14 +921,13 @@ async function watchMode() {
       cmd: ["bun", "wrangler", "dev"],
       stdout: "inherit",
       stderr: "inherit",
-      stdin: "pipe", // Don't inherit stdin so we control SIGINT
+      stdin: "pipe",
       env: { ...process.env },
     });
   }
 
   console.log("\n👀 Watching for changes...\n");
 
-  // Debounce timer and build lock
   let debounceTimer: Timer | null = null;
   let isBuilding = false;
   let pendingBuild = false;
@@ -1074,23 +959,19 @@ async function watchMode() {
   const watcher = watch(APP_DIR, { recursive: true }, (_event, filename) => {
     if (!filename) return;
 
-    // Skip generated files
     if (filename.endsWith(".generated.ts") || filename.endsWith(".generated.json")) {
       return;
     }
 
-    // Clear existing timer
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
 
-    // Set new debounced rebuild
     debounceTimer = setTimeout(() => {
       void doBuild(filename);
     }, DEBOUNCE_MS);
   });
 
-  // Cleanup on exit
   let isExiting = false;
   process.on("SIGINT", () => {
     if (isExiting) return;
@@ -1103,7 +984,6 @@ async function watchMode() {
     process.exit(0);
   });
 
-  // Keep process alive
   await new Promise(() => {});
 }
 
