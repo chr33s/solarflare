@@ -3,13 +3,13 @@
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
 import { serializeToString, parseFromString } from "./serialize";
 
-/** Server-rendered data passed to components. */
+/** Server-rendered data. */
 export interface ServerData<T = unknown> {
-  /** The actual data payload */
+  /** Data payload */
   data: T;
-  /** Whether data is still loading (for streaming) */
+  /** Loading state (for streaming) */
   loading: boolean;
-  /** Error if data fetch failed */
+  /** Fetch error if any */
   error: Error | null;
 }
 
@@ -175,12 +175,12 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
   }
 }
 
-/** Module-level hydration state (avoids window pollution). */
+/** Module-level hydration state. */
 let hydrationReady = false;
 const hydrationQueue: [string, string][] = [];
 let eventListenerAttached = false;
 
-/** Handler for hydration queue events from streaming SSR. */
+/** Handles hydration queue events. */
 function handleQueueHydrateEvent(e: Event): void {
   const { tag, id } = (e as CustomEvent<{ tag: string; id: string }>).detail;
   queueHydration(tag, id);

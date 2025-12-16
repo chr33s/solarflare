@@ -18,12 +18,12 @@ import chunkManifest from "../../dist/.chunks.generated.json";
 
 const typedModules = modules as ModuleMap;
 
-/** Chunk manifest type. */
+/** Chunk manifest mapping routes to assets. */
 interface ChunkManifest {
-  chunks: Record<string, string>; // pattern -> chunk filename
-  tags: Record<string, string>; // tag -> chunk filename
-  styles: Record<string, string[]>; // pattern -> CSS filenames
-  devScripts?: string[]; // dev mode scripts (e.g., console-forward.js)
+  chunks: Record<string, string>;
+  tags: Record<string, string>;
+  styles: Record<string, string[]>;
+  devScripts?: string[];
 }
 
 const manifest = chunkManifest as ChunkManifest;
@@ -64,9 +64,9 @@ function findPairedModule(path: string): string | null {
   return null;
 }
 
-/** Worker environment interface. */
+/** Worker environment. */
 interface WorkerEnv {
-  /** Console forward log level (matches wrangler --log-level) */
+  /** Log level for console forwarding */
   WRANGLER_LOG?: LogLevel;
   [key: string]: unknown;
 }
@@ -145,8 +145,6 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       const loader = serverMod.default as ServerLoader;
       const result = await loader(request, params);
 
-      // Auto-detect Promise values in the result
-      // Immediate values go to shellData, Promise values become deferred
       const immediateData: Record<string, unknown> = {};
       const deferredData: Record<string, Promise<unknown>> = {};
 

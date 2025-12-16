@@ -178,15 +178,15 @@ export type RouteParams<T extends RoutePath> = Routes[T]['params'];
 `;
 }
 
-/** Component metadata for client entry generation. */
+/** Component metadata. */
 interface ComponentMeta {
   file: string;
   tag: string;
   props: string[];
   parsed: ReturnType<typeof parsePath>;
-  /** Chunk filename for this component (e.g., "blog.$slug.js") */
+  /** Chunk filename */
   chunk: string;
-  /** Content hash for cache busting */
+  /** Content hash */
   hash?: string;
 }
 
@@ -378,7 +378,7 @@ async function extractAllCssImports(
   return allCss;
 }
 
-/** Route manifest structure for client-side routing. */
+/** Routes manifest for client-side routing. */
 interface RoutesManifest {
   routes: Array<{
     pattern: string;
@@ -401,10 +401,7 @@ import '@preact/signals-debug'
   // Inline the routes manifest to avoid fetch
   const inlinedRoutes = JSON.stringify(routesManifest);
 
-  return /* js */ `/**
- * Auto-generated Client Chunk: ${meta.chunk}
- * HMR-enabled wrapper for ${meta.tag}
- */
+  return /* js */ `/** Auto-generated: ${meta.chunk} */
 ${debugImports}import { h } from 'preact';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
@@ -414,13 +411,10 @@ import BaseComponent from '../src/app/${meta.file}';
 // Initialize hydration coordinator for streaming SSR
 initHydrationCoordinator();
 
-// Mutable reference for HMR - updated when module is hot-replaced
 let CurrentComponent = BaseComponent;
-
-// Module-level signal for HMR updates (shared across all instances)
 const hmrVersion = signal(0);
 
-// HMR Support - allows component updates without re-registering custom element
+// HMR support
 if (import.meta.hot) {
   import.meta.hot.accept('../src/app/${meta.file}', (newModule) => {
     if (newModule?.default) {
@@ -435,10 +429,8 @@ if (import.meta.hot) {
   });
 }
 
-// Routes manifest (inlined at build time)
 const routesManifest = ${inlinedRoutes};
 
-// Module-level router initialization (no window pollution)
 let routerInitialized = false;
 function ensureRouter() {
   if (typeof document === 'undefined') return null;
@@ -449,17 +441,15 @@ function ensureRouter() {
   return initRouter(routesManifest).start();
 }
 
-/** @description HMR-enabled wrapper component with deferred data hydration. */
+/** HMR wrapper with deferred data hydration. */
 function Component(props) {
   const deferredProps = useSignal(null);
   const _ = hmrVersion.value;
 
-  // Extract deferred data and set up event listeners
   useSignalEffect(() => {
     const el = document.querySelector('${meta.tag}');
     if (!el) return;
     
-    // Function to extract deferred data from DOM
     const extractDeferred = () => {
       if (el._sfDeferred) {
         deferredProps.value = el._sfDeferred;
@@ -471,18 +461,12 @@ function Component(props) {
       }
     };
     
-    // Extract on initial mount
     extractDeferred();
     
-    // Listen for hydration events (from streaming SSR and navigation)
     const hydrateHandler = (e) => { deferredProps.value = e.detail };
     el.addEventListener('sf:hydrate', hydrateHandler);
     
-    // Listen for navigation events to re-extract deferred data
-    const navHandler = () => {
-      // Use setTimeout to let DOM update complete before extracting
-      setTimeout(extractDeferred, 0);
-    };
+    const navHandler = () => setTimeout(extractDeferred, 0);
     window.addEventListener('sf:navigate', navHandler);
     
     ensureRouter();
@@ -507,7 +491,6 @@ function Component(props) {
   return h(CurrentComponent, finalProps);
 }
 
-// Register wrapper as web component (only happens once)
 register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });
 `;
 }
@@ -534,7 +517,7 @@ function generateModulesFile(
   return generateTypedModulesFile(entries);
 }
 
-/** Chunk manifest mapping routes to their JS chunks and CSS. */
+/** Chunk manifest. */
 interface ChunkManifest {
   chunks: Record<string, string>;
   tags: Record<string, string>;
@@ -555,10 +538,7 @@ async function buildClient() {
   // Get metadata for all components
   const metas = await Promise.all(clientFiles.map((file) => getComponentMeta(program, file)));
 
-  // Copy static assets FIRST (before JS build triggers wrangler reload)
-  // This ensures CSS/assets are available when browser refreshes
-
-  // Scan layouts for CSS imports (recursively following component imports) and copy them to dist
+  // Copy static assets before JS build
   const layoutFiles = await findLayouts();
   const layoutCssMap: Record<string, string[]> = {}; // layout directory -> CSS files
 
@@ -637,7 +617,6 @@ async function buildClient() {
     console.log("   Generated console-forward.js (dev mode)");
   }
 
-  // Pre-compute routes manifest to inline in client entries (avoids fetch for /routes.json)
   const inlineRoutesManifest: RoutesManifest = {
     routes: metas.map((meta) => ({
       pattern: meta.parsed.pattern,
@@ -666,7 +645,7 @@ async function buildClient() {
     entrypoints: entryPaths,
     outdir: DIST_CLIENT,
     target: "browser",
-    splitting: false, // FIX: known issue with Bun's bundler { splitting: true, minify: true } shared chunks sometimes don't get minified properly.
+    splitting: false, // Bun bundler issue: splitting + minify = unminified shared chunks
     minify: args.production,
   });
 
@@ -686,8 +665,6 @@ async function buildClient() {
     devScripts: args.production ? undefined : ["/console-forward.js"],
   };
 
-  // Map entry paths to their output chunk names
-  // Bun outputs entries as .entry-{name}.js when using splitting
   for (const output of result.outputs) {
     const outputPath = output.path;
     const outputName = outputPath.split("/").pop() || "";
@@ -697,19 +674,14 @@ async function buildClient() {
       continue;
     }
 
-    // Match output to our entry files
     for (const [entryPath, meta] of Object.entries(entryToMeta)) {
-      // Extract the base name from entry path: .entry-index.generated.tsx -> index
       const entryBase = entryPath
         .split("/")
         .pop()!
         .replace(".generated.tsx", "")
         .replace(".entry-", "");
 
-      // Check if this output corresponds to this entry
-      // Bun names the output based on the entry file name
       if (outputName.includes(entryBase) || outputName === `.entry-${entryBase}.js`) {
-        // Rename to the desired chunk name
         const targetPath = join(DIST_CLIENT, meta.chunk);
         if (outputPath !== targetPath) {
           await safeRename(outputPath, targetPath);
@@ -832,8 +804,6 @@ async function buildServer() {
     }
     process.exit(1);
   }
-
-  // Note: routes.json is no longer written since routes are inlined in client chunks
 
   console.log("✅ Server build complete");
 }

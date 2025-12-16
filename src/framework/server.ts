@@ -21,41 +21,41 @@ export function Assets(): VNode<any> {
 
 /** Route parameter definition. */
 export interface RouteParamDef {
-  /** Parameter name (e.g., "slug" from ":slug") */
+  /** Parameter name, e.g., "slug" from ":slug" */
   name: string;
-  /** Whether the parameter is optional */
+  /** Whether optional */
   optional: boolean;
-  /** Original segment in the pattern */
+  /** Original pattern segment */
   segment: string;
 }
 
-/** Parsed route pattern with type information. */
+/** Parsed route pattern. */
 export interface ParsedPattern {
   /** Original file path */
   filePath: string;
   /** URLPattern pathname */
   pathname: string;
-  /** Extracted parameter definitions */
+  /** Parameter definitions */
   params: RouteParamDef[];
-  /** Whether this is a static route (no params) */
+  /** Static route (no params) */
   isStatic: boolean;
-  /** Route specificity score for sorting */
+  /** Specificity score for sorting */
   specificity: number;
 }
 
-/** Route definition with parsed pattern metadata. */
+/** Route definition. */
 export interface Route {
-  /** URLPattern for matching requests */
+  /** URLPattern for matching */
   pattern: URLPattern;
-  /** Parsed pattern with type information */
+  /** Parsed pattern metadata */
   parsedPattern: ParsedPattern;
-  /** Original file path */
+  /** File path */
   path: string;
-  /** Custom element tag name */
+  /** Custom element tag */
   tag: string;
   /** Dynamic module loader */
   loader: () => Promise<{ default: unknown }>;
-  /** Route type: client or server */
+  /** Route type */
   type: "client" | "server";
 }
 
@@ -117,25 +117,25 @@ export function createRouter(modules: ModuleMap): Route[] {
   return routes;
 }
 
-/** Layout definition with hierarchy information. */
+/** Layout definition. */
 export interface Layout {
-  /** Layout file path */
+  /** File path */
   path: string;
-  /** Dynamic layout loader */
+  /** Module loader */
   loader: () => Promise<{ default: unknown }>;
   /** Nesting depth (0 = root) */
   depth: number;
-  /** Directory this layout applies to */
+  /** Directory scope */
   directory: string;
 }
 
-/** Layout hierarchy result with validation metadata. */
+/** Layout hierarchy result. */
 export interface LayoutHierarchy {
-  /** Ordered layouts from root to leaf */
+  /** Layouts from root to leaf */
   layouts: Layout[];
   /** Route path segments */
   segments: string[];
-  /** Directories checked for layouts */
+  /** Checked directory paths */
   checkedPaths: string[];
 }
 
@@ -188,15 +188,15 @@ export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
   return findLayoutHierarchy(routePath, modules.layout).layouts;
 }
 
-/** Validated route match with type-safe params. */
+/** Route match result. */
 export interface RouteMatch {
   /** Matched route */
   route: Route;
-  /** Extracted URL parameters (validated against pattern definition) */
+  /** Extracted URL parameters */
   params: Record<string, string>;
-  /** Parameter definitions from the route pattern */
+  /** Parameter definitions */
   paramDefs: RouteParamDef[];
-  /** Whether all required params were matched */
+  /** All required params matched */
   complete: boolean;
 }
 
@@ -338,21 +338,21 @@ export interface DeferredData {
   promise: Promise<Record<string, unknown>>;
 }
 
-/** Options for streaming rendering. */
+/** Streaming render options. */
 export interface StreamRenderOptions {
   /** Route parameters */
   params?: Record<string, string>;
-  /** Server-loaded data (shell data for immediate render) */
+  /** Server-loaded data for immediate render */
   serverData?: unknown;
   /** Current pathname */
   pathname?: string;
   /** Script path to inject */
   script?: string;
-  /** Stylesheet paths to inject */
+  /** Stylesheet paths */
   styles?: string[];
-  /** Dev mode scripts to inject (e.g., console forwarding) */
+  /** Dev scripts (e.g., console forwarding) */
   devScripts?: string[];
-  /** Deferred data to stream after initial render */
+  /** Deferred data to stream after shell */
   deferred?: DeferredData;
 }
 

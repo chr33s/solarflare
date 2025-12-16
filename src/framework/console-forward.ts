@@ -34,23 +34,15 @@ interface ClientLogRequest {
   logs: LogEntry[];
 }
 
-/** Plugin options. */
+/** Console forwarding configuration. */
 export interface ConsoleForwardOptions {
-  /**
-   * Whether to enable console forwarding (default: true in dev mode)
-   */
+  /** Enable console forwarding. @default true in dev mode */
   enabled?: boolean;
-  /**
-   * API endpoint path (default: '/__console')
-   */
+  /** API endpoint path. @default '/__console' */
   endpoint?: string;
-  /**
-   * Console levels to forward (default: ['log', 'warn', 'error', 'info', 'debug'])
-   */
+  /** Console levels to forward. @default ['log', 'warn', 'error', 'info', 'debug'] */
   levels?: ("log" | "warn" | "error" | "info" | "debug")[];
-  /**
-   * Whether to include stack traces (default: true)
-   */
+  /** Include stack traces. @default true */
   includeStacks?: boolean;
 }
 
@@ -61,9 +53,7 @@ const DEFAULT_OPTIONS: Required<ConsoleForwardOptions> = {
   includeStacks: true,
 };
 
-/**
- * ANSI color codes for terminal output
- */
+/** ANSI color codes. */
 const colors = {
   reset: "\x1b[0m",
   dim: "\x1b[2m",

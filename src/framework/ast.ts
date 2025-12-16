@@ -25,19 +25,18 @@ export function getChecker(program: ts.Program): ts.TypeChecker {
   return program.getTypeChecker();
 }
 
-/** Information about a module's default export. */
 export interface ExportInfo {
-  /** The TypeScript type of the export */
+  /** TypeScript type */
   type: ts.Type;
-  /** Call signatures if the export is callable */
+  /** Call signatures */
   signatures: readonly ts.Signature[];
-  /** String representation of the type */
+  /** Type as string */
   typeString: string;
-  /** Whether the export is a function */
+  /** Is a function */
   isFunction: boolean;
-  /** Parameter types if it's a function */
+  /** Function parameters */
   parameters: ParameterInfo[];
-  /** Return type if it's a function */
+  /** Function return type */
   returnType: string | null;
 }
 

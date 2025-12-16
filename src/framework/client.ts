@@ -35,19 +35,19 @@ export async function initClient(): Promise<void> {
   initHydrationCoordinator();
 }
 
-/** Parsed tag metadata from file path. */
+/** Tag metadata from file path. */
 export interface TagMeta {
-  /** Generated custom element tag name */
+  /** Custom element tag name */
   tag: string;
   /** Original file path */
   filePath: string;
-  /** Route segments extracted from path */
+  /** Route segments */
   segments: string[];
-  /** Dynamic parameter names (from $param segments) */
+  /** Dynamic param names (from $param) */
   paramNames: string[];
-  /** Whether this is the root/index component */
+  /** Root/index component */
   isRoot: boolean;
-  /** Component type based on file suffix */
+  /** Component type */
   type: "client" | "server" | "unknown";
 }
 
@@ -138,13 +138,13 @@ export function validateTag(meta: TagMeta): TagValidation {
 }
 
 export interface DefineOptions {
-  /** Custom element tag name. Defaults to generated from file path */
+  /** Custom element tag name. @default generated from file path */
   tag?: string;
-  /** Whether to use Shadow DOM. Defaults to false */
+  /** Use Shadow DOM. @default false */
   shadow?: boolean;
-  /** Observed attributes to pass as props. Auto-extracted if not provided */
+  /** Observed attributes. @default auto-extracted */
   observedAttributes?: string[];
-  /** Whether to validate the tag and warn on issues. Defaults to true in development */
+  /** Validate tag in dev mode. @default true */
   validate?: boolean;
 }
 

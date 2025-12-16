@@ -3,15 +3,15 @@
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "diff-dom-streaming";
 
-/** Route definition from build-time manifest. */
+/** Route entry from build-time manifest. */
 export interface RouteManifestEntry {
-  /** URL pattern pathname (e.g., '/blog/:slug') */
+  /** URL pattern pathname, e.g., '/blog/:slug' */
   pattern: string;
   /** Custom element tag name */
   tag: string;
-  /** Chunk path for this route's JS */
+  /** JS chunk path */
   chunk?: string;
-  /** CSS stylesheets for this route */
+  /** CSS stylesheet paths */
   styles?: string[];
   /** Route type */
   type: "client" | "server";
@@ -76,13 +76,13 @@ export function supportsViewTransitions(): boolean {
   return typeof document !== "undefined" && "startViewTransition" in document;
 }
 
-/** Options for fetch with retry. */
+/** Fetch retry options. */
 export interface FetchRetryOptions {
-  /** Maximum number of retry attempts (default: 3) */
+  /** Max retry attempts. @default 3 */
   maxRetries?: number;
-  /** Base delay in ms between retries (default: 1000) */
+  /** Base delay in ms between retries. @default 1000 */
   baseDelay?: number;
-  /** Only retry on these status codes (default: 5xx errors) */
+  /** Status codes to retry on. @default 5xx errors */
   retryOnStatus?: (status: number) => boolean;
 }
 
@@ -121,20 +121,20 @@ export async function fetchWithRetry(
   throw lastError ?? new Error("Fetch failed after retries");
 }
 
-/** Client-side SPA router using native browser APIs. */
+/** Client-side SPA router using Navigation API and View Transitions. */
 export class Router {
   #routes: Route[] = [];
   #config: Required<RouterConfig>;
   #started = false;
   #cleanupFns: (() => void)[] = [];
 
-  /** Reactive current match */
+  /** Current route match signal. */
   readonly current = signal<RouteMatch | null>(null);
 
-  /** Reactive params derived from current match */
+  /** Current route params signal. */
   readonly params: ReadonlySignal<Record<string, string>>;
 
-  /** Reactive pathname for easy access */
+  /** Current pathname signal. */
   readonly pathname: ReadonlySignal<string>;
 
   constructor(manifest: RoutesManifest, config: RouterConfig = {}) {
@@ -290,10 +290,7 @@ export class Router {
     }
   }
 
-  /**
-   * Hydrates deferred data islands after DOM diffing.
-   * Inline scripts don't execute when inserted via diff, so we manually trigger hydration.
-   */
+  /** Hydrates deferred data islands after DOM diffing. */
   #hydrateDeferredDataIslands(): void {
     const dataIslands = document.querySelectorAll('script[type="application/json"][data-island]');
     const processedIslands = new Set<string>();
