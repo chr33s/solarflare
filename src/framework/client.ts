@@ -4,31 +4,6 @@ import register from "preact-custom-element";
 import { parsePath } from "./paths";
 import { hydrateStore, initHydrationCoordinator } from "./store";
 
-/** Schedules work during browser idle time (falls back to setTimeout). */
-export function scheduleIdle(callback: () => void, options?: { timeout?: number }): number {
-  if (typeof window === "undefined") {
-    return -1;
-  }
-
-  if ("requestIdleCallback" in window) {
-    return requestIdleCallback(callback, options);
-  }
-
-  // Fallback: use setTimeout with minimal delay
-  return setTimeout(callback, 1) as unknown as number;
-}
-
-/** Cancels a scheduled idle callback. */
-export function cancelIdle(handle: number): void {
-  if (typeof window === "undefined" || handle === -1) return;
-
-  if ("cancelIdleCallback" in window) {
-    cancelIdleCallback(handle);
-  } else {
-    clearTimeout(handle);
-  }
-}
-
 /** Initializes client-side store from SSR hydration data. */
 export async function initClient(): Promise<void> {
   await hydrateStore();

@@ -26,13 +26,3 @@ export async function parseFromString<T>(serialized: string): Promise<T> {
   });
   return (await decode(stream)) as T;
 }
-
-/** Stream-aware serialization for deferred data. */
-export function serializeStream(data: unknown): ReadableStream<string> {
-  return encode(data);
-}
-
-/** Decodes a stream of serialized data. */
-export async function decodeStream<T>(stream: ReadableStream<string>): Promise<T> {
-  return (await decode(stream)) as T;
-}

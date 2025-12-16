@@ -28,7 +28,7 @@ export interface ParsedPath {
 }
 
 /** Determines module kind from file path. */
-export function getModuleKind(filePath: string): ModuleKind {
+function getModuleKind(filePath: string): ModuleKind {
   if (filePath.includes(".server.")) return "server";
   if (filePath.includes(".client.")) return "client";
   if (filePath.includes("_layout.")) return "layout";

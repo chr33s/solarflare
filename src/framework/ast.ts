@@ -4,7 +4,7 @@ import ts from "typescript";
 import { parsePath, type ParsedPath, type ModuleKind } from "./paths";
 
 /** Compiler options for TypeScript analysis. */
-export const COMPILER_OPTIONS: ts.CompilerOptions = {
+const COMPILER_OPTIONS: ts.CompilerOptions = {
   target: ts.ScriptTarget.Latest,
   module: ts.ModuleKind.ESNext,
   jsx: ts.JsxEmit.ReactJSX,
@@ -18,11 +18,6 @@ export const COMPILER_OPTIONS: ts.CompilerOptions = {
 /** Creates a TypeScript program for analyzing multiple files. */
 export function createProgram(files: string[]): ts.Program {
   return ts.createProgram(files, COMPILER_OPTIONS);
-}
-
-/** Returns the type checker from a program. */
-export function getChecker(program: ts.Program): ts.TypeChecker {
-  return program.getTypeChecker();
 }
 
 export interface ExportInfo {
