@@ -98,7 +98,7 @@ export async function serializeStoreForHydration(): Promise<string> {
   const serialized = await serializeToString(state);
   const escaped = JSON.stringify(serialized);
 
-  return `<script>window.__SF_STORE__=${escaped}</script>`;
+  return /* html */ `<script>window.__SF_STORE__=${escaped}</script>`;
 }
 
 /** Hydrates store from serialized state (client-side). */
@@ -130,7 +130,7 @@ export type { ReadonlySignal, Signal };
 /** Serializes data to a script tag for progressive hydration. */
 export async function serializeDataIsland(id: string, data: unknown): Promise<string> {
   const serialized = await serializeToString(data);
-  return `<script type="application/json" data-island="${id}">${serialized}</script>`;
+  return /* html */ `<script type="application/json" data-island="${id}">${serialized}</script>`;
 }
 
 /** Extracts and parses data from a data island script tag (client-side). */

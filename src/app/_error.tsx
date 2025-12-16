@@ -10,7 +10,7 @@ export interface ErrorProps {
 
 export default function ErrorPage({ error, url, statusCode = 500, reset }: ErrorProps): VNode {
   const title = statusCode === 404 ? "Page not found" : "Something went wrong";
-  
+
   return (
     <div class="error-page">
       <h1>{title}</h1>

@@ -158,13 +158,13 @@ function generateRoutesTypeFile(routeFiles: string[]): string {
       const parsed = parsePath(file);
       const paramsType =
         parsed.params.length > 0
-          ? `{ ${parsed.params.map((p) => `${p}: string`).join("; ")} }`
+          ? /* js */ `{ ${parsed.params.map((p) => `${p}: string`).join("; ")} }`
           : "Record<string, never>";
-      return `  '${parsed.pattern}': { params: ${paramsType} }`;
+      return /* js */ `  '${parsed.pattern}': { params: ${paramsType} }`;
     })
     .join("\n");
 
-  return `/**
+  return /* ts */ `/**
  * Auto-generated Route Types
  * Provides type-safe route definitions
  */
@@ -173,9 +173,9 @@ export interface Routes {
 ${routeTypes}
 }
 
-export type RoutePath = keyof Routes
+export type RoutePath = keyof Routes;
 
-export type RouteParams<T extends RoutePath> = Routes[T]['params']
+export type RouteParams<T extends RoutePath> = Routes[T]['params'];
 `;
 }
 
@@ -387,140 +387,140 @@ import '@preact/signals-debug'
 `
     : "";
 
-  return `/**
+  return /* js */ `/**
  * Auto-generated Client Chunk: ${meta.chunk}
  * HMR-enabled wrapper for ${meta.tag}
  */
-${debugImports}import { h } from 'preact'
-import { signal, useSignal, useSignalEffect } from '@preact/signals'
-import register from 'preact-custom-element'
-import { initRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client'
-import BaseComponent from '../src/app/${meta.file}'
+${debugImports}import { h } from 'preact';
+import { signal, useSignal, useSignalEffect } from '@preact/signals';
+import register from 'preact-custom-element';
+import { initRouter, initHydrationCoordinator, extractDataIsland } from '../src/framework/client';
+import BaseComponent from '../src/app/${meta.file}';
 
 // Initialize hydration coordinator for streaming SSR
-initHydrationCoordinator()
+initHydrationCoordinator();
 
 // Mutable reference for HMR - updated when module is hot-replaced
-let CurrentComponent = BaseComponent
+let CurrentComponent = BaseComponent;
 
 // Module-level signal for HMR updates (shared across all instances)
-const hmrVersion = signal(0)
+const hmrVersion = signal(0);
 
 // HMR Support - allows component updates without re-registering custom element
 if (import.meta.hot) {
   import.meta.hot.accept('../src/app/${meta.file}', (newModule) => {
     if (newModule?.default) {
-      CurrentComponent = newModule.default
-      console.log('[HMR] Updated <${meta.tag}>')
-      hmrVersion.value++
+      CurrentComponent = newModule.default;
+      console.log('[HMR] Updated <${meta.tag}>');
+      hmrVersion.value++;
     }
   })
   
   import.meta.hot.dispose(() => {
     console.log('[HMR] Disposing <${meta.tag}>')
-  })
+  });
 }
 
 // Initialize router once globally
 function ensureRouter() {
-  if (typeof window === 'undefined') return null
-  if (window.__SF_ROUTER__) return window.__SF_ROUTER__
+  if (typeof window === 'undefined') return null;
+  if (window.__SF_ROUTER__) return window.__SF_ROUTER__;
   if (window.__SF_ROUTES__) {
-    window.__SF_ROUTER__ = initRouter(window.__SF_ROUTES__).start()
-    return window.__SF_ROUTER__
+    window.__SF_ROUTER__ = initRouter(window.__SF_ROUTES__).start();
+    return window.__SF_ROUTER__;
   }
-  return null
+  return null;
 }
 
 // Fetch with retry for transient failures
 async function fetchWithRetry(url, maxRetries = 3, baseDelay = 1000) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(url)
-      if (res.ok || res.status < 500) return res
+      const res = await fetch(url);
+      if (res.ok || res.status < 500) return res;
     } catch (e) {
-      if (attempt === maxRetries) throw e
+      if (attempt === maxRetries) throw e;
     }
     if (attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)))
+      await new Promise(r => setTimeout(r, baseDelay * Math.pow(2, attempt)));
     }
   }
-  throw new Error('Fetch failed after retries')
+  throw new Error('Fetch failed after retries');
 }
 
 // Load router manifest when browser is idle
-let routerLoading = false
+let routerLoading = false;
 function loadRouter() {
-  if (routerLoading || window.__SF_ROUTER__) return
-  routerLoading = true
+  if (routerLoading || window.__SF_ROUTER__) return;
+  routerLoading = true;
   
   const doLoad = () => {
     fetchWithRetry('/routes.json', 2, 500)
       .then(res => res.json())
       .then(manifest => {
-        window.__SF_ROUTES__ = manifest
-        ensureRouter()
+        window.__SF_ROUTES__ = manifest;
+        ensureRouter();
       })
-      .catch(() => {})
+      .catch(() => {});
   }
   
   // Defer to idle time, fallback to setTimeout for Safari
   if ('requestIdleCallback' in window) {
-    requestIdleCallback(doLoad, { timeout: 2000 })
+    requestIdleCallback(doLoad, { timeout: 2000 });
   } else {
-    setTimeout(doLoad, 1)
+    setTimeout(doLoad, 1);
   }
 }
 
 // HMR Wrapper Component
 function Component(props) {
   // Local signal for deferred props (component-scoped)
-  const deferredProps = useSignal(null)
+  const deferredProps = useSignal(null);
   
   // Subscribe to HMR updates by reading module-level signal
-  const _ = hmrVersion.value
+  const _ = hmrVersion.value;
 
   // One-time setup for hydration and router
   useSignalEffect(() => {
-    const el = document.querySelector('${meta.tag}')
+    const el = document.querySelector('${meta.tag}');
     
     // Check for deferred SSR data
     if (el?._sfDeferred) {
-      deferredProps.value = el._sfDeferred
-      delete el._sfDeferred
+      deferredProps.value = el._sfDeferred;
+      delete el._sfDeferred;
     } else {
-      const data = extractDataIsland('${meta.tag}-deferred')
-      if (data) deferredProps.value = data
+      const data = extractDataIsland('${meta.tag}-deferred');
+      if (data) deferredProps.value = data;
     }
     
     // Listen for streaming hydration events
-    const handler = (e) => { deferredProps.value = e.detail }
-    el?.addEventListener('sf:hydrate', handler)
+    const handler = (e) => { deferredProps.value = e.detail };
+    el?.addEventListener('sf:hydrate', handler);
     
     // Load router
-    loadRouter()
+    loadRouter();
     
-    return () => el?.removeEventListener('sf:hydrate', handler)
+    return () => el?.removeEventListener('sf:hydrate', handler);
   })
 
   // Clean props - filter out "undefined" strings from unset attributes
   const cleanProps = {}
   for (const key in props) {
     if (props[key] !== 'undefined' && props[key] !== undefined) {
-      cleanProps[key] = props[key]
+      cleanProps[key] = props[key];
     }
   }
 
   // Merge deferred props (they override initial props)
   const finalProps = deferredProps.value 
     ? { ...cleanProps, ...deferredProps.value } 
-    : cleanProps
+    : cleanProps;
 
-  return h(CurrentComponent, finalProps)
+  return h(CurrentComponent, finalProps);
 }
 
 // Register wrapper as web component (only happens once)
-register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false })
+register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });
 `;
 }
 
@@ -532,7 +532,7 @@ function generateModulesFile(
   errorFile: string | null,
 ): { content: string; errors: string[] } {
   const allFiles = [...layoutFiles, ...routeFiles];
-  
+
   if (errorFile) {
     allFiles.push(errorFile);
   }
@@ -797,7 +797,9 @@ async function buildServer(clientRoutesManifest: {
   const routeFiles = await findRouteModules();
   const layoutFiles = await findLayouts();
   const errorFile = await findErrorFile();
-  console.log(`   Found ${routeFiles.length} route(s), ${layoutFiles.length} layout(s)${errorFile ? ", and error page" : ""}`);
+  console.log(
+    `   Found ${routeFiles.length} route(s), ${layoutFiles.length} layout(s)${errorFile ? ", and error page" : ""}`,
+  );
 
   console.log("🔎 Validating route types...");
   const valid = await validateRoutes(routeFiles, layoutFiles);

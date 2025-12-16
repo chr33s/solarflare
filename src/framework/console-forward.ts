@@ -163,9 +163,8 @@ export function isConsoleRequest(request: Request, options: ConsoleForwardOption
 export function generateClientScript(options: ConsoleForwardOptions = {}): string {
   const { endpoint, levels, includeStacks } = { ...DEFAULT_OPTIONS, ...options };
 
-  return `
+  return /* js */ `
 (function() {
-  // Console forwarding - forwards browser logs to wrangler dev server
   const originalMethods = {
     log: console.log.bind(console),
     warn: console.warn.bind(console),
@@ -188,8 +187,7 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
       if (arg === null) return "null";
       if (typeof arg === "string") return arg;
       if (typeof arg === "number" || typeof arg === "boolean") return String(arg);
-      
-      // Handle errors with stack traces
+
       if (arg instanceof Error || (arg && typeof arg.stack === "string")) {
         let stringifiedError = arg.toString();
         if (${includeStacks} && arg.stack) {
@@ -203,8 +201,7 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
         }
         return stringifiedError;
       }
-      
-      // Handle objects
+
       if (typeof arg === "object") {
         try {
           const serialized = JSON.parse(JSON.stringify(arg));
@@ -214,7 +211,6 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
           return String(arg);
         }
       }
-      
       return String(arg);
     }).join(" ");
 
@@ -257,21 +253,15 @@ export function generateClientScript(options: ConsoleForwardOptions = {}): strin
   }
 
   // Patch console methods
-  ${levels
-    .map(
-      (level) => `
+  ${levels.map((level) => `
   console.${level} = function(...args) {
     originalMethods.${level}(...args);
     const entry = createLogEntry("${level}", args);
     addToBuffer(entry);
   };`,
-    )
-    .join("\n")}
+    ).join("\n")}
 
-  // Flush on page unload
   window.addEventListener("beforeunload", flushLogs);
-  
-  // Periodic flush
   setInterval(flushLogs, 10000);
 })();
 `;

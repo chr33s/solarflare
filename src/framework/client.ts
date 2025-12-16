@@ -5,10 +5,7 @@ import { parsePath } from "./paths";
 import { hydrateStore, initHydrationCoordinator } from "./store";
 
 /** Schedules work during browser idle time (falls back to setTimeout). */
-export function scheduleIdle(
-  callback: () => void,
-  options?: { timeout?: number }
-): number {
+export function scheduleIdle(callback: () => void, options?: { timeout?: number }): number {
   if (typeof window === "undefined") {
     return -1;
   }

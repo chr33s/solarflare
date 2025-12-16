@@ -42,9 +42,7 @@ export function parsePath(filePath: string): ParsedPath {
   const kind = getModuleKind(normalized);
   const isPrivate = normalized.includes("/_") || normalized.startsWith("_");
 
-  const withoutExt = normalized
-    .replace(/\.(client|server)\.tsx?$/, "")
-    .replace(/\.tsx?$/, "");
+  const withoutExt = normalized.replace(/\.(client|server)\.tsx?$/, "").replace(/\.tsx?$/, "");
 
   const segments = withoutExt.split("/").filter(Boolean);
 

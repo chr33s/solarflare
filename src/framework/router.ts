@@ -92,11 +92,7 @@ export async function fetchWithRetry(
   init?: RequestInit,
   options: FetchRetryOptions = {},
 ): Promise<Response> {
-  const {
-    maxRetries = 3,
-    baseDelay = 1000,
-    retryOnStatus = (status) => status >= 500,
-  } = options;
+  const { maxRetries = 3, baseDelay = 1000, retryOnStatus = (status) => status >= 500 } = options;
 
   let lastError: Error | null = null;
 
@@ -186,8 +182,11 @@ export class Router {
     const app = document.querySelector("#app");
     if (app) {
       const escapeHtml = (str: string) =>
-        str.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c));
-      
+        str.replace(
+          /[&<>"']/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] || c,
+        );
+
       app.innerHTML = `
         <div class="error-page">
           <h1>Something went wrong</h1>

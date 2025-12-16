@@ -89,11 +89,11 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       // Render 404 error page wrapped in layouts
       const notFoundError = new Error(`Page not found: ${url.pathname}`);
       const errorContent = await renderErrorPage(notFoundError, url, typedModules, 404);
-      
+
       // Get stylesheets for error page (use root layout styles)
       const stylesheets = getStylesheets("/");
       const devScripts = getDevScripts();
-      
+
       const stream = await renderToStream(errorContent, {
         pathname: url.pathname,
         styles: stylesheets,
@@ -218,13 +218,13 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     // Render 500 error page wrapped in layouts
     const serverError = error instanceof Error ? error : new Error(String(error));
     console.error("[solarflare] Server error:", serverError);
-    
+
     const errorContent = await renderErrorPage(serverError, url, typedModules, 500);
-    
+
     // Get stylesheets for error page (use root layout styles)
     const stylesheets = getStylesheets("/");
     const devScripts = getDevScripts();
-    
+
     const stream = await renderToStream(errorContent, {
       pathname: url.pathname,
       styles: stylesheets,

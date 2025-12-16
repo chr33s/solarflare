@@ -310,11 +310,13 @@ export async function renderErrorPage(
     ErrorComponent = mod.default as FunctionComponent<ErrorPageProps>;
   } else {
     ErrorComponent = ({ error, url, statusCode }: ErrorPageProps) =>
-      h("div", { class: "error-page" },
+      h(
+        "div",
+        { class: "error-page" },
         h("h1", null, statusCode === 404 ? "Not Found" : "Something went wrong"),
         h("p", null, error.message),
         url && h("p", { class: "error-url" }, `Failed to load: ${url.pathname}`),
-        h("a", { href: "/" }, "Go home")
+        h("a", { href: "/" }, "Go home"),
       );
   }
 
