@@ -104,6 +104,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
         status: 404,
         headers: {
           "Content-Type": "text/html; charset=utf-8",
+          "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
           "Transfer-Encoding": "chunked",
           "X-Content-Type-Options": "nosniff",
         },
@@ -210,6 +211,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     return new Response(stream, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
+        "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
         "Transfer-Encoding": "chunked",
         "X-Content-Type-Options": "nosniff",
       },
@@ -235,6 +237,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       status: 500,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
+        "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
         "Transfer-Encoding": "chunked",
         "X-Content-Type-Options": "nosniff",
       },
