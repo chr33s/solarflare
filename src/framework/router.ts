@@ -246,6 +246,9 @@ export class Router {
         this.#config.onNotFound(url);
       }
       this.#handleScroll(url);
+      
+      // Dispatch navigation event for components to re-extract deferred data
+      window.dispatchEvent(new CustomEvent('sf:navigate', { detail: { url, match } }));
     } catch (error) {
       this.#handleError(error instanceof Error ? error : new Error(String(error)), url);
     }
@@ -267,6 +270,8 @@ export class Router {
 
     await diff(document, response.body!, { transition: useTransition });
 
+    this.#hydrateDeferredDataIslands();
+
     if (entry.styles?.length) {
       for (const href of entry.styles) {
         const absoluteHref = new URL(href, location.origin).href;
@@ -282,6 +287,46 @@ export class Router {
     if (entry.chunk) {
       const absoluteChunk = new URL(entry.chunk, location.origin).href;
       await import(absoluteChunk);
+    }
+  }
+
+  /**
+   * Hydrates deferred data islands after DOM diffing.
+   * Inline scripts don't execute when inserted via diff, so we manually trigger hydration.
+   */
+  #hydrateDeferredDataIslands(): void {
+    const dataIslands = document.querySelectorAll('script[type="application/json"][data-island]');
+    const processedIslands = new Set<string>();
+
+    for (const island of dataIslands) {
+      const dataIslandId = island.getAttribute("data-island");
+      if (!dataIslandId?.endsWith("-deferred")) continue;
+
+      if (processedIslands.has(dataIslandId)) {
+        island.remove();
+        continue;
+      }
+      processedIslands.add(dataIslandId);
+
+      const tag = dataIslandId.replace(/-deferred$/, "");
+
+      if (!document.querySelector(tag)) {
+        island.remove();
+        continue;
+      }
+
+      // Delay to allow component mount before triggering hydration
+      setTimeout(() => {
+        requestAnimationFrame(() => {
+          const hydrateFn = (window as any).__SF_HYDRATE__;
+          if (hydrateFn) {
+            hydrateFn(tag, dataIslandId);
+          } else {
+            const queue = ((window as any).__SF_HYDRATE_QUEUE__ ??= []);
+            queue.push([tag, dataIslandId]);
+          }
+        });
+      }, 0);
     }
   }
 

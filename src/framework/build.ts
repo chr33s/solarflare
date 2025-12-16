@@ -472,38 +472,50 @@ function loadRouter() {
   }
 }
 
-// HMR Wrapper Component
+/** @description HMR-enabled wrapper component with deferred data hydration. */
 function Component(props) {
-  // Local signal for deferred props (component-scoped)
   const deferredProps = useSignal(null);
-  
-  // Subscribe to HMR updates by reading module-level signal
   const _ = hmrVersion.value;
 
-  // One-time setup for hydration and router
+  // Extract deferred data and set up event listeners
   useSignalEffect(() => {
     const el = document.querySelector('${meta.tag}');
+    if (!el) return;
     
-    // Check for deferred SSR data
-    if (el?._sfDeferred) {
-      deferredProps.value = el._sfDeferred;
-      delete el._sfDeferred;
-    } else {
-      const data = extractDataIsland('${meta.tag}-deferred');
-      if (data) deferredProps.value = data;
-    }
+    // Function to extract deferred data from DOM
+    const extractDeferred = () => {
+      if (el._sfDeferred) {
+        deferredProps.value = el._sfDeferred;
+        delete el._sfDeferred;
+      } else {
+        extractDataIsland('${meta.tag}-deferred').then(data => {
+          if (data) deferredProps.value = data;
+        });
+      }
+    };
     
-    // Listen for streaming hydration events
-    const handler = (e) => { deferredProps.value = e.detail };
-    el?.addEventListener('sf:hydrate', handler);
+    // Extract on initial mount
+    extractDeferred();
     
-    // Load router
+    // Listen for hydration events (from streaming SSR and navigation)
+    const hydrateHandler = (e) => { deferredProps.value = e.detail };
+    el.addEventListener('sf:hydrate', hydrateHandler);
+    
+    // Listen for navigation events to re-extract deferred data
+    const navHandler = () => {
+      // Use setTimeout to let DOM update complete before extracting
+      setTimeout(extractDeferred, 0);
+    };
+    window.addEventListener('sf:navigate', navHandler);
+    
     loadRouter();
     
-    return () => el?.removeEventListener('sf:hydrate', handler);
-  })
+    return () => {
+      el.removeEventListener('sf:hydrate', hydrateHandler);
+      window.removeEventListener('sf:navigate', navHandler);
+    };
+  });
 
-  // Clean props - filter out "undefined" strings from unset attributes
   const cleanProps = {}
   for (const key in props) {
     if (props[key] !== 'undefined' && props[key] !== undefined) {
@@ -511,7 +523,6 @@ function Component(props) {
     }
   }
 
-  // Merge deferred props (they override initial props)
   const finalProps = deferredProps.value 
     ? { ...cleanProps, ...deferredProps.value } 
     : cleanProps;

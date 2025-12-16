@@ -156,10 +156,7 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
     _sfDeferred?: Record<string, unknown>;
     _vdom?: unknown;
   };
-  if (!element) {
-    console.warn(`[solarflare] Element "${tag}" not found for hydration`);
-    return;
-  }
+  if (!element) return;
 
   const islandId = dataIslandId ?? `${tag}-data`;
   const data = await extractDataIsland<Record<string, unknown>>(islandId);
@@ -184,6 +181,8 @@ export function initHydrationCoordinator(): void {
   const queue = (window as any).__SF_HYDRATE_QUEUE__ as [string, string][] | undefined;
   if (queue) {
     for (const [tag, dataIslandId] of queue) {
+      // Skip stale entries for elements no longer in the DOM
+      if (!document.querySelector(tag)) continue;
       void hydrateComponent(tag, dataIslandId);
     }
     delete (window as any).__SF_HYDRATE_QUEUE__;
