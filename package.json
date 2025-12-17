@@ -11,11 +11,11 @@
     "./worker": "./src/worker.ts"
   },
   "bin": {
-    "solarflare": "./bin/solarflare.ts"
+    "solarflare": "./src/cli.ts"
   },
   "scripts": {
     "build": "bun ./src/build.ts",
-    "build:cli": "bun ./scripts/build-cli.ts",
+    "build:cli": "bun ./src/build-cli.ts",
     "check": "oxfmt --check && oxlint --type-aware && tsc --noEmit",
     "clean": "rm -rf dist",
     "dev": "bun ./src/build.ts --serve --watch",

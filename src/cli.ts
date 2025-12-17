@@ -6,9 +6,8 @@
 
 import { execSync } from "child_process";
 import { existsSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { dirname } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const binDir = join(__dirname, "..");
@@ -40,7 +39,7 @@ const binaryPath = join(binDir, "bin", binaryName);
 if (!existsSync(binaryPath)) {
   console.error(
     `❌ Binary not found: ${binaryPath}\n` +
-      `Run 'bun run build-cli' to compile the CLI for your platform.`,
+      `Run 'bun run build:cli' to compile the CLI for your platform.`,
   );
   process.exit(1);
 }

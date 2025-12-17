@@ -1,6 +1,6 @@
 *.log*
 .wrangler
-dist
-node_modules
-bin/solarflare-*
+bin/
+dist/
+node_modules/
 package-lock.json
