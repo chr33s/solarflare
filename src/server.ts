@@ -387,11 +387,11 @@ function createAssetInjectionTransformer(
     transform(chunk, controller) {
       buffer += decoder.decode(chunk, { stream: true });
 
-      // Inject <!DOCTYPE html> before the root <html> tag (only once)
+      // Inject <!doctype html> before the root <html> tag (only once)
       if (!doctypeInjected) {
         const htmlIndex = buffer.indexOf("<html");
         if (htmlIndex !== -1) {
-          buffer = buffer.slice(0, htmlIndex) + "<!DOCTYPE html>" + buffer.slice(htmlIndex);
+          buffer = buffer.slice(0, htmlIndex) + "<!doctype html>" + buffer.slice(htmlIndex);
           doctypeInjected = true;
         }
       }
@@ -422,7 +422,7 @@ function createAssetInjectionTransformer(
         if (!doctypeInjected) {
           const htmlIndex = buffer.indexOf("<html");
           if (htmlIndex !== -1) {
-            buffer = buffer.slice(0, htmlIndex) + "<!DOCTYPE html>" + buffer.slice(htmlIndex);
+            buffer = buffer.slice(0, htmlIndex) + "<!doctype html>" + buffer.slice(htmlIndex);
           }
         }
         // Final check for marker in remaining content

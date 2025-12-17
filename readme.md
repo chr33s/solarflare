@@ -215,7 +215,7 @@ export default define(BlogPost, { shadow: true })
 Request to `/blog/hello` renders:
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">

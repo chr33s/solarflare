@@ -9,7 +9,8 @@
   "scripts": {
     "build": "solarflare",
     "dev": "solarflare --serve --watch",
-    "deploy": "solarflare --production && wrangler deploy"
+    "deploy": "solarflare --production && wrangler deploy",
+    "start": "wrangler dev"
   },
   "dependencies": {
     "@chr33s/solarflare": "file:../../"
