@@ -220,3 +220,28 @@ export {
   type RouterConfig,
   type RouteSubscriber,
 } from "./router";
+
+// HMR utilities re-exports
+export {
+  // Hook state preservation
+  saveHookState,
+  restoreHookState,
+  clearHookState,
+  getRefStorage,
+  // Scroll position preservation
+  saveScrollPosition,
+  restoreScrollPosition,
+  clearScrollPosition,
+  // Error boundary
+  HMRErrorBoundary,
+  // CSS HMR
+  reloadStylesheet,
+  removeStylesheet,
+  acceptCssHMR,
+  // HMR wrapper
+  createHMRWrapper,
+  type HMRWrapperOptions,
+  // HMR events
+  dispatchHMREvent,
+  onHMREvent,
+} from "./hmr";

@@ -408,7 +408,7 @@ import '@preact/signals-debug'
   const inlinedRoutes = JSON.stringify(routesManifest);
 
   return /* js */ `/** Auto-generated: ${meta.chunk} */
-${debugImports}import { h } from 'preact';
+${debugImports}import { h, Component as PreactComponent } from 'preact';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
 import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland } from '@chr33s/solarflare/client';
@@ -420,18 +420,195 @@ initHydrationCoordinator();
 let CurrentComponent = BaseComponent;
 const hmrVersion = signal(0);
 
-// HMR support
+// ============================================================================
+// HMR Scroll Position Preservation
+// ============================================================================
+const scrollPositions = new Map();
+
+function saveScrollPosition() {
+  scrollPositions.set('${meta.tag}', { x: window.scrollX, y: window.scrollY });
+}
+
+function restoreScrollPosition() {
+  const pos = scrollPositions.get('${meta.tag}');
+  if (pos) {
+    requestAnimationFrame(() => window.scrollTo(pos.x, pos.y));
+  }
+}
+
+// ============================================================================
+// HMR Hook State Preservation
+// ============================================================================
+const hookStateStorage = new Map();
+
+function saveHookState(instance) {
+  if (instance?.__hooks?.list) {
+    hookStateStorage.set('${meta.tag}', 
+      instance.__hooks.list.map(hook => hook?._value !== undefined ? hook._value : hook?.current)
+    );
+  }
+}
+
+function restoreHookState(instance) {
+  const saved = hookStateStorage.get('${meta.tag}');
+  if (saved && instance?.__hooks?.list) {
+    instance.__hooks.list.forEach((hook, i) => {
+      if (saved[i] !== undefined) {
+        if (hook?._value !== undefined) hook._value = saved[i];
+        else if (hook?.current !== undefined) hook.current = saved[i];
+      }
+    });
+  }
+}
+
+// ============================================================================
+// CSS Hot Module Replacement
+// ============================================================================
+function reloadStylesheets() {
+  // Find all stylesheets and bust their cache
+  const links = document.querySelectorAll('link[rel="stylesheet"]');
+  links.forEach(link => {
+    const href = link.getAttribute('href');
+    if (href && !href.includes('?')) {
+      link.setAttribute('href', href + '?t=' + Date.now());
+    } else if (href) {
+      link.setAttribute('href', href.replace(/\\?t=\\d+/, '?t=' + Date.now()));
+    }
+  });
+  console.log('[HMR] Reloaded stylesheets');
+}
+
+// Listen for CSS-only updates
+if (import.meta.hot) {
+  import.meta.hot.on('sf:css-update', () => {
+    reloadStylesheets();
+  });
+}
+
+// ============================================================================
+// HMR Error Boundary
+// ============================================================================
+class HMRErrorBoundary extends PreactComponent {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    console.error('[HMR] Error in <${meta.tag}>:', error);
+    document.dispatchEvent(new CustomEvent('sf:hmr:error', { 
+      detail: { tag: '${meta.tag}', error } 
+    }));
+  }
+
+  componentDidUpdate(prevProps) {
+    // Auto-recover when HMR version changes
+    if (prevProps.hmrVersion !== this.props.hmrVersion && this.state.error) {
+      console.log('[HMR] Attempting recovery for <${meta.tag}>');
+      this.setState({ error: null, errorInfo: null });
+      document.dispatchEvent(new CustomEvent('sf:hmr:recover', { 
+        detail: { tag: '${meta.tag}' } 
+      }));
+    }
+  }
+
+  retry = () => {
+    this.setState({ error: null, errorInfo: null });
+  };
+
+  render() {
+    if (this.state.error) {
+      return h('div', { 
+        style: { 
+          padding: '16px', 
+          margin: '8px', 
+          backgroundColor: '#fee2e2', 
+          border: '1px solid #ef4444', 
+          borderRadius: '8px',
+          fontFamily: 'system-ui, sans-serif'
+        } 
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' } },
+          h('span', { style: { fontSize: '20px' } }, '⚠️'),
+          h('strong', { style: { color: '#991b1b' } }, 'Error in <${meta.tag}>')
+        ),
+        h('pre', { 
+          style: { 
+            margin: '8px 0', 
+            padding: '8px', 
+            backgroundColor: '#fef2f2', 
+            borderRadius: '4px', 
+            overflow: 'auto',
+            fontSize: '12px',
+            color: '#7f1d1d'
+          } 
+        }, this.state.error.message),
+        this.state.errorInfo?.componentStack && h('details', { style: { marginTop: '8px' } },
+          h('summary', { style: { cursor: 'pointer', color: '#991b1b' } }, 'Component Stack'),
+          h('pre', { style: { fontSize: '10px', color: '#7f1d1d', whiteSpace: 'pre-wrap' } }, 
+            this.state.errorInfo.componentStack)
+        ),
+        h('button', {
+          onClick: this.retry,
+          style: {
+            marginTop: '12px',
+            padding: '8px 16px',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }
+        }, 'Retry')
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ============================================================================
+// HMR Support
+// ============================================================================
 if (import.meta.hot) {
   import.meta.hot.accept('../src/${meta.file}', (newModule) => {
     if (newModule?.default) {
+      // Save scroll position before update
+      saveScrollPosition();
+      
+      // Save hook state from existing instances
+      const el = document.querySelector('${meta.tag}');
+      if (el?._vdom) saveHookState(el._vdom);
+      
       CurrentComponent = newModule.default;
       console.log('[HMR] Updated <${meta.tag}>');
       hmrVersion.value++;
+      
+      // Restore scroll position after render
+      requestAnimationFrame(() => {
+        restoreScrollPosition();
+        // Attempt to restore hook state
+        const el = document.querySelector('${meta.tag}');
+        if (el?._vdom) restoreHookState(el._vdom);
+      });
+      
+      document.dispatchEvent(new CustomEvent('sf:hmr:update', { 
+        detail: { tag: '${meta.tag}' } 
+      }));
     }
-  })
+  });
   
   import.meta.hot.dispose(() => {
-    console.log('[HMR] Disposing <${meta.tag}>')
+    console.log('[HMR] Disposing <${meta.tag}>');
+    // Save state before disposal
+    saveScrollPosition();
+    const el = document.querySelector('${meta.tag}');
+    if (el?._vdom) saveHookState(el._vdom);
   });
 }
 
@@ -447,7 +624,7 @@ function ensureRouter() {
   return initRouter(routesManifest).start();
 }
 
-/** HMR wrapper with deferred data hydration. */
+/** HMR wrapper with deferred data hydration and error boundary. */
 function Component(props) {
   const deferredProps = useSignal(null);
   const _ = hmrVersion.value;
@@ -494,7 +671,10 @@ function Component(props) {
     ? { ...cleanProps, ...deferredProps.value } 
     : cleanProps;
 
-  return h(CurrentComponent, finalProps);
+  // Wrap in error boundary with HMR recovery
+  return h(HMRErrorBoundary, { hmrVersion: hmrVersion.value },
+    h(CurrentComponent, finalProps)
+  );
 }
 
 register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });

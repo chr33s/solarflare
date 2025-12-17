@@ -52,7 +52,7 @@ declare module "*.svg" {
  * Solarflare Framework Types
  */
 declare module "@chr33s/solarflare/client" {
-  import { FunctionComponent } from "preact";
+  import { FunctionComponent, VNode, Component } from "preact";
   import { ReadonlySignal, Signal } from "@preact/signals";
 
   /**
@@ -233,6 +233,126 @@ declare module "@chr33s/solarflare/client" {
   export function getRouter(): Router;
   export function navigate(to: string | URL, options?: NavigateOptions): Promise<void>;
   export function isActive(path: string, exact?: boolean): boolean;
+
+  // ============================================================================
+  // HMR (Hot Module Replacement) Utilities
+  // ============================================================================
+
+  /**
+   * Options for creating an HMR wrapper component
+   */
+  export interface HMRWrapperOptions {
+    /** Component tag name for identification */
+    tag: string;
+    /** Preserve scroll position across HMR updates. Defaults to true */
+    preserveScroll?: boolean;
+    /** Preserve hook state across HMR updates. Defaults to true */
+    preserveHookState?: boolean;
+    /** Custom error fallback UI */
+    errorFallback?: (error: Error, retry: () => void) => VNode;
+  }
+
+  /**
+   * HMR event detail structure
+   */
+  export interface HMREventDetail {
+    /** Component tag that was updated */
+    tag: string;
+    /** Error that occurred (for error events) */
+    error?: Error;
+  }
+
+  /**
+   * HMR event types
+   */
+  export type HMREventType = "update" | "error" | "recover";
+
+  // Hook state preservation
+  /**
+   * Saves hook state for a component before HMR update
+   */
+  export function saveHookState(componentId: string, hookState: unknown[]): void;
+
+  /**
+   * Restores hook state for a component after HMR update
+   */
+  export function restoreHookState(componentId: string): unknown[] | undefined;
+
+  /**
+   * Clears hook state for a component
+   */
+  export function clearHookState(componentId: string): void;
+
+  /**
+   * Gets or creates the ref storage for a component
+   */
+  export function getRefStorage(componentId: string): Map<number, unknown>;
+
+  // Scroll position preservation
+  /**
+   * Saves current scroll position before HMR update
+   */
+  export function saveScrollPosition(tag?: string): void;
+
+  /**
+   * Restores scroll position after HMR update
+   */
+  export function restoreScrollPosition(tag?: string): void;
+
+  /**
+   * Clears stored scroll position
+   */
+  export function clearScrollPosition(tag?: string): void;
+
+  // CSS HMR
+  /**
+   * Reloads a CSS file by updating its href with a cache-busting query
+   */
+  export function reloadStylesheet(href: string): void;
+
+  /**
+   * Removes a stylesheet from the document
+   */
+  export function removeStylesheet(href: string): void;
+
+  /**
+   * Accepts CSS HMR updates. Returns cleanup function
+   */
+  export function acceptCssHMR(cssFiles: string[]): () => void;
+
+  // HMR wrapper
+  /**
+   * Creates an HMR-enabled component wrapper with error boundary and state preservation
+   */
+  export function createHMRWrapper<P extends Record<string, unknown>>(
+    hmrVersion: Signal<number>,
+    getComponent: () => FunctionComponent<P>,
+    options: HMRWrapperOptions,
+  ): FunctionComponent<P>;
+
+  // HMR events
+  /**
+   * Dispatches an HMR event for external listeners
+   */
+  export function dispatchHMREvent(type: HMREventType, detail: HMREventDetail): void;
+
+  /**
+   * Registers an HMR event listener. Returns unsubscribe function
+   */
+  export function onHMREvent(
+    type: HMREventType,
+    handler: (detail: HMREventDetail) => void,
+  ): () => void;
+
+  /**
+   * Error boundary component that auto-recovers on HMR updates
+   */
+  export class HMRErrorBoundary extends Component<{
+    children?: VNode;
+    tag: string;
+    hmrVersion: Signal<number>;
+    fallback?: (error: Error, retry: () => void) => VNode;
+  }> {}
 }
 
 declare module "@chr33s/solarflare/server" {

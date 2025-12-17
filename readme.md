@@ -272,6 +272,18 @@ The compiled binaries will be in the `bin/` directory.
 npx wrangler deploy
 ```
 
+### Debugging
+
+You can listen for HMR events in your application:
+
+```tsx
+import { onHMREvent } from "@chr33s/solarflare/client";
+
+onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`));
+onHMREvent("error", ({ tag, error }) => console.error(`Error in ${tag}:`, error));
+onHMREvent("recover", ({ tag }) => console.log(`Recovered: ${tag}`));
+```
+
 ## License
 
 MIT
