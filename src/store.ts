@@ -2,6 +2,7 @@
 
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
 import { serializeToString, parseFromString } from "./serialize";
+import { serializeHeadState, hydrateHeadState } from "./head";
 
 /** Server-rendered data. */
 export interface ServerData<T = unknown> {
@@ -90,6 +91,9 @@ export function resetStore(): void {
 /** Data island ID for store hydration. */
 const STORE_ISLAND_ID = "sf-store";
 
+/** Data island ID for head hydration. */
+const HEAD_ISLAND_ID = "sf-head";
+
 /** Serializes store state for client hydration using a data island. */
 export async function serializeStoreForHydration(): Promise<string> {
   const state = {
@@ -99,6 +103,11 @@ export async function serializeStoreForHydration(): Promise<string> {
   };
 
   return serializeDataIsland(STORE_ISLAND_ID, state);
+}
+
+/** Serializes head state for client hydration using a data island. */
+export async function serializeHeadForHydration(): Promise<string> {
+  return /* html */ `<script type="application/json" data-island="${HEAD_ISLAND_ID}">${serializeHeadState()}</script>`;
 }
 
 /** Hydrates store from serialized state (client-side). */
@@ -123,6 +132,19 @@ export async function hydrateStore(): Promise<void> {
   // Clean up the data island after extraction
   const script = document.querySelector(`script[data-island="${STORE_ISLAND_ID}"]`);
   script?.remove();
+}
+
+/** Hydrates head state from serialized data island (client-side). */
+export async function hydrateHead(): Promise<void> {
+  if (typeof document === "undefined") return;
+
+  const script = document.querySelector(`script[data-island="${HEAD_ISLAND_ID}"]`);
+  if (!script?.textContent) return;
+
+  hydrateHeadState(script.textContent);
+
+  // Clean up the data island after extraction
+  script.remove();
 }
 
 export { signal, computed, effect, batch };

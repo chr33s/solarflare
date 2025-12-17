@@ -401,6 +401,169 @@ declare module "@chr33s/solarflare/server" {
     children: VNode<any>;
   }
 
+  // =========================================================================
+  // Head Management
+  // =========================================================================
+
+  /**
+   * Marker for head tag injection during streaming
+   */
+  export const HEAD_MARKER: string;
+
+  /**
+   * Supported head tag names
+   */
+  export type HeadTagName = "title" | "meta" | "link" | "script" | "base" | "style" | "noscript";
+
+  /**
+   * Tag priority for ordering (lower = earlier in head)
+   */
+  export type TagPriority = "critical" | "high" | number | "low";
+
+  /**
+   * Tag position in the document
+   */
+  export type TagPosition = "head" | "bodyOpen" | "bodyClose";
+
+  /**
+   * Head tag structure
+   */
+  export interface HeadTag {
+    /** Tag name */
+    tag: HeadTagName;
+    /** Tag attributes/props */
+    props: Record<string, string | boolean | null | undefined>;
+    /** Inner content (for title, script, style) */
+    textContent?: string;
+    /** Deduplication key */
+    key?: string;
+    /** Priority for ordering */
+    tagPriority?: TagPriority;
+    /** Position in document */
+    tagPosition?: TagPosition;
+  }
+
+  /**
+   * Head input schema (similar to unhead)
+   */
+  export interface HeadInput {
+    /** Document title */
+    title?: string;
+    /** Title template (function or string with %s placeholder) */
+    titleTemplate?: string | ((title?: string) => string);
+    /** Base element */
+    base?: { href?: string; target?: string };
+    /** Meta tags */
+    meta?: Array<{
+      charset?: string;
+      name?: string;
+      property?: string;
+      "http-equiv"?: string;
+      content?: string;
+      key?: string;
+    }>;
+    /** Link tags */
+    link?: Array<{
+      rel?: string;
+      href?: string;
+      type?: string;
+      sizes?: string;
+      media?: string;
+      crossorigin?: string;
+      as?: string;
+      key?: string;
+    }>;
+    /** Script tags */
+    script?: Array<{
+      src?: string;
+      type?: string;
+      async?: boolean;
+      defer?: boolean;
+      innerHTML?: string;
+      key?: string;
+    }>;
+    /** Style tags */
+    style?: Array<{
+      type?: string;
+      media?: string;
+      innerHTML?: string;
+      key?: string;
+    }>;
+    /** HTML element attributes */
+    htmlAttrs?: Record<string, string>;
+    /** Body element attributes */
+    bodyAttrs?: Record<string, string>;
+  }
+
+  /**
+   * Active head entry with lifecycle methods
+   */
+  export interface ActiveHeadEntry {
+    /** Update the head entry */
+    patch: (input: Partial<HeadInput>) => void;
+    /** Remove the head entry */
+    dispose: () => void;
+  }
+
+  /**
+   * Head entry options
+   */
+  export interface HeadEntryOptions {
+    /** Priority of tags */
+    tagPriority?: TagPriority;
+    /** Position of tags */
+    tagPosition?: TagPosition;
+  }
+
+  /**
+   * Registers head tags (works on both server and client)
+   * Inspired by unhead's useHead composable
+   * @example
+   * useHead({
+   *   title: "My Page",
+   *   meta: [
+   *     { name: "description", content: "Page description" },
+   *     { property: "og:title", content: "My Page" }
+   *   ]
+   * });
+   */
+  export function useHead(input: HeadInput, options?: HeadEntryOptions): ActiveHeadEntry;
+
+  /**
+   * Install automatic head tag hoisting.
+   * When installed, head tags (title, meta, link, script, base, style, noscript)
+   * placed anywhere in the component tree are automatically hoisted to the document head.
+   *
+   * Called automatically by initServerContext(), but can be called manually for testing.
+   * @example
+   * // Head tags anywhere in components are automatically hoisted
+   * function MyComponent() {
+   *   return (
+   *     <div>
+   *       <title>My Page</title>
+   *       <meta name="description" content="..." />
+   *       <h1>Content</h1>
+   *     </div>
+   *   );
+   * }
+   */
+  export function installHeadHoisting(): void;
+
+  /**
+   * Head component - renders marker for SSR head injection.
+   * Place in your layout's <head> where dynamic head tags should be injected.
+   * @example
+   * <head>
+   *   <meta charset="UTF-8" />
+   *   <Head />
+   *   <Assets />
+   * </head>
+   */
+  export function Head(): VNode<any>;
+
+  /** @deprecated Use Head instead */
+  export function HeadOutlet(): VNode<any>;
+
   /**
    * Wrap content in nested layouts
    */
@@ -493,6 +656,8 @@ declare module "@chr33s/solarflare/server" {
   export function resetStore(): void;
   export function serializeStoreForHydration(): Promise<string>;
   export function serializeDataIsland(id: string, data: unknown): Promise<string>;
+  export function serializeHeadForHydration(): Promise<string>;
+  export function hydrateHead(): Promise<void>;
 }
 
 declare module "@chr33s/solarflare/worker" {

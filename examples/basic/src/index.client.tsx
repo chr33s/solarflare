@@ -7,6 +7,8 @@ export default function Index(props: { async?: string; defer?: string; string?: 
   console.log(props);
   return (
     <main>
+      <title>Home | Solarflare</title>
+      <meta name="description" content="Welcome to the Solarflare demo app" />
       <img alt="Logo" height="231.25" src={logo} width="200" />
       <h1>Hello {props.string}</h1>
       <h2>Async: {props.async}</h2>

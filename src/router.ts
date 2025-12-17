@@ -2,6 +2,7 @@
 
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "diff-dom-streaming";
+import { resetHeadContext } from "./head";
 
 /** Route entry from build-time manifest. */
 export interface RouteManifestEntry {
@@ -269,6 +270,10 @@ export class Router {
     }
 
     await diff(document, response.body!, { transition: useTransition });
+
+    // Reset head context after navigation - the new HTML has fresh head tags
+    // and any new useHead calls from hydrated components will be fresh
+    resetHeadContext();
 
     this.#hydrateDeferredDataIslands();
 

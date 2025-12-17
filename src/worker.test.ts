@@ -338,6 +338,39 @@ describe("integration", () => {
     // Should not be treated as console endpoint, returns 404
     expect(response.status).toBe(404);
   });
+
+  it.concurrent("should include hoisted head tags from components", async () => {
+    const response = await fetch(`${BASE_URL}/`);
+    const html = await response.text();
+
+    // The index.client.tsx sets title "Home | Solarflare" which should be hoisted
+    expect(html).toContain("<title>Home | Solarflare</title>");
+    // The index.client.tsx also sets a description meta tag
+    expect(html).toContain('content="Welcome to the Solarflare demo app"');
+  });
+
+  it.concurrent("should include hoisted head tags for dynamic routes", async () => {
+    const response = await fetch(`${BASE_URL}/blog/my-test-post`);
+    const html = await response.text();
+
+    // The blog/$slug.client.tsx sets dynamic title based on title prop
+    // The title is derived from the slug in $slug.server.tsx
+    expect(html).toContain("<title>");
+    expect(html).toContain("| Blog | Solarflare</title>");
+    // Should also have the dynamic description
+    expect(html).toContain('<meta name="description"');
+    expect(html).toContain('content="Blog post:');
+  });
+
+  it.concurrent("should include base head tags from layout", async () => {
+    const response = await fetch(`${BASE_URL}/`);
+    const html = await response.text();
+
+    // Layout defines these base meta tags
+    expect(html).toContain('<meta charset="UTF-8"');
+    expect(html).toContain('<meta name="viewport"');
+    expect(html).toContain('content="width=device-width, initial-scale=1.0"');
+  });
 });
 
 describe("e2e", () => {
@@ -488,6 +521,83 @@ describe("e2e", () => {
     expect(html).toContain("<html");
   });
 
+  it.concurrent("should render hoisted head tags in document head", async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL);
+
+    // Wait for hydration
+    await page.waitForTimeout(500);
+
+    // Check that both title tags exist in the head
+    // The layout's base title and the hoisted title from components
+    const titleInfo = await page.evaluate(() => {
+      const titles = document.querySelectorAll("title");
+      return {
+        count: titles.length,
+        texts: Array.from(titles).map((t) => t.textContent),
+      };
+    });
+    // Should have both the layout title and the hoisted component title
+    expect(titleInfo.texts).toContain("Solarflare");
+    expect(titleInfo.texts).toContain("Home | Solarflare");
+
+    // Check meta description is in the head (hoisted from component)
+    const metaDescription = await page.evaluate(() => {
+      const meta = document.querySelector(
+        'meta[name="description"][content="Welcome to the Solarflare demo app"]',
+      );
+      return meta?.getAttribute("content");
+    });
+    expect(metaDescription).toBe("Welcome to the Solarflare demo app");
+  });
+
+  it.concurrent("should render dynamic head tags for route params", async () => {
+    const page = await browser.newPage();
+    await page.goto(`${BASE_URL}/blog/awesome-post`);
+
+    // Wait for hydration
+    await page.waitForTimeout(500);
+
+    // Check that the hoisted title from the blog component exists
+    const titleInfo = await page.evaluate(() => {
+      const titles = document.querySelectorAll("title");
+      return {
+        count: titles.length,
+        texts: Array.from(titles).map((t) => t.textContent),
+      };
+    });
+    // Should have a title containing the blog suffix from the component
+    expect(titleInfo.texts.some((t) => t?.includes("| Blog | Solarflare"))).toBe(true);
+
+    // Check meta description contains the blog post reference
+    const metaDescription = await page.evaluate(() => {
+      const metas = document.querySelectorAll('meta[name="description"]');
+      return Array.from(metas).map((m) => m.getAttribute("content"));
+    });
+    expect(metaDescription.some((c) => c?.includes("Blog post:"))).toBe(true);
+  });
+
+  it.concurrent("should have base meta tags from layout in head", async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL);
+
+    const headInfo = await page.evaluate(() => {
+      const charset = document.querySelector("meta[charset]");
+      const viewport = document.querySelector('meta[name="viewport"]');
+      return {
+        hasCharset: charset !== null,
+        charsetValue: charset?.getAttribute("charset"),
+        hasViewport: viewport !== null,
+        viewportContent: viewport?.getAttribute("content"),
+      };
+    });
+
+    expect(headInfo.hasCharset).toBe(true);
+    expect(headInfo.charsetValue).toBe("UTF-8");
+    expect(headInfo.hasViewport).toBe(true);
+    expect(headInfo.viewportContent).toBe("width=device-width, initial-scale=1.0");
+  });
+
   it.concurrent("should stream response incrementally", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
@@ -498,7 +608,7 @@ describe("e2e", () => {
       return (
         document.querySelector("[data-island]") !== null ||
         Array.from(document.querySelectorAll("*")).some((el) =>
-          el.tagName.toLowerCase().startsWith("sf-")
+          el.tagName.toLowerCase().startsWith("sf-"),
         )
       );
     });
@@ -562,15 +672,19 @@ describe("e2e", () => {
     expect(hasStyles).toBe(true);
   });
 
-  it.concurrent("should handle concurrent navigation", async () => {
-    const page = await browser.newPage();
-    await page.goto(BASE_URL);
-    await page.goto(`${BASE_URL}/blog/test`);
-    await page.goto(BASE_URL);
+  it.concurrent(
+    "should handle concurrent navigation",
+    async () => {
+      const page = await browser.newPage();
+      await page.goto(BASE_URL);
+      await page.goto(`${BASE_URL}/blog/test`);
+      await page.goto(BASE_URL);
 
-    const finalUrl = page.url();
-    expect(finalUrl).toBe(`${BASE_URL}/`);
-  }, 10_000);
+      const finalUrl = page.url();
+      expect(finalUrl).toBe(`${BASE_URL}/`);
+    },
+    10_000,
+  );
 
   it.concurrent("should support browser back navigation", async () => {
     const page = await browser.newPage();
@@ -589,7 +703,7 @@ describe("e2e", () => {
 
     const sfElementCount = await page.evaluate(() => {
       return Array.from(document.querySelectorAll("*")).filter((el) =>
-        el.tagName.toLowerCase().startsWith("sf-")
+        el.tagName.toLowerCase().startsWith("sf-"),
       ).length;
     });
 
@@ -629,7 +743,7 @@ describe("e2e", () => {
         (script) =>
           script.textContent?.includes("data-island") ||
           script.type === "application/json" ||
-          script.dataset.island !== undefined
+          script.dataset.island !== undefined,
       );
     });
 
@@ -652,4 +766,4 @@ async function waitForServer(url: string, timeout = 30_000) {
     await Bun.sleep(100);
   }
   throw new Error(`Server did not start within ${timeout}ms`);
-};
+}

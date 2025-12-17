@@ -5,6 +5,8 @@ import { PostForm } from "#app/_components/post-form";
 export default function BlogPost({ slug, title }: { slug: string; title: string }) {
   return (
     <article>
+      <title>{title} | Blog | Solarflare</title>
+      <meta name="description" content={`Blog post: ${title}`} />
       <h1>Blog: {title}</h1>
       <p>Slug: {slug}</p>
       <CountButton />

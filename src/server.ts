@@ -10,6 +10,21 @@ import {
   serializeDataIsland,
   resetStore,
 } from "./store";
+import {
+  createHeadContext,
+  setHeadContext,
+  getHeadContext,
+  resetHeadContext,
+  HEAD_MARKER,
+  Head,
+  HeadOutlet,
+  useHead,
+  installHeadHoisting,
+  resetHeadElementTracking,
+  type HeadInput,
+  type HeadEntryOptions,
+  type ActiveHeadEntry,
+} from "./head";
 
 /** Marker for asset injection during streaming. */
 export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
@@ -18,6 +33,10 @@ export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
 export function Assets(): VNode<any> {
   return h("solarflare-assets", { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } });
 }
+
+// Re-export head components
+export { Head, HeadOutlet, useHead, HEAD_MARKER, installHeadHoisting };
+export type { HeadInput, HeadEntryOptions, ActiveHeadEntry };
 
 /** Route parameter definition. */
 export interface RouteParamDef {
@@ -359,6 +378,15 @@ export interface StreamRenderOptions {
 /** Initializes server-side store with request context. */
 export function initServerContext(options: StreamRenderOptions): void {
   resetStore();
+  resetHeadContext();
+  resetHeadElementTracking();
+
+  // Install head hoisting (idempotent - only installs once)
+  installHeadHoisting();
+
+  // Create fresh head context for this request
+  const headCtx = createHeadContext();
+  setHeadContext(headCtx);
 
   initStore({
     params: options.params,
@@ -370,7 +398,7 @@ export function initServerContext(options: StreamRenderOptions): void {
   }
 }
 
-/** Transforms stream to inject assets and store hydration. */
+/** Transforms stream to inject assets, head tags, and store hydration. */
 function createAssetInjectionTransformer(
   storeScript: string,
   script?: string,
@@ -381,7 +409,9 @@ function createAssetInjectionTransformer(
   const decoder = new TextDecoder();
   let buffer = "";
   let doctypeInjected = false;
-  const marker = `<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`;
+  let headInjected = false;
+  const assetsMarker = `<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`;
+  const headMarker = `<solarflare-head>${HEAD_MARKER}</solarflare-head>`;
 
   return new TransformStream({
     transform(chunk, controller) {
@@ -396,21 +426,32 @@ function createAssetInjectionTransformer(
         }
       }
 
-      // Check if we have the complete marker
-      const markerIndex = buffer.indexOf(marker);
+      // Inject head tags at HeadOutlet marker (only once)
+      if (!headInjected) {
+        const headMarkerIndex = buffer.indexOf(headMarker);
+        if (headMarkerIndex !== -1) {
+          const headCtx = getHeadContext();
+          const headHtml = headCtx.renderToString();
+          buffer = buffer.replace(headMarker, headHtml);
+          headInjected = true;
+        }
+      }
+
+      // Check if we have the complete assets marker
+      const markerIndex = buffer.indexOf(assetsMarker);
       if (markerIndex !== -1) {
         // Generate replacement content
         const assetTags = generateAssetTags(script, styles, devScripts);
 
         // Replace marker with assets + store hydration
-        buffer = buffer.replace(marker, assetTags + storeScript);
+        buffer = buffer.replace(assetsMarker, assetTags + storeScript);
 
         // Flush everything before and including the replacement
         controller.enqueue(encoder.encode(buffer));
         buffer = "";
-      } else if (buffer.length > marker.length * 2) {
+      } else if (buffer.length > assetsMarker.length * 2) {
         // If buffer is getting large and no marker found, flush safe portion
-        const safeLength = buffer.length - marker.length;
+        const safeLength = buffer.length - assetsMarker.length;
         controller.enqueue(encoder.encode(buffer.slice(0, safeLength)));
         buffer = buffer.slice(safeLength);
       }
@@ -425,11 +466,20 @@ function createAssetInjectionTransformer(
             buffer = buffer.slice(0, htmlIndex) + "<!doctype html>" + buffer.slice(htmlIndex);
           }
         }
-        // Final check for marker in remaining content
-        const markerIndex = buffer.indexOf(marker);
+        // Final check for head marker in remaining content
+        if (!headInjected) {
+          const headMarkerIndex = buffer.indexOf(headMarker);
+          if (headMarkerIndex !== -1) {
+            const headCtx = getHeadContext();
+            const headHtml = headCtx.renderToString();
+            buffer = buffer.replace(headMarker, headHtml);
+          }
+        }
+        // Final check for assets marker in remaining content
+        const markerIndex = buffer.indexOf(assetsMarker);
         if (markerIndex !== -1) {
           const assetTags = generateAssetTags(script, styles, devScripts);
-          buffer = buffer.replace(marker, assetTags + storeScript);
+          buffer = buffer.replace(assetsMarker, assetTags + storeScript);
         }
         controller.enqueue(encoder.encode(buffer));
       }
@@ -530,6 +580,8 @@ export {
   setPathname,
   resetStore,
   serializeStoreForHydration,
+  serializeHeadForHydration,
+  hydrateHead,
   serializeDataIsland,
   params,
   serverData,
