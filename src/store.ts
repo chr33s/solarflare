@@ -46,7 +46,8 @@ export const pathname: ReadonlySignal<string> = _pathname;
 
 /** Sets route parameters. */
 export function setParams(newParams: Record<string, string>): void {
-  _params.value = newParams;
+  // Use Object.assign to prevent prototype pollution
+  _params.value = Object.assign({}, newParams);
 }
 
 /** Sets server data. */
@@ -67,7 +68,8 @@ export function setPathname(path: string): void {
 export function initStore(config: StoreConfig = {}): void {
   batch(() => {
     if (config.params) {
-      _params.value = config.params;
+      // Use Object.assign to prevent prototype pollution
+      _params.value = Object.assign({}, config.params);
     }
     if (config.serverData !== undefined) {
       _serverData.value = {
@@ -243,4 +245,17 @@ export function initHydrationCoordinator(): void {
   hydrationQueue.length = 0;
 
   hydrationReady = true;
+}
+
+/** Cleans up the hydration coordinator (call on app unmount/navigation). */
+export function cleanupHydrationCoordinator(): void {
+  if (typeof document === "undefined") return;
+
+  if (eventListenerAttached) {
+    document.removeEventListener("sf:queue-hydrate", handleQueueHydrateEvent);
+    eventListenerAttached = false;
+  }
+
+  hydrationReady = false;
+  hydrationQueue.length = 0;
 }

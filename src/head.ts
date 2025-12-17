@@ -406,6 +406,11 @@ export function createHeadContext(): HeadContext {
   return context;
 }
 
+/** Resets the entry ID counter (call between SSR requests to prevent overflow). */
+export function resetEntryIdCounter(): void {
+  entryId = 0;
+}
+
 /** Gets or creates the global head context. */
 export function getHeadContext(): HeadContext {
   if (!headContext) {
@@ -424,6 +429,8 @@ export function resetHeadContext(): void {
   if (headContext) {
     headContext.reset();
   }
+  // Reset entry ID counter to prevent overflow in long-running scenarios
+  resetEntryIdCounter();
 }
 
 // ============================================================================

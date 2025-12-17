@@ -190,6 +190,7 @@ export {
   // Hydration coordinator
   hydrateComponent,
   initHydrationCoordinator,
+  cleanupHydrationCoordinator,
   queueHydration,
   isHydrationReady,
   // Re-exports from signals-core
@@ -232,6 +233,9 @@ export {
   saveScrollPosition,
   restoreScrollPosition,
   clearScrollPosition,
+  // State cleanup
+  clearAllHMRState,
+  getHMRStateSize,
   // Error boundary
   HMRErrorBoundary,
   // CSS HMR

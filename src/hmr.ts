@@ -72,6 +72,22 @@ export function clearScrollPosition(tag?: string): void {
   scrollPositions.delete(key);
 }
 
+/** Clears all HMR state maps (call periodically or on app reset to prevent memory growth). */
+export function clearAllHMRState(): void {
+  hookStateMap.clear();
+  refStateMap.clear();
+  scrollPositions.clear();
+}
+
+/** Gets the current size of HMR state maps (useful for debugging memory issues). */
+export function getHMRStateSize(): { hookStates: number; refStates: number; scrollPositions: number } {
+  return {
+    hookStates: hookStateMap.size,
+    refStates: refStateMap.size,
+    scrollPositions: scrollPositions.size,
+  };
+}
+
 // ============================================================================
 // Error Boundary for HMR
 // ============================================================================

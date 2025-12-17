@@ -81,6 +81,15 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     return processConsoleLogs(request, logLevel);
   }
 
+  const headers = {
+    "Content-Type": "text/html; charset=utf-8",
+    "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Transfer-Encoding": "chunked",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+  };
+
   try {
     // Match route using URLPattern - prefers client routes for SSR
     const match = matchRoute(router, url);
@@ -101,13 +110,8 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       });
 
       return new Response(stream, {
+        headers,
         status: 404,
-        headers: {
-          "Content-Type": "text/html; charset=utf-8",
-          "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
-          "Transfer-Encoding": "chunked",
-          "X-Content-Type-Options": "nosniff",
-        },
       });
     }
 
@@ -206,14 +210,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
     });
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
-        "Transfer-Encoding": "chunked",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    return new Response(stream, { headers });
   } catch (error) {
     // Render 500 error page wrapped in layouts
     const serverError = error instanceof Error ? error : new Error(String(error));
@@ -232,13 +229,8 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     });
 
     return new Response(stream, {
+      headers,
       status: 500,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
-        "Transfer-Encoding": "chunked",
-        "X-Content-Type-Options": "nosniff",
-      },
     });
   }
 }
