@@ -2,6 +2,9 @@
 
 File-based routing for Preact + Cloudflare Workers with SSR streaming and web component hydration.
 
+> [!IMPORTANT]  
+> Authoritative Prompt: See prompt.txt for the workflow, strict binding validation, security guidance, and AI usage rules.
+
 ## Features
 
 - **File-based routing** — Routes derived from file structure
@@ -33,6 +36,13 @@ solarflare [options]
 | `--serve`, `-s`   | Start development server           |
 | `--clean`, `-c`   | Clean output before build          |
 | `--verbose`, `-v` | Verbose logging                    |
+
+## Folder Conventions
+
+| Directory    | Purpose                                |
+| ------------ | -------------------------------------- |
+| `./src`      | Original (source) human readable code  |
+| `./dist`     | Compiled (distribution) output code    |
 
 ## File Conventions
 
