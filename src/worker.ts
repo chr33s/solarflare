@@ -170,7 +170,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     if (serverPath && serverPath in typedModules.server) {
       const serverMod = await typedModules.server[serverPath]();
       const loader = serverMod.default as ServerLoader;
-      const result = await loader(request, params) as Record<string, unknown> & {
+      const result = (await loader(request, params)) as Record<string, unknown> & {
         _headers?: Record<string, string>;
         _status?: number;
         _statusText?: string;

@@ -12,7 +12,7 @@ This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, 
 - **Preact**: Lightweight UI framework for components.
 - **Preact Signals**: Reactive state management (`store.ts`).
 - **Node.js**: Primary runtime for builds (`build.ts`), requires v24.12.0+.
-- **Rolldown**: Rust-based bundler (via obuild) for client/server builds.
+- **Rolldown**: Rust-based bundler for client/server builds.
 - **Cloudflare Workers**: Server hosting for SSR (`worker.ts`).
 
 ---

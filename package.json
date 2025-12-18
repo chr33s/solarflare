@@ -24,12 +24,10 @@
   "dependencies": {
     "@preact/signals": "^2.5.1",
     "diff-dom-streaming": "^0.6.6",
-    "obuild": "^0.4.9",
     "preact": "^10.28.0",
     "preact-custom-element": "^4.6.0",
     "preact-render-to-string": "^6.6.4",
     "rolldown": "^1.0.0-beta.55",
-    "tinyglobby": "^0.2.15",
     "turbo-stream": "^3.1.0"
   },
   "devDependencies": {
