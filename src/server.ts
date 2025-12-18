@@ -634,8 +634,9 @@ function createDeferredStream(
           const dataIsland = await serializeDataIsland(dataIslandId, data);
           // Dispatch a custom event that the hydration coordinator listens for
           // Use JSON.stringify to safely escape tag/id values and prevent injection
+          // Add id to script so diff-dom-streaming can identify it and avoid duplicates
           const hydrationDetail = JSON.stringify({ tag, id: dataIslandId });
-          const hydrationScript = `<script>requestAnimationFrame(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})))</script>`;
+          const hydrationScript = `<script id="${tag}-hydrate">requestAnimationFrame(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})))</script>`;
           controller.enqueue(encoder.encode(dataIsland + hydrationScript));
         } catch (err) {
           const errorScript = `<script>console.error("[solarflare] Deferred error:", ${JSON.stringify((err as Error).message)})</script>`;
