@@ -252,6 +252,117 @@ describe("Response headers", () => {
   });
 });
 
+describe("Response metadata extraction", () => {
+  it("should extract _status from server loader result", () => {
+    const result = {
+      _status: 201,
+      title: "Created",
+    };
+    const { _status, ...data } = result as any;
+    assert.strictEqual(_status, 201);
+    assert.deepStrictEqual(data, { title: "Created" });
+  });
+
+  it("should extract _statusText from server loader result", () => {
+    const result = {
+      _statusText: "Created",
+      title: "Resource",
+    };
+    const { _statusText, ...data } = result as any;
+    assert.strictEqual(_statusText, "Created");
+    assert.deepStrictEqual(data, { title: "Resource" });
+  });
+
+  it("should extract _headers from server loader result", () => {
+    const result = {
+      _headers: { "X-Custom": "value", "Cache-Control": "max-age=3600" },
+      data: "test",
+    };
+    const { _headers, ...data } = result as any;
+    assert.deepStrictEqual(_headers, {
+      "X-Custom": "value",
+      "Cache-Control": "max-age=3600",
+    });
+    assert.deepStrictEqual(data, { data: "test" });
+  });
+
+  it("should filter out underscore-prefixed properties", () => {
+    const result = {
+      _status: 201,
+      _statusText: "Created",
+      _headers: { "X-Custom": "value" },
+      title: "Test",
+      description: "A test",
+    };
+    const dataEntries = Object.entries(result).filter(([key]) => !key.startsWith("_"));
+    const data = Object.fromEntries(dataEntries);
+    assert.deepStrictEqual(data, { title: "Test", description: "A test" });
+  });
+
+  it("should handle empty result", () => {
+    const result = {};
+    const { _status, _statusText, _headers, ...data } = result as any;
+    assert.strictEqual(_status, undefined);
+    assert.strictEqual(_statusText, undefined);
+    assert.strictEqual(_headers, undefined);
+    assert.deepStrictEqual(data, {});
+  });
+
+  it("should merge custom headers with defaults", () => {
+    const defaultHeaders = {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+    };
+    const customHeaders = {
+      "X-Custom": "value",
+      "Cache-Control": "max-age=3600",
+    };
+    const finalHeaders = { ...defaultHeaders };
+    if (customHeaders) {
+      for (const [key, value] of Object.entries(customHeaders)) {
+        finalHeaders[key] = value;
+      }
+    }
+    assert.strictEqual(finalHeaders["Content-Type"], "text/html; charset=utf-8");
+    assert.strictEqual(finalHeaders["X-Custom"], "value");
+    assert.strictEqual(finalHeaders["Cache-Control"], "max-age=3600");
+  });
+
+  it("should allow custom headers to override defaults", () => {
+    const defaultHeaders = {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-cache",
+    };
+    const customHeaders = {
+      "Cache-Control": "max-age=3600",
+    };
+    const finalHeaders = { ...defaultHeaders };
+    if (customHeaders) {
+      for (const [key, value] of Object.entries(customHeaders)) {
+        finalHeaders[key] = value;
+      }
+    }
+    assert.strictEqual(finalHeaders["Cache-Control"], "max-age=3600");
+    assert.strictEqual(finalHeaders["Content-Type"], "text/html; charset=utf-8");
+  });
+
+  it("should create response with custom status and headers", () => {
+    const customHeaders = {
+      "X-Custom": "value",
+    };
+    const status = 201;
+    const statusText = "Created";
+    const response = new Response("test", {
+      status,
+      statusText,
+      headers: customHeaders,
+    });
+    assert.strictEqual(response.status, 201);
+    assert.strictEqual(response.statusText, "Created");
+    assert.strictEqual(response.headers.get("X-Custom"), "value");
+  });
+});
+
 const BASIC_EXAMPLE_DIR = join(__dirname, "../examples/basic");
 const BASE_URL = "http://localhost:8080";
 

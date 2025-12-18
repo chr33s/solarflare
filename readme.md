@@ -74,6 +74,32 @@ export default async function server(
 }
 ```
 
+#### With Response Metadata
+
+Control HTTP status, status text, and headers from your server handler:
+
+```tsx
+export default async function server(
+  request: Request,
+  params: Record<string, string>
+) {
+  return {
+    _status: 201,
+    _statusText: "Created",
+    _headers: {
+      "X-Custom-Header": "value",
+      "Cache-Control": "max-age=3600"
+    },
+    title: "Resource Created"
+  }
+}
+```
+
+**Notes:**
+- `_status` defaults to 200 if not provided
+- `_headers` are merged with default headers (custom headers take priority)
+- All `_*` prefixed properties are reserved for response metadata and won't be passed as component props
+
 ### Client Component
 
 ```tsx

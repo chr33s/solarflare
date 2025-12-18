@@ -163,16 +163,31 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     // Load props from server loader if available
     let shellData: Record<string, unknown> = {};
     let deferredPromise: Promise<Record<string, unknown>> | null = null;
+    let responseHeaders: Record<string, string> | undefined;
+    let responseStatus: number | undefined;
+    let responseStatusText: string | undefined;
 
     if (serverPath && serverPath in typedModules.server) {
       const serverMod = await typedModules.server[serverPath]();
       const loader = serverMod.default as ServerLoader;
-      const result = await loader(request, params);
+      const result = await loader(request, params) as Record<string, unknown> & {
+        _headers?: Record<string, string>;
+        _status?: number;
+        _statusText?: string;
+      };
+
+      // Extract response metadata from underscore-prefixed properties
+      responseHeaders = result._headers;
+      responseStatus = result._status;
+      responseStatusText = result._statusText;
 
       const immediateData: Record<string, unknown> = {};
       const deferredData: Record<string, Promise<unknown>> = {};
 
-      for (const [key, value] of Object.entries(result)) {
+      // Filter out underscore-prefixed properties (response metadata)
+      const dataEntries = Object.entries(result).filter(([key]) => !key.startsWith("_"));
+
+      for (const [key, value] of dataEntries) {
         if (value instanceof Promise) {
           deferredData[key] = value;
         } else {
@@ -228,9 +243,24 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       styles: stylesheets,
       devScripts,
       deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
+      _headers: responseHeaders,
+      _status: responseStatus,
+      _statusText: responseStatusText,
     });
 
-    return new Response(stream, { headers });
+    // Merge custom headers with defaults, custom headers take priority
+    const finalHeaders = { ...headers };
+    if (stream.headers) {
+      for (const [key, value] of Object.entries(stream.headers)) {
+        finalHeaders[key] = value;
+      }
+    }
+
+    return new Response(stream, {
+      headers: finalHeaders,
+      status: stream.status ?? 200,
+      statusText: stream.statusText,
+    });
   } catch (error) {
     // Render 500 error page wrapped in layouts
     const serverError = error instanceof Error ? error : new Error(String(error));

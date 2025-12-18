@@ -580,11 +580,17 @@ export async function renderToStream(
     const { tag, promise } = options.deferred;
     const resultStream = createDeferredStream(transformedStream, tag, promise);
     (resultStream as SolarflareStream).allReady = stream.allReady;
+    (resultStream as SolarflareStream).status = options._status ?? 200;
+    (resultStream as SolarflareStream).statusText = options._statusText;
+    (resultStream as SolarflareStream).headers = options._headers;
     return resultStream as SolarflareStream;
   }
 
   const resultStream = transformedStream as SolarflareStream;
   resultStream.allReady = stream.allReady;
+  resultStream.status = options._status ?? 200;
+  resultStream.statusText = options._statusText;
+  resultStream.headers = options._headers;
   return resultStream;
 }
 

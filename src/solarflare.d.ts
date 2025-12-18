@@ -752,6 +752,9 @@ declare module "@chr33s/solarflare/server" {
     styles?: string[];
     devScripts?: string[];
     deferred?: DeferredData;
+    _headers?: Record<string, string>;
+    _status?: number;
+    _statusText?: string;
   }
 
   /**
@@ -759,6 +762,9 @@ declare module "@chr33s/solarflare/server" {
    */
   export interface SolarflareStream extends ReadableStream<Uint8Array> {
     allReady: Promise<void>;
+    status?: number;
+    statusText?: string;
+    headers?: Record<string, string>;
   }
 
   /**

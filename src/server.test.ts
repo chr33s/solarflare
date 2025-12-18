@@ -276,3 +276,97 @@ describe("generateAssetTags", () => {
     assert.strictEqual(result, "");
   });
 });
+
+describe("renderToStream with response metadata", () => {
+  it("should set default status to 200", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+    const stream = await import("./server.ts").then((m) => m.renderToStream(vnode, {}));
+    assert.strictEqual(stream.status, 200);
+  });
+
+  it("should set custom status from options", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, { _status: 201 }),
+    );
+    assert.strictEqual(stream.status, 201);
+  });
+
+  it("should set statusText from options", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, { _statusText: "Created" }),
+    );
+    assert.strictEqual(stream.statusText, "Created");
+  });
+
+  it("should set headers from options", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+    const customHeaders = { "X-Custom": "value", "Cache-Control": "no-cache" };
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, { _headers: customHeaders }),
+    );
+    assert.deepStrictEqual(stream.headers, customHeaders);
+  });
+
+  it("should handle 404 status", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "Not Found");
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, { _status: 404, _statusText: "Not Found" }),
+    );
+    assert.strictEqual(stream.status, 404);
+    assert.strictEqual(stream.statusText, "Not Found");
+  });
+
+  it("should handle 500 status", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "Error");
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, { _status: 500, _statusText: "Internal Server Error" }),
+    );
+    assert.strictEqual(stream.status, 500);
+    assert.strictEqual(stream.statusText, "Internal Server Error");
+  });
+
+  it("should combine all response metadata", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+    const customHeaders = {
+      "X-Custom": "value",
+      "Cache-Control": "max-age=3600",
+    };
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, {
+        _status: 201,
+        _statusText: "Created",
+        _headers: customHeaders,
+      }),
+    );
+    assert.strictEqual(stream.status, 201);
+    assert.strictEqual(stream.statusText, "Created");
+    assert.deepStrictEqual(stream.headers, customHeaders);
+  });
+
+  it("should preserve status and headers with deferred data", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+    const customHeaders = { "X-Deferred": "true" };
+    const deferredPromise = Promise.resolve({ data: "deferred" });
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, {
+        _status: 202,
+        _statusText: "Accepted",
+        _headers: customHeaders,
+        deferred: { tag: "test-component", promise: deferredPromise },
+      }),
+    );
+    assert.strictEqual(stream.status, 202);
+    assert.strictEqual(stream.statusText, "Accepted");
+    assert.deepStrictEqual(stream.headers, customHeaders);
+  });
+});
