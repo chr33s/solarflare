@@ -12,23 +12,38 @@ const hookStateMap = new Map<string, unknown[]>();
 /** Global storage for component refs across HMR updates. */
 const refStateMap = new Map<string, Map<number, unknown>>();
 
-/** Saves hook state for a component before HMR update. */
+/**
+ * Saves hook state for a component before HMR update.
+ * @param componentId - Unique component identifier
+ * @param hookState - Array of hook state values
+ */
 export function saveHookState(componentId: string, hookState: unknown[]): void {
   hookStateMap.set(componentId, [...hookState]);
 }
 
-/** Restores hook state for a component after HMR update. */
+/**
+ * Restores hook state for a component after HMR update.
+ * @param componentId - Unique component identifier
+ * @returns Previously saved hook state or undefined
+ */
 export function restoreHookState(componentId: string): unknown[] | undefined {
   return hookStateMap.get(componentId);
 }
 
-/** Clears hook state for a component. */
+/**
+ * Clears hook state for a component.
+ * @param componentId - Unique component identifier
+ */
 export function clearHookState(componentId: string): void {
   hookStateMap.delete(componentId);
   refStateMap.delete(componentId);
 }
 
-/** Gets or creates the ref storage for a component. */
+/**
+ * Gets or creates the ref storage for a component.
+ * @param componentId - Unique component identifier
+ * @returns Map of ref index to ref value
+ */
 export function getRefStorage(componentId: string): Map<number, unknown> {
   let storage = refStateMap.get(componentId);
   if (!storage) {
@@ -45,7 +60,10 @@ export function getRefStorage(componentId: string): Map<number, unknown> {
 /** Stored scroll positions keyed by component tag. */
 const scrollPositions = new Map<string, { x: number; y: number }>();
 
-/** Saves current scroll position before HMR update. */
+/**
+ * Saves current scroll position before HMR update.
+ * @param tag - Optional component tag for scoped storage
+ */
 export function saveScrollPosition(tag?: string): void {
   const key = tag ?? "__global__";
   scrollPositions.set(key, {
@@ -54,7 +72,10 @@ export function saveScrollPosition(tag?: string): void {
   });
 }
 
-/** Restores scroll position after HMR update. */
+/**
+ * Restores scroll position after HMR update.
+ * @param tag - Optional component tag for scoped retrieval
+ */
 export function restoreScrollPosition(tag?: string): void {
   const key = tag ?? "__global__";
   const pos = scrollPositions.get(key);
@@ -66,7 +87,10 @@ export function restoreScrollPosition(tag?: string): void {
   }
 }
 
-/** Clears stored scroll position. */
+/**
+ * Clears stored scroll position.
+ * @param tag - Optional component tag for scoped deletion
+ */
 export function clearScrollPosition(tag?: string): void {
   const key = tag ?? "__global__";
   scrollPositions.delete(key);
@@ -79,7 +103,10 @@ export function clearAllHMRState(): void {
   scrollPositions.clear();
 }
 
-/** Gets the current size of HMR state maps (useful for debugging memory issues). */
+/**
+ * Gets the current size of HMR state maps (useful for debugging memory issues).
+ * @returns Object with counts of hook states, ref states, and scroll positions
+ */
 export function getHMRStateSize(): {
   hookStates: number;
   refStates: number;
@@ -256,7 +283,10 @@ export class HMRErrorBoundary extends PreactComponent<
 /** Tracks loaded CSS files for HMR. */
 const loadedStylesheets = new Map<string, HTMLLinkElement>();
 
-/** Reloads a CSS file by updating its href with a cache-busting query. */
+/**
+ * Reloads a CSS file by updating its href with a cache-busting query.
+ * @param href - Stylesheet URL to reload
+ */
 export function reloadStylesheet(href: string): void {
   // Find existing link element
   const existing =
@@ -279,7 +309,10 @@ export function reloadStylesheet(href: string): void {
   }
 }
 
-/** Removes a stylesheet from the document. */
+/**
+ * Removes a stylesheet from the document.
+ * @param href - Stylesheet URL to remove
+ */
 export function removeStylesheet(href: string): void {
   const existing =
     loadedStylesheets.get(href) ?? document.querySelector<HTMLLinkElement>(`link[href^="${href}"]`);
@@ -291,7 +324,11 @@ export function removeStylesheet(href: string): void {
   }
 }
 
-/** Accepts CSS HMR updates. Returns cleanup function. */
+/**
+ * Accepts CSS HMR updates.
+ * @param cssFiles - CSS file paths to watch
+ * @returns Cleanup function to remove stylesheets
+ */
 export function acceptCssHMR(cssFiles: string[]): () => void {
   // Initial load
   for (const file of cssFiles) {
@@ -322,7 +359,14 @@ export interface HMRWrapperOptions {
   errorFallback?: (error: Error, retry: () => void) => VNode;
 }
 
-/** Creates an HMR-enabled component wrapper. */
+/**
+ * Creates an HMR-enabled component wrapper.
+ * @template P - Props type
+ * @param hmrVersion - Signal tracking HMR version
+ * @param getComponent - Function returning current component
+ * @param options - Wrapper options
+ * @returns Wrapped component with HMR support
+ */
 export function createHMRWrapper<P extends Record<string, unknown>>(
   hmrVersion: Signal<number>,
   getComponent: () => FunctionComponent<P>,
@@ -358,7 +402,11 @@ export function createHMRWrapper<P extends Record<string, unknown>>(
 // HMR Event Helpers
 // ============================================================================
 
-/** Dispatches an HMR event for external listeners. */
+/**
+ * Dispatches an HMR event for external listeners.
+ * @param type - Event type
+ * @param detail - Event detail with tag and optional error
+ */
 export function dispatchHMREvent(
   type: "update" | "error" | "recover",
   detail: { tag: string; error?: Error },
@@ -373,7 +421,12 @@ export function dispatchHMREvent(
   );
 }
 
-/** Registers an HMR event listener. */
+/**
+ * Registers an HMR event listener.
+ * @param type - Event type to listen for
+ * @param handler - Callback for event
+ * @returns Unsubscribe function
+ */
 export function onHMREvent(
   type: "update" | "error" | "recover",
   handler: (detail: { tag: string; error?: Error }) => void,

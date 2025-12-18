@@ -28,17 +28,28 @@ interface ChunkManifest {
 
 const manifest = chunkManifest as ChunkManifest;
 
-/** Gets the script path for a route from the chunk manifest. */
+/**
+ * Gets the script path for a route from the chunk manifest.
+ * @param tag - Custom element tag name
+ * @returns Script path or undefined if not found
+ */
 function getScriptPath(tag: string): string | undefined {
   return manifest.tags[tag];
 }
 
-/** Gets stylesheets for a route pattern from the chunk manifest. */
+/**
+ * Gets stylesheets for a route pattern from the chunk manifest.
+ * @param pattern - Route pattern
+ * @returns Array of stylesheet paths
+ */
 function getStylesheets(pattern: string): string[] {
   return manifest.styles[pattern] ?? [];
 }
 
-/** Gets dev mode scripts from the chunk manifest. */
+/**
+ * Gets dev mode scripts from the chunk manifest.
+ * @returns Array of dev script paths or undefined
+ */
 function getDevScripts(): string[] | undefined {
   return manifest.devScripts;
 }
@@ -51,7 +62,11 @@ type ServerLoader = (
 
 const router = createRouter(typedModules);
 
-/** Finds paired module (server for client, or client for server). */
+/**
+ * Finds paired module (server for client, or client for server).
+ * @param path - Module path to find pair for
+ * @returns Paired module path or null if not found
+ */
 function findPairedModule(path: string): string | null {
   if (path.includes(".client.")) {
     const serverPath = path.replace(".client.", ".server.");
@@ -71,7 +86,12 @@ interface WorkerEnv {
   [key: string]: unknown;
 }
 
-/** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
+/**
+ * Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR.
+ * @param request - Incoming HTTP request
+ * @param env - Worker environment bindings
+ * @returns HTTP Response with streamed HTML or error page
+ */
 async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
 

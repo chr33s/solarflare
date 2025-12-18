@@ -28,7 +28,10 @@ import {
 /** Marker for asset injection during streaming. */
 export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
 
-/** Assets placeholder component for layout injection. */
+/**
+ * Assets placeholder component for layout injection.
+ * @returns VNode with assets marker
+ */
 export function Assets(): VNode<any> {
   return h("solarflare-assets", { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } });
 }
@@ -77,7 +80,11 @@ export interface Route {
   type: "client" | "server";
 }
 
-/** Converts file path to URLPattern with parsed metadata. */
+/**
+ * Converts file path to URLPattern with parsed metadata.
+ * @param filePath - File path to parse
+ * @returns Parsed pattern with pathname and params
+ */
 export function parsePattern(filePath: string): ParsedPattern {
   const parsed = parsePath(filePath);
 
@@ -105,7 +112,11 @@ export interface ModuleMap {
   error?: () => Promise<{ default: unknown }>;
 }
 
-/** Creates router from module map, returning sorted routes array. */
+/**
+ * Creates router from module map, returning sorted routes array.
+ * @param modules - Module map with server, client, layout entries
+ * @returns Sorted array of route definitions
+ */
 export function createRouter(modules: ModuleMap): Route[] {
   // Combine server and client modules for routing (layouts are handled separately)
   const routeModules = { ...modules.server, ...modules.client };
@@ -157,7 +168,12 @@ export interface LayoutHierarchy {
   checkedPaths: string[];
 }
 
-/** Finds all ancestor layouts for a route path, root to leaf order. */
+/**
+ * Finds all ancestor layouts for a route path, root to leaf order.
+ * @param routePath - Route file path
+ * @param modules - Layout module loaders
+ * @returns Layout hierarchy with layouts and segments
+ */
 export function findLayoutHierarchy(
   routePath: string,
   modules: Record<string, () => Promise<{ default: unknown }>>,
@@ -201,7 +217,12 @@ export function findLayoutHierarchy(
   return { layouts, segments, checkedPaths };
 }
 
-/** Finds ancestor layouts for a route using structured module map. */
+/**
+ * Finds ancestor layouts for a route using structured module map.
+ * @param routePath - Route file path
+ * @param modules - Module map
+ * @returns Array of layouts from root to leaf
+ */
 export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
   return findLayoutHierarchy(routePath, modules.layout).layouts;
 }
@@ -218,7 +239,12 @@ export interface RouteMatch {
   complete: boolean;
 }
 
-/** Matches URL against routes using URLPattern. */
+/**
+ * Matches URL against routes using URLPattern.
+ * @param routes - Array of routes to match against
+ * @param url - URL to match
+ * @returns Route match or null if no match
+ */
 export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   for (const route of routes) {
     const result = route.pattern.exec(url);
@@ -247,7 +273,12 @@ export interface LayoutProps {
   children: VNode<any>;
 }
 
-/** Wraps content in nested layouts (root to leaf order). */
+/**
+ * Wraps content in nested layouts (root to leaf order).
+ * @param content - VNode content to wrap
+ * @param layouts - Array of layouts to apply
+ * @returns VNode wrapped in all layouts
+ */
 export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>> {
   let wrapped: VNode<any> = content;
 
@@ -261,7 +292,13 @@ export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): P
   return wrapped;
 }
 
-/** Generates asset HTML tags for injection. */
+/**
+ * Generates asset HTML tags for injection.
+ * @param script - Script path
+ * @param styles - Stylesheet paths
+ * @param devScripts - Development scripts
+ * @returns HTML string with asset tags
+ */
 export function generateAssetTags(
   script?: string,
   styles?: string[],
@@ -291,7 +328,13 @@ export function generateAssetTags(
   return html;
 }
 
-/** Renders a component with its tag wrapper for hydration. */
+/**
+ * Renders a component with its tag wrapper for hydration.
+ * @param Component - Preact component to render
+ * @param tag - Custom element tag name
+ * @param props - Component props
+ * @returns VNode wrapped in custom element tag
+ */
 export function renderComponent(
   Component: FunctionComponent<any>,
   tag: string,
@@ -315,7 +358,14 @@ export interface ErrorPageProps {
   reset?: () => void;
 }
 
-/** Renders an error page wrapped in layouts. */
+/**
+ * Renders an error page wrapped in layouts.
+ * @param error - Error to display
+ * @param url - Request URL
+ * @param modules - Module map
+ * @param statusCode - HTTP status code
+ * @returns VNode for error page
+ */
 export async function renderErrorPage(
   error: Error,
   url: URL,
@@ -374,7 +424,10 @@ export interface StreamRenderOptions {
   deferred?: DeferredData;
 }
 
-/** Initializes server-side store with request context. */
+/**
+ * Initializes server-side store with request context.
+ * @param options - Stream render options
+ */
 export function initServerContext(options: StreamRenderOptions): void {
   resetStore();
   resetHeadContext();
@@ -397,7 +450,14 @@ export function initServerContext(options: StreamRenderOptions): void {
   }
 }
 
-/** Transforms stream to inject assets, head tags, and store hydration. */
+/**
+ * Transforms stream to inject assets, head tags, and store hydration.
+ * @param storeScript - Serialized store script
+ * @param script - Script path
+ * @param styles - Stylesheet paths
+ * @param devScripts - Development scripts
+ * @returns TransformStream for asset injection
+ */
 function createAssetInjectionTransformer(
   storeScript: string,
   script?: string,
@@ -492,7 +552,12 @@ export interface SolarflareStream extends ReadableStream<Uint8Array> {
   allReady: Promise<void>;
 }
 
-/** Renders a VNode to a streaming response with asset injection. */
+/**
+ * Renders a VNode to a streaming response with asset injection.
+ * @param vnode - Preact VNode to render
+ * @param options - Streaming render options
+ * @returns Streaming response with allReady promise
+ */
 export async function renderToStream(
   vnode: VNode<any>,
   options: StreamRenderOptions = {},
@@ -523,7 +588,13 @@ export async function renderToStream(
   return resultStream;
 }
 
-/** Creates stream that flushes HTML immediately, then appends deferred data. */
+/**
+ * Creates stream that flushes HTML immediately, then appends deferred data.
+ * @param inputStream - Source stream to read from
+ * @param tag - Component tag for hydration
+ * @param promise - Deferred data promise
+ * @returns ReadableStream with deferred data appended
+ */
 function createDeferredStream(
   inputStream: ReadableStream<Uint8Array>,
   tag: string,

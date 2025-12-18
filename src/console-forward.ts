@@ -12,7 +12,12 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   none: 5,
 };
 
-/** Checks if a log level should be shown given the threshold. */
+/**
+ * Checks if a log level should be shown given the threshold.
+ * @param level - Log level to check
+ * @param threshold - Minimum log level threshold
+ * @returns Whether the log should be shown
+ */
 function shouldLog(level: string, threshold: LogLevel): boolean {
   const levelPriority = LOG_LEVEL_PRIORITY[level as LogLevel] ?? LOG_LEVEL_PRIORITY.log;
   const thresholdPriority = LOG_LEVEL_PRIORITY[threshold];
@@ -64,7 +69,11 @@ const colors = {
   gray: "\x1b[90m",
 };
 
-/** Gets color for log level. */
+/**
+ * Gets ANSI color code for log level.
+ * @param level - Log level
+ * @returns ANSI color code string
+ */
 function getLevelColor(level: string): string {
   switch (level) {
     case "error":
@@ -80,7 +89,11 @@ function getLevelColor(level: string): string {
   }
 }
 
-/** Formats log message for terminal output. */
+/**
+ * Formats log message for terminal output.
+ * @param log - Log entry to format
+ * @returns Formatted message string with ANSI colors
+ */
 function formatLogMessage(log: LogEntry): string {
   const color = getLevelColor(log.level);
   const prefix = `${color}[browser:${log.level}]${colors.reset}`;
@@ -114,7 +127,12 @@ function formatLogMessage(log: LogEntry): string {
   return message;
 }
 
-/** Processes console logs from the client. */
+/**
+ * Processes console logs from the client.
+ * @param request - Incoming POST request with log data
+ * @param logLevel - Minimum log level threshold
+ * @returns Response indicating success or failure
+ */
 export async function processConsoleLogs(
   request: Request,
   logLevel: LogLevel = "log",
@@ -142,14 +160,23 @@ export async function processConsoleLogs(
   }
 }
 
-/** Checks if request is a console forward request. */
+/**
+ * Checks if request is a console forward request.
+ * @param request - Incoming request to check
+ * @param options - Console forwarding options
+ * @returns Whether this is a console forward request
+ */
 export function isConsoleRequest(request: Request, options: ConsoleForwardOptions = {}): boolean {
   const { endpoint } = { ...DEFAULT_OPTIONS, ...options };
   const url = new URL(request.url);
   return url.pathname === endpoint && request.method === "POST";
 }
 
-/** Generates client-side script that patches console methods. */
+/**
+ * Generates client-side script that patches console methods.
+ * @param options - Console forwarding options
+ * @returns JavaScript code string for client injection
+ */
 export function generateClientScript(options: ConsoleForwardOptions = {}): string {
   const { endpoint, levels, includeStacks } = { ...DEFAULT_OPTIONS, ...options };
 

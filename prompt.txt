@@ -9,7 +9,16 @@ Solarflare provides a full-stack development experience with:
 - Automatic web component registration via preact-custom-element
 - SPA navigation using Navigation API with View Transitions
 - Signal-based reactive state management with @preact/signals
+- Hot module replacement with state preservation
 - Full TypeScript support throughout
+
+Tech stack:
+- TypeScript for static typing
+- Preact for lightweight UI components
+- Preact Signals for reactive state management
+- Node.js (≥v24.12.0) as primary runtime
+- Rolldown (Rust-based bundler) for client/server builds
+- Cloudflare Workers for server hosting
 
 This framework follows a convention-over-configuration approach where file
 naming determines routing behavior, component type, and hydration strategy.
@@ -116,15 +125,30 @@ const doubled: ReadonlySignal<number> = computed(() => count.value * 2);
 | `*.client.tsx`   | Client component, auto-registered as web component |
 | `*.server.tsx`   | Server handler, runs in Workers runtime            |
 | `_layout.tsx`    | Layout component, wraps child routes               |
+| `_error.tsx`     | Error boundary component                           |
 | `_*`             | Private (not routed)                               |
 | `$param`         | Dynamic URL segment → `:param`                     |
 | `index.*`        | Matches directory root                             |
+
+## Folder Conventions
+
+| Directory | Purpose                               |
+| --------- | ------------------------------------- |
+| `./src`   | Original (source) human readable code |
+| `./dist`  | Compiled (distribution) output code   |
+
+## Path Conventions
+
+| Pattern | Purpose                                               |
+| ------- | ----------------------------------------------------- |
+| `/_`    | Reserved for internal framework (e.g. `/_console`)    |
 
 ## Directory Structure Example
 
 ```
 src/
 ├── _layout.tsx           # Root layout
+├── _error.tsx            # Error boundary component
 ├── _components/          # Private components (not routed)
 │   └── nav.tsx
 ├── index.client.tsx      # Home page client component
@@ -693,8 +717,8 @@ import { reloadStylesheet, acceptCssHMR } from "@chr33s/solarflare/client";
 // Manually reload a stylesheet
 reloadStylesheet("/styles/main.css");
 
-// Accept CSS HMR for a specific file
-acceptCssHMR(import.meta.hot, "./styles.css");
+// Accept CSS HMR for specific files (returns cleanup function)
+const cleanup = acceptCssHMR(["./styles.css", "./theme.css"]);
 ```
 
 ## State Preservation
@@ -714,6 +738,20 @@ saveScrollPosition();
 // After HMR update
 const previousState = restoreHookState("my-component");
 restoreScrollPosition();
+```
+
+## HMR Error Boundary
+
+```typescript
+import { HMRErrorBoundary } from "@chr33s/solarflare/client";
+import { signal } from "@preact/signals";
+
+const hmrVersion = signal(0);
+
+// Wrap components to isolate crashes without affecting the app
+<HMRErrorBoundary tag="my-component" hmrVersion={hmrVersion}>
+  <MyComponent />
+</HMRErrorBoundary>
 ```
 
 </hmr_and_development>
@@ -1148,19 +1186,22 @@ export default function Dashboard({ user, stats }: { user: User; stats: Stats })
 solarflare [options]
 ```
 
-| Option                | Description                    |
-| --------------------- | ------------------------------ |
-| `--clean`, `-c`       | Clean output before build      |
-| `--debug`, `-d`       | Enable debugging               |
-| `--production`, `-p`  | Optimize build for production  |
-| `--serve`, `-s`       | Start development server       |
-| `--watch`, `-w`       | Watch for changes and rebuild  |
+| Option               | Description                    |
+| -------------------- | ------------------------------ |
+| `--clean`, `-c`      | Clean output before build      |
+| `--debug`, `-d`      | Enable debugging               |
+| `--production`, `-p` | Optimize build for production  |
+| `--serve`, `-s`      | Start development server (hmr) |
+| `--watch`, `-w`      | Watch for changes and rebuild  |
 
 ## Development Workflow
 
 ```sh
 # Install dependencies
 npm install
+
+# Check lint rules
+npm run check
 
 # Start development server with hot reload
 npm run dev
@@ -1170,10 +1211,6 @@ npm run build
 
 # Run tests
 npm run test
-
-# Deploy to Cloudflare
-wrangler deploy
-```
 
 # Deploy to Cloudflare
 wrangler deploy
@@ -1231,7 +1268,7 @@ npm add @chr33s/solarflare
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) ≥24.12.0
+- [Node.js](https://nodejs.org) ≥v24.12.0
 - Modern browser (Chrome 102+, Edge 102+, Safari 15.4+)
 
 </installation>

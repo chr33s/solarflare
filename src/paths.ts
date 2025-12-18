@@ -27,7 +27,11 @@ export interface ParsedPath {
   specificity: number;
 }
 
-/** Determines module kind from file path. */
+/**
+ * Determines module kind from file path.
+ * @param filePath - File path to analyze
+ * @returns Module kind based on file suffix
+ */
 function getModuleKind(filePath: string): ModuleKind {
   if (filePath.includes(".server.")) return "server";
   if (filePath.includes(".client.")) return "client";
@@ -36,7 +40,11 @@ function getModuleKind(filePath: string): ModuleKind {
   return "unknown";
 }
 
-/** Parses a file path into structured metadata. */
+/**
+ * Parses a file path into structured metadata.
+ * @param filePath - File path to parse (e.g., "./blog/$slug.client.tsx")
+ * @returns Parsed path information including pattern, tag, params, etc.
+ */
 export function parsePath(filePath: string): ParsedPath {
   const normalized = filePath.replace(/^\.\//, "").replace(/^.*\/app\//, "");
   const kind = getModuleKind(normalized);

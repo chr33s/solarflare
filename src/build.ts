@@ -89,7 +89,10 @@ const { values: args } = parseArgs({
   },
 });
 
-/** Auto-scaffolds missing template files. */
+/**
+ * Auto-scaffolds missing template files.
+ * @returns Promise that resolves when scaffolding completes
+ */
 async function scaffoldTemplates(): Promise<void> {
   const templates: Record<string, string> = {
     "index.ts": `import worker from "@chr33s/solarflare/worker";
@@ -143,7 +146,12 @@ export default function Layout({ children }: { children: VNode }) {
   }
 }
 
-/** Validates all route files using AST analysis. */
+/**
+ * Validates all route files using AST analysis.
+ * @param routeFiles - Route file paths to validate
+ * @param layoutFiles - Layout file paths to validate
+ * @returns Whether all validations passed
+ */
 async function validateRoutes(routeFiles: string[], layoutFiles: string[]): Promise<boolean> {
   const allFiles = [
     ...routeFiles.map((f) => join(APP_DIR, f)),
@@ -177,7 +185,12 @@ async function validateRoutes(routeFiles: string[], layoutFiles: string[]): Prom
   return !hasErrors;
 }
 
-/** Extracts props property names from a TypeScript file using the type checker. */
+/**
+ * Extracts props property names from a TypeScript file using the type checker.
+ * @param program - TypeScript program
+ * @param filePath - Absolute file path
+ * @returns Array of prop names
+ */
 function extractPropsFromProgram(program: ts.Program, filePath: string): string[] {
   const checker = program.getTypeChecker();
   const sourceFile = program.getSourceFile(filePath);
@@ -195,7 +208,11 @@ function extractPropsFromProgram(program: ts.Program, filePath: string): string[
   return properties.map((p) => p.getName());
 }
 
-/** Generates typed routes file using AST-based path parsing. */
+/**
+ * Generates typed routes file using AST-based path parsing.
+ * @param routeFiles - Route file paths
+ * @returns TypeScript type declaration content
+ */
 function generateRoutesTypeFile(routeFiles: string[]): string {
   const clientRoutes = routeFiles.filter((f) => f.includes(".client."));
 
@@ -237,12 +254,21 @@ interface ComponentMeta {
   hash?: string;
 }
 
-/** Normalizes asset path from nested directories to dot-separated. */
+/**
+ * Normalizes asset path from nested directories to dot-separated.
+ * @param path - Asset path to normalize
+ * @returns Normalized path with dots instead of slashes
+ */
 function normalizeAssetPath(path: string): string {
   return path.replace(/\//g, ".");
 }
 
-/** Generates chunk filename from file path. */
+/**
+ * Generates chunk filename from file path.
+ * @param file - Source file path
+ * @param contentHash - Optional content hash for cache busting
+ * @returns Chunk filename
+ */
 function getChunkName(file: string, contentHash?: string): string {
   const base = file
     .replace(/\.client\.tsx?$/, "")
@@ -266,28 +292,44 @@ async function getComponentMeta(program: ts.Program, file: string): Promise<Comp
   return { file, tag: parsed.tag, props, parsed, chunk, hash: contentHash };
 }
 
-/** Finds all route modules in the app directory. */
+/**
+ * Finds all route modules in the app directory.
+ * @returns Array of route module paths
+ */
 async function findRouteModules(): Promise<string[]> {
   return scanFiles("**/*.{client,server}.{ts,tsx}", APP_DIR);
 }
 
-/** Finds all layout files in the app directory. */
+/**
+ * Finds all layout files in the app directory.
+ * @returns Array of layout file paths
+ */
 async function findLayouts(): Promise<string[]> {
   return scanFiles("**/_layout.tsx", APP_DIR);
 }
 
-/** Finds the error file in the app directory. */
+/**
+ * Finds the error file in the app directory.
+ * @returns Error file path or null if not found
+ */
 async function findErrorFile(): Promise<string | null> {
   const files = await scanFiles("_error.tsx", APP_DIR);
   return files.length > 0 ? files[0] : null;
 }
 
-/** Finds all client components in the app directory. */
+/**
+ * Finds all client components in the app directory.
+ * @returns Array of client component paths
+ */
 async function findClientComponents(): Promise<string[]> {
   return scanFiles("**/*.client.tsx", APP_DIR);
 }
 
-/** Extracts CSS import paths from a TypeScript/TSX file. */
+/**
+ * Extracts CSS import paths from a TypeScript/TSX file.
+ * @param filePath - File path to analyze
+ * @returns Array of CSS import paths
+ */
 async function extractCssImports(filePath: string): Promise<string[]> {
   const content = await readText(filePath);
   const cssImports: string[] = [];
@@ -305,7 +347,11 @@ async function extractCssImports(filePath: string): Promise<string[]> {
   return cssImports;
 }
 
-/** Extracts component import paths from a TypeScript/TSX file. */
+/**
+ * Extracts component import paths from a TypeScript/TSX file.
+ * @param filePath - File path to analyze
+ * @returns Array of local component import paths
+ */
 async function extractComponentImports(filePath: string): Promise<string[]> {
   const content = await readText(filePath);
   const imports: string[] = [];
@@ -329,7 +375,12 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
   return imports;
 }
 
-/** Resolves an import path to an absolute file path. */
+/**
+ * Resolves an import path to an absolute file path.
+ * @param importPath - Import path from source
+ * @param fromFile - File containing the import
+ * @returns Absolute file path or null if not found
+ */
 async function resolveImportPath(importPath: string, fromFile: string): Promise<string | null> {
   const fromDir = fromFile.split("/").slice(0, -1).join("/");
 
@@ -366,7 +417,12 @@ async function resolveImportPath(importPath: string, fromFile: string): Promise<
   return null;
 }
 
-/** Recursively extracts all CSS imports from a file and its dependencies. */
+/**
+ * Recursively extracts all CSS imports from a file and its dependencies.
+ * @param filePath - File path to start from
+ * @param visited - Set of already-visited paths
+ * @returns Array of all CSS import paths
+ */
 async function extractAllCssImports(
   filePath: string,
   visited: Set<string> = new Set(),
@@ -418,7 +474,12 @@ interface RoutesManifest {
   }>;
 }
 
-/** Generates virtual client entry for a single component with HMR support. */
+/**
+ * Generates virtual client entry for a single component with HMR support.
+ * @param meta - Component metadata
+ * @param routesManifest - Routes manifest for routing
+ * @returns Generated JavaScript entry code
+ */
 function generateChunkedClientEntry(meta: ComponentMeta, routesManifest: RoutesManifest): string {
   const debugImports = args.debug
     ? `import 'preact/debug'
@@ -1033,7 +1094,10 @@ async function buildServer() {
   console.log("✅ Server build complete");
 }
 
-/** Cleans the dist directory. */
+/**
+ * Cleans the dist directory.
+ * @returns Promise that resolves when cleaning completes
+ */
 async function clean() {
   const { rm } = await import("fs/promises");
   try {
@@ -1044,7 +1108,10 @@ async function clean() {
   }
 }
 
-/** Main build function. */
+/**
+ * Main build function.
+ * @returns Promise that resolves when build completes
+ */
 async function build() {
   const startTime = performance.now();
 
@@ -1063,7 +1130,10 @@ async function build() {
   console.log(`\n🚀 Build completed in ${duration}s\n`);
 }
 
-/** Watch mode - rebuilds on file changes and optionally starts dev server. */
+/**
+ * Watch mode - rebuilds on file changes and optionally starts dev server.
+ * @returns Promise that never resolves (runs until interrupted)
+ */
 async function watchMode() {
   console.log("\n⚡ Solarflare Dev Mode\n");
 

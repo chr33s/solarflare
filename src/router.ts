@@ -72,7 +72,10 @@ export interface RouterConfig {
 /** Subscription callback for route changes. */
 export type RouteSubscriber = (match: RouteMatch | null) => void;
 
-/** Checks if View Transitions API is supported. */
+/**
+ * Checks if View Transitions API is supported.
+ * @returns Whether the browser supports view transitions
+ */
 export function supportsViewTransitions(): boolean {
   return typeof document !== "undefined" && "startViewTransition" in document;
 }
@@ -87,7 +90,14 @@ export interface FetchRetryOptions {
   retryOnStatus?: (status: number) => boolean;
 }
 
-/** Fetch with exponential backoff retry for transient failures. */
+/**
+ * Fetch with exponential backoff retry for transient failures.
+ * @param input - Request URL or RequestInfo
+ * @param init - Optional fetch init options
+ * @param options - Retry configuration
+ * @returns Response from successful fetch
+ * @throws Error if all retries are exhausted
+ */
 export async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -440,14 +450,23 @@ export class Router {
   }
 }
 
-/** Creates a router from a build-time routes manifest. */
+/**
+ * Creates a router from a build-time routes manifest.
+ * @param manifest - Routes manifest from build
+ * @param config - Optional router configuration
+ * @returns Configured Router instance
+ */
 export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
   return new Router(manifest, config);
 }
 
 let globalRouter: Router | null = null;
 
-/** Gets the global router instance. Throws if not initialized. */
+/**
+ * Gets the global router instance.
+ * @returns Global Router instance
+ * @throws Error if router not initialized
+ */
 export function getRouter(): Router {
   if (!globalRouter) {
     throw new Error("[solarflare] Router not initialized. Call initRouter() first.");
@@ -455,18 +474,33 @@ export function getRouter(): Router {
   return globalRouter;
 }
 
-/** Initializes the global router instance. */
+/**
+ * Initializes the global router instance.
+ * @param manifest - Routes manifest from build
+ * @param config - Optional router configuration
+ * @returns Initialized Router instance
+ */
 export function initRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
   globalRouter = createRouter(manifest, config);
   return globalRouter;
 }
 
-/** Navigates using the global router. */
+/**
+ * Navigates using the global router.
+ * @param to - Target URL or path
+ * @param options - Navigation options
+ * @returns Promise that resolves when navigation completes
+ */
 export function navigate(to: string | URL, options?: NavigateOptions): Promise<void> {
   return getRouter().navigate(to, options);
 }
 
-/** Checks if path is active using global router. */
+/**
+ * Checks if path is active using global router.
+ * @param path - Path to check
+ * @param exact - Require exact match
+ * @returns Whether the path is active
+ */
 export function isActive(path: string, exact = false): boolean {
   return getRouter().isActive(path, exact);
 }

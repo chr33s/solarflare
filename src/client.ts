@@ -4,7 +4,10 @@ import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./store.ts";
 
-/** Initializes client-side store from SSR hydration data. */
+/**
+ * Initializes client-side store from SSR hydration data.
+ * @returns Promise that resolves when initialization completes
+ */
 export async function initClient(): Promise<void> {
   await hydrateStore();
   initHydrationCoordinator();
@@ -36,7 +39,11 @@ export interface TagValidation {
   warnings: string[];
 }
 
-/** Parses file path into structured tag metadata. */
+/**
+ * Parses file path into structured tag metadata.
+ * @param path - File path to parse
+ * @returns Tag metadata including tag name, segments, and params
+ */
 export function parseTagMeta(path: string): TagMeta {
   const parsed = parsePath(path);
 
@@ -54,7 +61,11 @@ export function parseTagMeta(path: string): TagMeta {
   };
 }
 
-/** Validates a tag against web component naming rules. */
+/**
+ * Validates a tag against web component naming rules.
+ * @param meta - Tag metadata to validate
+ * @returns Validation result with errors and warnings
+ */
 export function validateTag(meta: TagMeta): TagValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -123,7 +134,13 @@ export interface DefineOptions {
   validate?: boolean;
 }
 
-/** Registers a Preact component as a web component (build-time macro). */
+/**
+ * Registers a Preact component as a web component (build-time macro).
+ * @template P - Props type extending Record<string, any>
+ * @param Component - Preact function component to register
+ * @param options - Registration options
+ * @returns The original component (pass-through for composition)
+ */
 export function define<P extends Record<string, any>>(
   Component: FunctionComponent<P>,
   options?: DefineOptions,
