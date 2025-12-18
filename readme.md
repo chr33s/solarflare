@@ -15,8 +15,7 @@ File-based routing for Preact + Cloudflare Workers with SSR streaming and web co
 
 ## Requirements
 
-- [Bun](https://bun.sh) or pre-compiled binaries in `bin/`
-- [Node.js](https://nodejs.org) ≥22.18.0
+- [Node.js](https://nodejs.org) ≥v24.12.0 (primary runtime)
 - Modern browser (Chrome 102+, Edge 102+, Safari 15.4+)
 
 ## Examples
@@ -30,19 +29,20 @@ File-based routing for Preact + Cloudflare Workers with SSR streaming and web co
 solarflare [options]
 ```
 
-| Option            | Description                        |
-| ----------------- | ---------------------------------- |
-| `--watch`, `-w`   | Watch for changes and rebuild      |
-| `--serve`, `-s`   | Start development server           |
-| `--clean`, `-c`   | Clean output before build          |
-| `--verbose`, `-v` | Verbose logging                    |
+| Option               | Description                    |
+| -------------------- | ------------------------------ |
+| `--clean`, `-c`      | Clean output before build      |
+| `--debug`, `-d`      | Enable debugging               |
+| `--production`, `-p` | Optimize build for production  |
+| `--serve`, `-s`      | Start development server (hmr) |
+| `--watch`, `-w`      | Watch for changes and rebuild  |
 
 ## Folder Conventions
 
-| Directory    | Purpose                                |
-| ------------ | -------------------------------------- |
-| `./src`      | Original (source) human readable code  |
-| `./dist`     | Compiled (distribution) output code    |
+| Directory | Purpose                               |
+| --------- | ------------------------------------- |
+| `./src`   | Original (source) human readable code |
+| `./dist`  | Compiled (distribution) output code   |
 
 ## File Conventions
 
@@ -54,6 +54,12 @@ solarflare [options]
 | `_*`           | Private (not routed)                               |
 | `$param`       | Dynamic URL segment → `:param`                     |
 | `index.*`      | Matches directory root                             |
+
+## Path Conventions
+
+| Pattern | Purpose                                               |
+| ------- | ----------------------------------------------------- |
+| `/_`    | is reserved for internal framework (e.g. `/_console`) |
 
 ## API
 
@@ -103,14 +109,22 @@ onHMREvent("error", ({ tag, error }) => console.error(`Error:`, error))
 
 ## Development
 
+### Node.js (Primary)
+
 ```sh
-bun install && bun run dev
+npm install && npm run dev
 ```
 
 ## Build
 
 ```sh
-bun install && bun run build:cli --all
+npm install && npm run build
+```
+
+## Testing
+
+```sh
+npm run test
 ```
 
 ## License

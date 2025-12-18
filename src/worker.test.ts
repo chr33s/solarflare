@@ -1,7 +1,29 @@
-import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { spawn, type Subprocess } from "bun";
-import { join } from "node:path";
+import { describe, it, before, after } from "node:test";
+import * as assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 import { chromium, type Browser } from "playwright";
+
+// Helper to spawn a process and wait for it
+function spawnAsync(
+  command: string[],
+  options: { cwd: string },
+): { process: ChildProcess; exited: Promise<number | null> } {
+  const proc = spawn(command[0], command.slice(1), {
+    cwd: options.cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const exited = new Promise<number | null>((resolve) => {
+    proc.on("close", (code) => resolve(code));
+    proc.on("error", () => resolve(null));
+  });
+
+  return { process: proc, exited };
+}
 
 describe("findPairedModule helper logic", () => {
   // Test the logic that would be in findPairedModule
@@ -23,7 +45,7 @@ describe("findPairedModule helper logic", () => {
       client: ["./blog/$slug.client.tsx"],
     };
     const result = findPairedModule("./blog/$slug.client.tsx", modules);
-    expect(result).toBe("./blog/$slug.server.tsx");
+    assert.strictEqual(result, "./blog/$slug.server.tsx");
   });
 
   it("should find client module for server module", () => {
@@ -32,7 +54,7 @@ describe("findPairedModule helper logic", () => {
       client: ["./blog/$slug.client.tsx"],
     };
     const result = findPairedModule("./blog/$slug.server.tsx", modules);
-    expect(result).toBe("./blog/$slug.client.tsx");
+    assert.strictEqual(result, "./blog/$slug.client.tsx");
   });
 
   it("should return null when no paired module exists", () => {
@@ -41,7 +63,7 @@ describe("findPairedModule helper logic", () => {
       client: ["./blog/$slug.client.tsx"],
     };
     const result = findPairedModule("./api/data.server.tsx", modules);
-    expect(result).toBeNull();
+    assert.strictEqual(result, null);
   });
 
   it("should return null for non-client/server paths", () => {
@@ -50,7 +72,7 @@ describe("findPairedModule helper logic", () => {
       client: [],
     };
     const result = findPairedModule("./utils/helpers.ts", modules);
-    expect(result).toBeNull();
+    assert.strictEqual(result, null);
   });
 });
 
@@ -69,9 +91,9 @@ describe("ChunkManifest structure", () => {
       styles: { "/": ["/index.css"] },
     };
 
-    expect(manifest.chunks.index).toBe("index.abc123.js");
-    expect(manifest.tags["sf-root"]).toBe("/index.abc123.js");
-    expect(manifest.styles["/"]).toEqual(["/index.css"]);
+    assert.strictEqual(manifest.chunks.index, "index.abc123.js");
+    assert.strictEqual(manifest.tags["sf-root"], "/index.abc123.js");
+    assert.deepStrictEqual(manifest.styles["/"], ["/index.css"]);
   });
 
   it("should handle optional devScripts", () => {
@@ -82,7 +104,7 @@ describe("ChunkManifest structure", () => {
       devScripts: ["/console-forward.js"],
     };
 
-    expect(manifestWithDev.devScripts).toEqual(["/console-forward.js"]);
+    assert.deepStrictEqual(manifestWithDev.devScripts, ["/console-forward.js"]);
 
     const manifestWithoutDev: ChunkManifest = {
       chunks: {},
@@ -90,7 +112,7 @@ describe("ChunkManifest structure", () => {
       styles: {},
     };
 
-    expect(manifestWithoutDev.devScripts).toBeUndefined();
+    assert.strictEqual(manifestWithoutDev.devScripts, undefined);
   });
 });
 
@@ -101,12 +123,12 @@ describe("getScriptPath helper logic", () => {
 
   it("should return script path for known tag", () => {
     const manifest = { tags: { "sf-root": "/index.abc123.js" } };
-    expect(getScriptPath("sf-root", manifest)).toBe("/index.abc123.js");
+    assert.strictEqual(getScriptPath("sf-root", manifest), "/index.abc123.js");
   });
 
   it("should return undefined for unknown tag", () => {
     const manifest = { tags: { "sf-root": "/index.js" } };
-    expect(getScriptPath("sf-unknown", manifest)).toBeUndefined();
+    assert.strictEqual(getScriptPath("sf-unknown", manifest), undefined);
   });
 });
 
@@ -120,17 +142,17 @@ describe("getStylesheets helper logic", () => {
 
   it("should return stylesheets for known pattern", () => {
     const manifest = { styles: { "/blog": ["/blog.css", "/theme.css"] } };
-    expect(getStylesheets("/blog", manifest)).toEqual(["/blog.css", "/theme.css"]);
+    assert.deepStrictEqual(getStylesheets("/blog", manifest), ["/blog.css", "/theme.css"]);
   });
 
   it("should return empty array for unknown pattern", () => {
     const manifest = { styles: { "/": ["/index.css"] } };
-    expect(getStylesheets("/unknown", manifest)).toEqual([]);
+    assert.deepStrictEqual(getStylesheets("/unknown", manifest), []);
   });
 
   it("should return empty array when no styles defined", () => {
     const manifest = { styles: {} };
-    expect(getStylesheets("/", manifest)).toEqual([]);
+    assert.deepStrictEqual(getStylesheets("/", manifest), []);
   });
 });
 
@@ -146,7 +168,7 @@ describe("ServerLoader type expectations", () => {
     };
 
     const result = loader(new Request("http://localhost"), { slug: "test" });
-    expect(result).toEqual({ slug: "test" });
+    assert.deepStrictEqual(result, { slug: "test" });
   });
 
   it("should accept async loader", async () => {
@@ -155,7 +177,7 @@ describe("ServerLoader type expectations", () => {
     };
 
     const result = await loader(new Request("http://localhost"), { slug: "test" });
-    expect(result).toEqual({ slug: "test" });
+    assert.deepStrictEqual(result, { slug: "test" });
   });
 });
 
@@ -176,7 +198,7 @@ describe("WorkerEnv structure", () => {
     ];
 
     for (const env of envs) {
-      expect(env.WRANGLER_LOG).toBeDefined();
+      assert.ok(env.WRANGLER_LOG !== undefined);
     }
   });
 
@@ -187,8 +209,8 @@ describe("WorkerEnv structure", () => {
       API_KEY: "secret",
     };
 
-    expect(env.DATABASE_URL).toBe("postgres://...");
-    expect(env.API_KEY).toBe("secret");
+    assert.strictEqual(env.DATABASE_URL, "postgres://...");
+    assert.strictEqual(env.API_KEY, "secret");
   });
 });
 
@@ -201,10 +223,10 @@ describe("Response headers", () => {
       "X-Content-Type-Options": "nosniff",
     };
 
-    expect(headers["Content-Type"]).toBe("text/html; charset=utf-8");
-    expect(headers["Content-Encoding"]).toBe("identity");
-    expect(headers["Transfer-Encoding"]).toBe("chunked");
-    expect(headers["X-Content-Type-Options"]).toBe("nosniff");
+    assert.strictEqual(headers["Content-Type"], "text/html; charset=utf-8");
+    assert.strictEqual(headers["Content-Encoding"], "identity");
+    assert.strictEqual(headers["Transfer-Encoding"], "chunked");
+    assert.strictEqual(headers["X-Content-Type-Options"], "nosniff");
   });
 
   it("should create response with streaming headers", () => {
@@ -216,223 +238,232 @@ describe("Response headers", () => {
       },
     });
 
-    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    assert.strictEqual(response.headers.get("Content-Type"), "text/html; charset=utf-8");
   });
 
   it("should create 404 response", () => {
     const response = new Response("Not Found", { status: 404 });
-    expect(response.status).toBe(404);
+    assert.strictEqual(response.status, 404);
   });
 
   it("should create 500 response", () => {
     const response = new Response("Server Error", { status: 500 });
-    expect(response.status).toBe(500);
+    assert.strictEqual(response.status, 500);
   });
 });
 
-const BASIC_EXAMPLE_DIR = join(import.meta.dir, "../examples/basic");
+const BASIC_EXAMPLE_DIR = join(__dirname, "../examples/basic");
 const BASE_URL = "http://localhost:8080";
 
-describe("integration", () => {
-  let serverProcess: Subprocess | null = null;
+describe("integration", { timeout: 120_000 }, () => {
+  let serverProcess: ChildProcess | null = null;
 
-  beforeAll(async () => {
-    const buildProcess = spawn(["npm", "run", "build", "--clean"], {
-      cwd: BASIC_EXAMPLE_DIR,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+  before(async () => {
+    // Build the example
+    const { process: buildProcess, exited: buildExited } = spawnAsync(
+      ["npm", "run", "build", "--clean"],
+      { cwd: BASIC_EXAMPLE_DIR },
+    );
 
-    const buildExitCode = await buildProcess.exited;
+    const buildExitCode = await buildExited;
     if (buildExitCode !== 0) {
-      const stderr = await new Response(buildProcess.stderr).text();
+      let stderr = "";
+      if (buildProcess.stderr) {
+        for await (const chunk of buildProcess.stderr) {
+          stderr += chunk.toString();
+        }
+      }
       throw new Error(`Build failed with exit code ${buildExitCode}: ${stderr}`);
     }
 
     // Start the dev server
-    serverProcess = spawn(["npm", "run", "start"], {
+    const { process: proc } = spawnAsync(["npm", "run", "start"], {
       cwd: BASIC_EXAMPLE_DIR,
-      stdout: "pipe",
-      stderr: "pipe",
     });
+    serverProcess = proc;
 
     // Wait for server to be ready
     await waitForServer(BASE_URL);
-  }, 60_000);
+  });
 
-  afterAll(async () => {
+  after(async () => {
     if (serverProcess) {
       serverProcess.kill();
-      await serverProcess.exited;
+      // Give it time to cleanup
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       serverProcess = null;
     }
-  }, 10_000);
+  });
 
-  it.concurrent("should return HTML for root route", async () => {
+  it("should return HTML for root route", async () => {
     const response = await fetch(`${BASE_URL}/`);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.headers.get("Content-Type"), "text/html; charset=utf-8");
 
     const html = await response.text();
-    expect(html).toContain("<!doctype html>");
-    expect(html).toContain("<html");
+    assert.ok(html.includes("<!doctype html>"));
+    assert.ok(html.includes("<html"));
   });
 
-  it.concurrent("should return streaming headers", async () => {
+  it("should return streaming headers", async () => {
     const response = await fetch(`${BASE_URL}/`);
-    expect(response.headers.get("Content-Encoding")).toBe("identity");
-    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    assert.strictEqual(response.headers.get("Content-Encoding"), "identity");
+    assert.strictEqual(response.headers.get("X-Content-Type-Options"), "nosniff");
   });
 
-  it.concurrent("should return 404 for unknown routes", async () => {
+  it("should return 404 for unknown routes", async () => {
     const response = await fetch(`${BASE_URL}/unknown-route-xyz`);
-    expect(response.status).toBe(404);
-    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    assert.strictEqual(response.status, 404);
+    assert.strictEqual(response.headers.get("Content-Type"), "text/html; charset=utf-8");
   });
 
-  it.concurrent("should handle API routes returning JSON", async () => {
+  it("should handle API routes returning JSON", async () => {
     const response = await fetch(`${BASE_URL}/api`);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toContain("application/json");
+    assert.strictEqual(response.status, 200);
+    assert.ok(response.headers.get("Content-Type")?.includes("application/json"));
 
-    const data = await response.json();
-    expect(data).toHaveProperty("hello");
+    const data = (await response.json()) as Record<string, unknown>;
+    assert.ok("hello" in data);
   });
 
-  it.concurrent("should handle dynamic routes", async () => {
+  it("should handle dynamic routes", async () => {
     const response = await fetch(`${BASE_URL}/blog/test-slug`);
-    expect(response.status).toBe(200);
-    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(response.headers.get("Content-Type"), "text/html; charset=utf-8");
   });
 
-  it.concurrent("should include custom element tags in HTML", async () => {
+  it("should include custom element tags in HTML", async () => {
     const response = await fetch(`${BASE_URL}/`);
     const html = await response.text();
-    expect(html).toContain("<sf-");
+    assert.ok(html.includes("<sf-"));
   });
 
-  it.concurrent("should include data island script in HTML", async () => {
+  it("should include data island script in HTML", async () => {
     const response = await fetch(`${BASE_URL}/`);
     const html = await response.text();
-    expect(html).toContain("data-island");
+    assert.ok(html.includes("data-island"));
   });
 
-  it.concurrent("should include stylesheets in HTML", async () => {
+  it("should include stylesheets in HTML", async () => {
     const response = await fetch(`${BASE_URL}/`);
     const html = await response.text();
-    expect(html).toContain("<link");
-    expect(html).toContain("stylesheet");
+    assert.ok(html.includes("<link"));
+    assert.ok(html.includes("stylesheet"));
   });
 
-  it.concurrent("should handle console forward endpoint", async () => {
-    const response = await fetch(`${BASE_URL}/__console`, {
+  it("should handle console forward endpoint", async () => {
+    const response = await fetch(`${BASE_URL}/_console`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ logs: [] }),
     });
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
   });
 
-  it.concurrent("should reject GET to console forward endpoint", async () => {
-    const response = await fetch(`${BASE_URL}/__console`);
+  it("should reject GET to console forward endpoint", async () => {
+    const response = await fetch(`${BASE_URL}/_console`);
     // Should not be treated as console endpoint, returns 404
-    expect(response.status).toBe(404);
+    assert.strictEqual(response.status, 404);
   });
 
-  it.concurrent("should include hoisted head tags from components", async () => {
+  it("should include hoisted head tags from components", async () => {
     const response = await fetch(`${BASE_URL}/`);
     const html = await response.text();
 
     // The index.client.tsx sets title "Home | Solarflare" which should be hoisted
-    expect(html).toContain("<title>Home | Solarflare</title>");
+    assert.ok(html.includes("<title>Home | Solarflare</title>"));
     // The index.client.tsx also sets a description meta tag
-    expect(html).toContain('content="Welcome to the Solarflare demo app"');
+    assert.ok(html.includes('content="Welcome to the Solarflare demo app"'));
   });
 
-  it.concurrent("should include hoisted head tags for dynamic routes", async () => {
+  it("should include hoisted head tags for dynamic routes", async () => {
     const response = await fetch(`${BASE_URL}/blog/my-test-post`);
     const html = await response.text();
 
     // The blog/$slug.client.tsx sets dynamic title based on title prop
     // The title is derived from the slug in $slug.server.tsx
-    expect(html).toContain("<title>");
-    expect(html).toContain("| Blog | Solarflare</title>");
+    assert.ok(html.includes("<title>"));
+    assert.ok(html.includes("| Blog | Solarflare</title>"));
     // Should also have the dynamic description
-    expect(html).toContain('<meta name="description"');
-    expect(html).toContain('content="Blog post:');
+    assert.ok(html.includes('<meta name="description"'));
+    assert.ok(html.includes('content="Blog post:'));
   });
 
-  it.concurrent("should include base head tags from layout", async () => {
+  it("should include base head tags from layout", async () => {
     const response = await fetch(`${BASE_URL}/`);
     const html = await response.text();
 
     // Layout defines these base meta tags
-    expect(html).toContain('<meta charset="UTF-8"');
-    expect(html).toContain('<meta name="viewport"');
-    expect(html).toContain('content="width=device-width, initial-scale=1.0"');
+    assert.ok(html.includes('<meta charset="UTF-8"'));
+    assert.ok(html.includes('<meta name="viewport"'));
+    assert.ok(html.includes('content="width=device-width, initial-scale=1.0"'));
   });
 });
 
-describe("e2e", () => {
-  let serverProcess: Subprocess | null = null;
+describe("e2e", { timeout: 120_000 }, () => {
+  let serverProcess: ChildProcess | null = null;
   let browser: Browser;
 
-  beforeAll(async () => {
+  before(async () => {
     // Build the basic example
-    const buildProcess = spawn(["npm", "run", "build", "--clean"], {
-      cwd: BASIC_EXAMPLE_DIR,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const { process: buildProcess, exited: buildExited } = spawnAsync(
+      ["npm", "run", "build", "--clean"],
+      { cwd: BASIC_EXAMPLE_DIR },
+    );
 
-    const buildExitCode = await buildProcess.exited;
+    const buildExitCode = await buildExited;
     if (buildExitCode !== 0) {
-      const stderr = await new Response(buildProcess.stderr).text();
+      let stderr = "";
+      if (buildProcess.stderr) {
+        for await (const chunk of buildProcess.stderr) {
+          stderr += chunk.toString();
+        }
+      }
       throw new Error(`Build failed with exit code ${buildExitCode}: ${stderr}`);
     }
 
     // Start the dev server
-    serverProcess = spawn(["npm", "run", "start"], {
+    const { process: proc } = spawnAsync(["npm", "run", "start"], {
       cwd: BASIC_EXAMPLE_DIR,
-      stdout: "pipe",
-      stderr: "pipe",
     });
+    serverProcess = proc;
 
     // Wait for server to be ready
     await waitForServer(BASE_URL);
 
     // Launch browser
     browser = await chromium.launch();
-  }, 60_000);
+  });
 
-  afterAll(async () => {
+  after(async () => {
     if (browser) await browser.close();
     if (serverProcess) {
       serverProcess.kill();
-      await serverProcess.exited;
+      // Give it time to cleanup
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       serverProcess = null;
     }
-  }, 10_000);
+  });
 
-  it.concurrent("should render the page in browser", async () => {
+  it("should render the page in browser", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
     const html = await page.content();
-    expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("<html");
+    assert.ok(html.includes("<!DOCTYPE html>"));
+    assert.ok(html.includes("<html"));
   });
 
-  it.concurrent("should have custom elements defined", async () => {
+  it("should have custom elements defined", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
     const customElementsExist = await page.evaluate(() => {
       const sfElements = document.querySelectorAll("*");
       return Array.from(sfElements).some((el) => el.tagName.toLowerCase().startsWith("sf-"));
     });
-    expect(customElementsExist).toBe(true);
+    assert.strictEqual(customElementsExist, true);
   });
 
-  it.concurrent("should hydrate client components", async () => {
+  it("should hydrate client components", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -444,20 +475,20 @@ describe("e2e", () => {
     const dataIslandExists = await page.evaluate(() => {
       return document.querySelector("[data-island]") !== null;
     });
-    expect(dataIslandExists).toBe(true);
+    assert.strictEqual(dataIslandExists, true);
   });
 
-  it.concurrent("should handle navigation to dynamic routes", async () => {
+  it("should handle navigation to dynamic routes", async () => {
     const page = await browser.newPage();
     await page.goto(`${BASE_URL}/blog/test-post`);
     const url = page.url();
-    expect(url).toContain("/blog/test-post");
+    assert.ok(url.includes("/blog/test-post"));
 
     const html = await page.content();
-    expect(html).toContain("<html");
+    assert.ok(html.includes("<html"));
   });
 
-  it.concurrent("should load and apply stylesheets", async () => {
+  it("should load and apply stylesheets", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -465,10 +496,10 @@ describe("e2e", () => {
     const stylesheetCount = await page.evaluate(() => {
       return document.querySelectorAll('link[rel="stylesheet"]').length;
     });
-    expect(stylesheetCount).toBeGreaterThan(0);
+    assert.ok(stylesheetCount > 0);
   });
 
-  it.concurrent("should execute client-side scripts", async () => {
+  it("should execute client-side scripts", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -481,20 +512,20 @@ describe("e2e", () => {
       const scripts = document.querySelectorAll("script");
       return scripts.length > 0;
     });
-    expect(scriptsExecuted).toBe(true);
+    assert.strictEqual(scriptsExecuted, true);
   });
 
-  it.concurrent("should maintain DOM structure after streaming", async () => {
+  it("should maintain DOM structure after streaming", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
     const bodyChildren = await page.evaluate(() => {
       return document.body.children.length;
     });
-    expect(bodyChildren).toBeGreaterThan(0);
+    assert.ok(bodyChildren > 0);
   });
 
-  it.concurrent("should have proper head elements", async () => {
+  it("should have proper head elements", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -508,20 +539,20 @@ describe("e2e", () => {
     });
 
     // Head element should exist
-    expect(headContent.headExists).toBe(true);
+    assert.strictEqual(headContent.headExists, true);
   });
 
-  it.concurrent("should handle 404 pages in browser", async () => {
+  it("should handle 404 pages in browser", async () => {
     const page = await browser.newPage();
     const response = await page.goto(`${BASE_URL}/non-existent-route-xyz`);
-    expect(response?.status()).toBe(404);
+    assert.strictEqual(response?.status(), 404);
 
     // Should still render HTML error page
     const html = await page.content();
-    expect(html).toContain("<html");
+    assert.ok(html.includes("<html"));
   });
 
-  it.concurrent("should render hoisted head tags in document head", async () => {
+  it("should render hoisted head tags in document head", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -538,8 +569,8 @@ describe("e2e", () => {
       };
     });
     // Should have both the layout title and the hoisted component title
-    expect(titleInfo.texts).toContain("Solarflare");
-    expect(titleInfo.texts).toContain("Home | Solarflare");
+    assert.ok(titleInfo.texts.includes("Solarflare"));
+    assert.ok(titleInfo.texts.includes("Home | Solarflare"));
 
     // Check meta description is in the head (hoisted from component)
     const metaDescription = await page.evaluate(() => {
@@ -548,10 +579,10 @@ describe("e2e", () => {
       );
       return meta?.getAttribute("content");
     });
-    expect(metaDescription).toBe("Welcome to the Solarflare demo app");
+    assert.strictEqual(metaDescription, "Welcome to the Solarflare demo app");
   });
 
-  it.concurrent("should render dynamic head tags for route params", async () => {
+  it("should render dynamic head tags for route params", async () => {
     const page = await browser.newPage();
     await page.goto(`${BASE_URL}/blog/awesome-post`);
 
@@ -567,17 +598,23 @@ describe("e2e", () => {
       };
     });
     // Should have a title containing the blog suffix from the component
-    expect(titleInfo.texts.some((t) => t?.includes("| Blog | Solarflare"))).toBe(true);
+    assert.strictEqual(
+      titleInfo.texts.some((t) => t?.includes("| Blog | Solarflare")),
+      true,
+    );
 
     // Check meta description contains the blog post reference
     const metaDescription = await page.evaluate(() => {
       const metas = document.querySelectorAll('meta[name="description"]');
       return Array.from(metas).map((m) => m.getAttribute("content"));
     });
-    expect(metaDescription.some((c) => c?.includes("Blog post:"))).toBe(true);
+    assert.strictEqual(
+      metaDescription.some((c) => c?.includes("Blog post:")),
+      true,
+    );
   });
 
-  it.concurrent("should have base meta tags from layout in head", async () => {
+  it("should have base meta tags from layout in head", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -592,13 +629,13 @@ describe("e2e", () => {
       };
     });
 
-    expect(headInfo.hasCharset).toBe(true);
-    expect(headInfo.charsetValue).toBe("UTF-8");
-    expect(headInfo.hasViewport).toBe(true);
-    expect(headInfo.viewportContent).toBe("width=device-width, initial-scale=1.0");
+    assert.strictEqual(headInfo.hasCharset, true);
+    assert.strictEqual(headInfo.charsetValue, "UTF-8");
+    assert.strictEqual(headInfo.hasViewport, true);
+    assert.strictEqual(headInfo.viewportContent, "width=device-width, initial-scale=1.0");
   });
 
-  it.concurrent("should stream response incrementally", async () => {
+  it("should stream response incrementally", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -612,10 +649,10 @@ describe("e2e", () => {
         )
       );
     });
-    expect(hasStreamedContent).toBe(true);
+    assert.strictEqual(hasStreamedContent, true);
   });
 
-  it.concurrent("should preserve state in interactive components", async () => {
+  it("should preserve state in interactive components", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -632,10 +669,10 @@ describe("e2e", () => {
     });
 
     // The basic example should have some interactive elements
-    expect(hasInteractiveElements).toBe(true);
+    assert.strictEqual(hasInteractiveElements, true);
   });
 
-  it.concurrent("should handle API route requests from browser", async () => {
+  it("should handle API route requests from browser", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -649,12 +686,12 @@ describe("e2e", () => {
       };
     });
 
-    expect(apiResponse.status).toBe(200);
-    expect(apiResponse.contentType).toContain("application/json");
-    expect(apiResponse.data).toHaveProperty("hello");
+    assert.strictEqual(apiResponse.status, 200);
+    assert.ok(apiResponse.contentType?.includes("application/json"));
+    assert.ok("hello" in (apiResponse.data as Record<string, unknown>));
   });
 
-  it.concurrent("should apply CSS styles correctly", async () => {
+  it("should apply CSS styles correctly", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -669,24 +706,20 @@ describe("e2e", () => {
       // Check that some CSS is being applied (not default browser styles)
       return styles.display !== undefined;
     });
-    expect(hasStyles).toBe(true);
+    assert.strictEqual(hasStyles, true);
   });
 
-  it.concurrent(
-    "should handle concurrent navigation",
-    async () => {
-      const page = await browser.newPage();
-      await page.goto(BASE_URL);
-      await page.goto(`${BASE_URL}/blog/test`);
-      await page.goto(BASE_URL);
+  it("should handle concurrent navigation", { timeout: 10_000 }, async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL);
+    await page.goto(`${BASE_URL}/blog/test`);
+    await page.goto(BASE_URL);
 
-      const finalUrl = page.url();
-      expect(finalUrl).toBe(`${BASE_URL}/`);
-    },
-    10_000,
-  );
+    const finalUrl = page.url();
+    assert.strictEqual(finalUrl, `${BASE_URL}/`);
+  });
 
-  it.concurrent("should support browser back navigation", async () => {
+  it("should support browser back navigation", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
     await page.goto(`${BASE_URL}/blog/test`);
@@ -694,10 +727,10 @@ describe("e2e", () => {
     await page.goBack();
 
     const url = page.url();
-    expect(url).toBe(`${BASE_URL}/`);
+    assert.strictEqual(url, `${BASE_URL}/`);
   });
 
-  it.concurrent("should render custom element tags correctly", async () => {
+  it("should render custom element tags correctly", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -707,10 +740,10 @@ describe("e2e", () => {
       ).length;
     });
 
-    expect(sfElementCount).toBeGreaterThan(0);
+    assert.ok(sfElementCount > 0);
   });
 
-  it.concurrent("should handle form submission", async () => {
+  it("should handle form submission", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -725,14 +758,14 @@ describe("e2e", () => {
         const form = document.querySelector("form");
         return form !== null && typeof form.submit === "function";
       });
-      expect(formIsInteractive).toBe(true);
+      assert.strictEqual(formIsInteractive, true);
     } else {
       // Skip test if no form
-      expect(true).toBe(true);
+      assert.strictEqual(true, true);
     }
   });
 
-  it.concurrent("should inject serialized data for hydration", async () => {
+  it("should inject serialized data for hydration", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
@@ -747,9 +780,12 @@ describe("e2e", () => {
       );
     });
 
-    expect(hasSerializedData).toBe(true);
+    assert.strictEqual(hasSerializedData, true);
   });
 });
+
+// Sleep helper for Node.js
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Wait for the server to be ready by polling the health endpoint
 async function waitForServer(url: string, timeout = 30_000) {
@@ -763,7 +799,7 @@ async function waitForServer(url: string, timeout = 30_000) {
     } catch {
       // Server not ready yet
     }
-    await Bun.sleep(100);
+    await sleep(100);
   }
   throw new Error(`Server did not start within ${timeout}ms`);
 }

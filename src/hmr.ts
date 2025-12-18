@@ -80,7 +80,11 @@ export function clearAllHMRState(): void {
 }
 
 /** Gets the current size of HMR state maps (useful for debugging memory issues). */
-export function getHMRStateSize(): { hookStates: number; refStates: number; scrollPositions: number } {
+export function getHMRStateSize(): {
+  hookStates: number;
+  refStates: number;
+  scrollPositions: number;
+} {
   return {
     hookStates: hookStateMap.size,
     refStates: refStateMap.size,

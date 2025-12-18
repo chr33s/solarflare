@@ -38,7 +38,7 @@ interface ClientLogRequest {
 export interface ConsoleForwardOptions {
   /** Enable console forwarding. @default true in dev mode */
   enabled?: boolean;
-  /** API endpoint path. @default '/__console' */
+  /** API endpoint path. @default '/_console' */
   endpoint?: string;
   /** Console levels to forward. @default ['log', 'warn', 'error', 'info', 'debug'] */
   levels?: ("log" | "warn" | "error" | "info" | "debug")[];
@@ -48,7 +48,7 @@ export interface ConsoleForwardOptions {
 
 const DEFAULT_OPTIONS: Required<ConsoleForwardOptions> = {
   enabled: true,
-  endpoint: "/__console",
+  endpoint: "/_console",
   levels: ["log", "warn", "error", "info", "debug"],
   includeStacks: true,
 };

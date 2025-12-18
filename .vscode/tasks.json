@@ -4,7 +4,7 @@
     {
       "label": "build",
       "type": "shell",
-      "command": "bun run build",
+      "command": "npm run build",
       "group": {
         "kind": "build",
         "isDefault": true
@@ -14,7 +14,7 @@
     {
       "label": "dev",
       "type": "shell",
-      "command": "bun run dev",
+      "command": "npm run dev",
       "group": "none",
       "isBackground": true,
       "problemMatcher": []

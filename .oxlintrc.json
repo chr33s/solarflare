@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "ignorePatterns": ["dist/**", "node_modules/**", "**/worker-configuration.d.ts"],
+  "plugins": ["eslint", "import", "jsdoc", "node", "oxc", "promise", "typescript", "unicorn"],
+  "rules": {
+    "@typescript-eslint/no-floating-promises": [
+      "error",
+      {
+        "allowForKnownSafeCalls": [
+          {
+            "from": "package",
+            "name": ["test", "it", "suite", "describe"],
+            "package": "node:test"
+          }
+        ]
+      }
+    ]
+  }
+}

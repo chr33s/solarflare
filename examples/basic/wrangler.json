@@ -2,6 +2,7 @@
   "assets": {
     "directory": "./dist/client"
   },
+  "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2025-12-10",
   "dev": {
     "port": 8080
@@ -9,6 +10,7 @@
   "main": "./dist/server/index.js",
   "name": "solarflare",
   "vars": {
-    "HELLO": "WORLD"
+    "HELLO": "WORLD",
+    "WRANGLER_LOG": "log"
   }
 }

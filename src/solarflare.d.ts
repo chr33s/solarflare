@@ -1,11 +1,20 @@
 /**
- * Extend ImportMeta with glob support
+ * Extend ImportMeta with glob support and runtime properties
  */
 interface ImportMeta {
   glob<T = { default: unknown }>(
     pattern: string,
     options?: { eager?: boolean },
   ): Record<string, () => Promise<T>>;
+  /** The file path of the current module (Node runtime) */
+  path?: string;
+  /** Environment variables (bundler) */
+  env?: {
+    DEV?: boolean;
+    PROD?: boolean;
+    MODE?: string;
+    [key: string]: unknown;
+  };
 }
 
 declare module "*.css" {

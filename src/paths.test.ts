@@ -1,176 +1,177 @@
-import { describe, it, expect } from "bun:test";
-import { parsePath } from "./paths";
+import { describe, it } from "node:test";
+import * as assert from "node:assert/strict";
+import { parsePath } from "./paths.ts";
 
 describe("parsePath", () => {
   describe("module kind detection", () => {
     it("should detect server modules", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.kind).toBe("server");
+      assert.strictEqual(result.kind, "server");
     });
 
     it("should detect client modules", () => {
       const result = parsePath("./blog/$slug.client.tsx");
-      expect(result.kind).toBe("client");
+      assert.strictEqual(result.kind, "client");
     });
 
     it("should detect layout modules", () => {
       const result = parsePath("./blog/_layout.tsx");
-      expect(result.kind).toBe("layout");
+      assert.strictEqual(result.kind, "layout");
     });
 
     it("should detect error modules", () => {
       const result = parsePath("./_error.tsx");
-      expect(result.kind).toBe("error");
+      assert.strictEqual(result.kind, "error");
     });
 
     it("should return unknown for unrecognized patterns", () => {
       const result = parsePath("./utils/helpers.tsx");
-      expect(result.kind).toBe("unknown");
+      assert.strictEqual(result.kind, "unknown");
     });
   });
 
   describe("path normalization", () => {
     it("should remove leading ./", () => {
       const result = parsePath("./src/app/index.tsx");
-      expect(result.normalized).not.toStartWith("./");
+      assert.ok(!result.normalized.startsWith("./"));
     });
 
     it("should normalize paths with app prefix", () => {
       const result = parsePath("./src/app/blog/$slug.client.tsx");
-      expect(result.normalized).toBe("blog/$slug.client.tsx");
+      assert.strictEqual(result.normalized, "blog/$slug.client.tsx");
     });
 
     it("should preserve original path", () => {
       const original = "./blog/$slug.server.tsx";
       const result = parsePath(original);
-      expect(result.original).toBe(original);
+      assert.strictEqual(result.original, original);
     });
   });
 
   describe("dynamic parameters", () => {
     it("should extract single dynamic param", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.params).toEqual(["slug"]);
+      assert.deepStrictEqual(result.params, ["slug"]);
     });
 
     it("should extract multiple dynamic params", () => {
       const result = parsePath("./shop/$category/$productId.client.tsx");
-      expect(result.params).toEqual(["category", "productId"]);
+      assert.deepStrictEqual(result.params, ["category", "productId"]);
     });
 
     it("should return empty params for static routes", () => {
       const result = parsePath("./about.server.tsx");
-      expect(result.params).toEqual([]);
+      assert.deepStrictEqual(result.params, []);
     });
 
     it("should handle nested dynamic params", () => {
       const result = parsePath("./users/$userId/posts/$postId.server.tsx");
-      expect(result.params).toEqual(["userId", "postId"]);
+      assert.deepStrictEqual(result.params, ["userId", "postId"]);
     });
   });
 
   describe("segments", () => {
     it("should parse route segments", () => {
       const result = parsePath("./blog/posts/recent.server.tsx");
-      expect(result.segments).toEqual(["blog", "posts", "recent"]);
+      assert.deepStrictEqual(result.segments, ["blog", "posts", "recent"]);
     });
 
     it("should include dynamic segments", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.segments).toEqual(["blog", "$slug"]);
+      assert.deepStrictEqual(result.segments, ["blog", "$slug"]);
     });
 
     it("should handle root index", () => {
       const result = parsePath("./index.server.tsx");
-      expect(result.segments).toEqual(["index"]);
+      assert.deepStrictEqual(result.segments, ["index"]);
     });
   });
 
   describe("isIndex detection", () => {
     it("should detect root index", () => {
       const result = parsePath("./index.server.tsx");
-      expect(result.isIndex).toBe(true);
+      assert.strictEqual(result.isIndex, true);
     });
 
     it("should detect nested index", () => {
       const result = parsePath("./blog/index.client.tsx");
-      expect(result.isIndex).toBe(true);
+      assert.strictEqual(result.isIndex, true);
     });
 
     it("should return false for non-index routes", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.isIndex).toBe(false);
+      assert.strictEqual(result.isIndex, false);
     });
   });
 
   describe("private file detection", () => {
     it("should detect underscore-prefixed files as private", () => {
       const result = parsePath("./_layout.tsx");
-      expect(result.isPrivate).toBe(true);
+      assert.strictEqual(result.isPrivate, true);
     });
 
     it("should detect private files in subdirectories", () => {
       const result = parsePath("./blog/_layout.tsx");
-      expect(result.isPrivate).toBe(true);
+      assert.strictEqual(result.isPrivate, true);
     });
 
     it("should not mark regular files as private", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.isPrivate).toBe(false);
+      assert.strictEqual(result.isPrivate, false);
     });
   });
 
   describe("URL pattern generation", () => {
     it("should generate pattern for root index", () => {
       const result = parsePath("./index.server.tsx");
-      expect(result.pattern).toBe("/");
+      assert.strictEqual(result.pattern, "/");
     });
 
     it("should generate pattern for static route", () => {
       const result = parsePath("./about.server.tsx");
-      expect(result.pattern).toBe("/about");
+      assert.strictEqual(result.pattern, "/about");
     });
 
     it("should generate pattern with dynamic segments", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.pattern).toBe("/blog/:slug");
+      assert.strictEqual(result.pattern, "/blog/:slug");
     });
 
     it("should generate pattern with multiple dynamic segments", () => {
       const result = parsePath("./users/$userId/posts/$postId.server.tsx");
-      expect(result.pattern).toBe("/users/:userId/posts/:postId");
+      assert.strictEqual(result.pattern, "/users/:userId/posts/:postId");
     });
 
     it("should remove trailing /index from pattern", () => {
       const result = parsePath("./blog/index.client.tsx");
-      expect(result.pattern).toBe("/blog");
+      assert.strictEqual(result.pattern, "/blog");
     });
   });
 
   describe("custom element tag generation", () => {
     it("should generate tag for root", () => {
       const result = parsePath("./index.server.tsx");
-      expect(result.tag).toBe("sf-root");
+      assert.strictEqual(result.tag, "sf-root");
     });
 
     it("should generate tag for nested route", () => {
       const result = parsePath("./blog/$slug.server.tsx");
-      expect(result.tag).toBe("sf-blog-slug");
+      assert.strictEqual(result.tag, "sf-blog-slug");
     });
 
     it("should lowercase tags", () => {
       const result = parsePath("./Blog/Post.client.tsx");
-      expect(result.tag).toBe("sf-blog-post");
+      assert.strictEqual(result.tag, "sf-blog-post");
     });
 
     it("should replace slashes with hyphens", () => {
       const result = parsePath("./users/profile/settings.client.tsx");
-      expect(result.tag).toBe("sf-users-profile-settings");
+      assert.strictEqual(result.tag, "sf-users-profile-settings");
     });
 
     it("should strip $ from dynamic segments in tags", () => {
       const result = parsePath("./shop/$category/$productId.client.tsx");
-      expect(result.tag).toBe("sf-shop-category-productid");
+      assert.strictEqual(result.tag, "sf-shop-category-productid");
     });
   });
 
@@ -178,19 +179,19 @@ describe("parsePath", () => {
     it("should give higher specificity to static routes", () => {
       const staticRoute = parsePath("./blog/featured.server.tsx");
       const dynamicRoute = parsePath("./blog/$slug.server.tsx");
-      expect(staticRoute.specificity).toBeGreaterThan(dynamicRoute.specificity);
+      assert.ok(staticRoute.specificity > dynamicRoute.specificity);
     });
 
     it("should give root route lower specificity than nested routes", () => {
       const root = parsePath("./index.server.tsx");
       const nested = parsePath("./blog/post.server.tsx");
-      expect(root.specificity).toBeLessThan(nested.specificity);
+      assert.ok(root.specificity < nested.specificity);
     });
 
     it("should increase specificity with more segments", () => {
       const shallow = parsePath("./blog.server.tsx");
       const deep = parsePath("./blog/posts/recent.server.tsx");
-      expect(deep.specificity).toBeGreaterThan(shallow.specificity);
+      assert.ok(deep.specificity > shallow.specificity);
     });
   });
 });

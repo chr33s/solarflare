@@ -1,20 +1,24 @@
 # AGENTS.md
 
 ## Overview
+
 This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, with hot module replacement, efficient routing, and reactive state management.
 
 ---
 
 ## Tech Stack
+
 - **TypeScript**: Static typing and compiler utilities (`ast.ts`).
 - **Preact**: Lightweight UI framework for components.
 - **Preact Signals**: Reactive state management (`store.ts`).
-- **Bun**: Modern JavaScript runtime for builds (`build.ts`).
+- **Node.js**: Primary runtime for builds (`build.ts`), requires v24.12.0+.
+- **Rolldown**: Rust-based bundler (via obuild) for client/server builds.
 - **Cloudflare Workers**: Server hosting for SSR (`worker.ts`).
 
 ---
 
 ## Key Conventions
+
 1. **File Suffixes**:
    - `.server.ts(x)`: Server-only logic.
    - `.client.ts(x)`: Client-side rendering.
@@ -35,31 +39,40 @@ This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, 
 ---
 
 ## Scripts
-1. **Build**: Create server and client bundles.
+
+1. **Check**: Check lint rules
    ```bash
-   bun build
+   npm run check
    ```
-2. **Check**: Check lint rules
+2. **Build**: Create server and client bundles.
    ```bash
-   bun check
+   npm run build
    ```
 3. **Dev**: Start development mode.
    ```bash
-   bun dev
+   npm run dev
    ```
 4. **Test**: Run functional, integration & e2e tests
    ```bash
-   bun test
+   npm run test
    ```
 
 ---
 
 ## Folder Structure
+
 - **`src/`**: Core logic for routing, HMR, SSR, and state:
+  - `build.ts`: Node.js build script using rolldown.
+  - `test-utils.ts`: Test utilities with expect() API.
   - `server.ts`: SSR utilities.
   - `store.ts`: Signal state layers.
   - `router.ts`: SPA routing.
 - **`dist/`**: Generated output for client/server builds.
+
+## Path Structure
+
+- **`/_`**: reserved for internal framework
+  - `_console`: Browser / Server console piping
 
 ---
 

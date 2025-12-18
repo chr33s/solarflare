@@ -1,8 +1,8 @@
 /** Web component registration, hydration, and signal-based state. */
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
-import { parsePath } from "./paths";
-import { hydrateStore, initHydrationCoordinator } from "./store";
+import { parsePath } from "./paths.ts";
+import { hydrateStore, initHydrationCoordinator } from "./store.ts";
 
 /** Initializes client-side store from SSR hydration data. */
 export async function initClient(): Promise<void> {
@@ -131,7 +131,7 @@ export function define<P extends Record<string, any>>(
   // Only register custom elements in the browser
   if (typeof window !== "undefined" && typeof HTMLElement !== "undefined") {
     const propNames = options?.observedAttributes ?? [];
-    const filePath = import.meta.path;
+    const filePath = import.meta.path ?? import.meta.url ?? "";
     const meta = parseTagMeta(filePath);
     const tag = options?.tag ?? meta.tag;
     const shadow = options?.shadow ?? false;
@@ -203,7 +203,7 @@ export {
   type StoreConfig,
   type ReadonlySignal,
   type Signal,
-} from "./store";
+} from "./store.ts";
 
 // Router re-exports
 export {
@@ -220,7 +220,7 @@ export {
   type NavigateOptions,
   type RouterConfig,
   type RouteSubscriber,
-} from "./router";
+} from "./router.ts";
 
 // HMR utilities re-exports
 export {
@@ -248,4 +248,4 @@ export {
   // HMR events
   dispatchHMREvent,
   onHMREvent,
-} from "./hmr";
+} from "./hmr.ts";

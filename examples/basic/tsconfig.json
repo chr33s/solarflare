@@ -3,7 +3,8 @@
   "compilerOptions": {
     "paths": {
       "#app/*": ["./src/*"]
-    }
+    },
+    "types": ["@chr33s/solarflare"]
   },
   "include": ["./src", "./worker-configuration.d.ts"]
 }

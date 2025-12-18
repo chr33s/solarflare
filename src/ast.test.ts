@@ -1,5 +1,8 @@
-import { describe, it, expect } from "bun:test";
-import { join } from "path";
+import { describe, it } from "node:test";
+import * as assert from "node:assert/strict";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import ts from "typescript";
 import {
   createProgram,
@@ -7,36 +10,38 @@ import {
   getTypeDeclaration,
   generateTypedModulesFile,
   type ModuleEntry,
-} from "./ast";
-import { parsePath } from "./paths";
+} from "./ast.ts";
+import { parsePath } from "./paths.ts";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe("createProgram", () => {
   it("should create a TypeScript program", () => {
     const program = createProgram([]);
-    expect(program).toBeDefined();
-    expect(typeof program.getTypeChecker).toBe("function");
+    assert.notStrictEqual(program, undefined);
+    assert.strictEqual(typeof program.getTypeChecker, "function");
   });
 
   it("should create program with source files", () => {
     // Create a minimal test file
-    const testFile = join(import.meta.dir, "paths.ts");
+    const testFile = join(__dirname, "paths.ts");
     const program = createProgram([testFile]);
-    expect(program).toBeDefined();
+    assert.notStrictEqual(program, undefined);
     const sourceFile = program.getSourceFile(testFile);
-    expect(sourceFile).toBeDefined();
+    assert.notStrictEqual(sourceFile, undefined);
   });
 });
 
 describe("getDefaultExportInfo", () => {
   it("should return null for file without default export", () => {
-    const testFile = join(import.meta.dir, "paths.ts");
+    const testFile = join(__dirname, "paths.ts");
     const program = createProgram([testFile]);
     const checker = program.getTypeChecker();
     const sourceFile = program.getSourceFile(testFile)!;
 
     const exportInfo = getDefaultExportInfo(checker, sourceFile);
     // paths.ts has named exports but no default export
-    expect(exportInfo).toBeNull();
+    assert.strictEqual(exportInfo, null);
   });
 
   it("should return export info for file with default export", () => {
@@ -47,49 +52,49 @@ describe("getDefaultExportInfo", () => {
 
     // We can't easily test this without a full program context
     // but we can verify the function exists and returns the right type
-    expect(typeof getDefaultExportInfo).toBe("function");
+    assert.strictEqual(typeof getDefaultExportInfo, "function");
   });
 });
 
 describe("getTypeDeclaration", () => {
   it("should return server loader type declaration", () => {
     const declaration = getTypeDeclaration("server");
-    expect(declaration).toContain("Request");
-    expect(declaration).toContain("Response");
-    expect(declaration).toContain("Record<string, string>");
+    assert.ok(declaration.includes("Request"));
+    assert.ok(declaration.includes("Response"));
+    assert.ok(declaration.includes("Record<string, string>"));
   });
 
   it("should return client component type declaration", () => {
     const declaration = getTypeDeclaration("client");
-    expect(declaration).toContain("props");
-    expect(declaration).toContain("VNode");
+    assert.ok(declaration.includes("props"));
+    assert.ok(declaration.includes("VNode"));
   });
 
   it("should return layout component type declaration", () => {
     const declaration = getTypeDeclaration("layout");
-    expect(declaration).toContain("children");
-    expect(declaration).toContain("VNode");
+    assert.ok(declaration.includes("children"));
+    assert.ok(declaration.includes("VNode"));
   });
 
   it("should return error component type declaration", () => {
     const declaration = getTypeDeclaration("error");
-    expect(declaration).toContain("error");
-    expect(declaration).toContain("Error");
-    expect(declaration).toContain("statusCode");
+    assert.ok(declaration.includes("error"));
+    assert.ok(declaration.includes("Error"));
+    assert.ok(declaration.includes("statusCode"));
   });
 
   it("should return unknown for unrecognized kind", () => {
     const declaration = getTypeDeclaration("unknown");
-    expect(declaration).toBe("unknown");
+    assert.strictEqual(declaration, "unknown");
   });
 });
 
 describe("generateTypedModulesFile", () => {
   it("should generate empty modules file with no entries", () => {
     const { content, errors } = generateTypedModulesFile([]);
-    expect(errors).toEqual([]);
-    expect(content).toContain("Auto-generated route modules");
-    expect(content).toContain("export default modules");
+    assert.deepStrictEqual(errors, []);
+    assert.ok(content.includes("Auto-generated route modules"));
+    assert.ok(content.includes("export default modules"));
   });
 
   it("should include module count comments", () => {
@@ -106,8 +111,8 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("Server modules: 1");
-    expect(content).toContain("Client modules: 1");
+    assert.ok(content.includes("Server modules: 1"));
+    assert.ok(content.includes("Client modules: 1"));
   });
 
   it("should generate server module entries", () => {
@@ -119,8 +124,8 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("server:");
-    expect(content).toContain("blog/$slug.server.tsx");
+    assert.ok(content.includes("server:"));
+    assert.ok(content.includes("blog/$slug.server.tsx"));
   });
 
   it("should generate client module entries", () => {
@@ -132,8 +137,8 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("client:");
-    expect(content).toContain("blog/$slug.client.tsx");
+    assert.ok(content.includes("client:"));
+    assert.ok(content.includes("blog/$slug.client.tsx"));
   });
 
   it("should generate layout module entries", () => {
@@ -145,7 +150,7 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("layout:");
+    assert.ok(content.includes("layout:"));
   });
 
   it("should include error module when present", () => {
@@ -157,14 +162,14 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("error:");
-    expect(content).toContain("_error.tsx");
+    assert.ok(content.includes("error:"));
+    assert.ok(content.includes("_error.tsx"));
   });
 
   it("should set error to undefined when not present", () => {
     const entries: ModuleEntry[] = [];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("error: undefined");
+    assert.ok(content.includes("error: undefined"));
   });
 
   it("should collect validation errors", () => {
@@ -183,24 +188,24 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { errors } = generateTypedModulesFile(entries);
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toContain("Missing default export");
+    assert.strictEqual(errors.length, 1);
+    assert.ok(errors[0].includes("Missing default export"));
   });
 
   it("should include type declarations", () => {
     const { content } = generateTypedModulesFile([]);
-    expect(content).toContain("type ServerLoader");
-    expect(content).toContain("type ClientComponent");
-    expect(content).toContain("type LayoutComponent");
-    expect(content).toContain("type ErrorComponent");
+    assert.ok(content.includes("type ServerLoader"));
+    assert.ok(content.includes("type ClientComponent"));
+    assert.ok(content.includes("type LayoutComponent"));
+    assert.ok(content.includes("type ErrorComponent"));
   });
 
   it("should include ModuleMap interface", () => {
     const { content } = generateTypedModulesFile([]);
-    expect(content).toContain("interface ModuleMap");
-    expect(content).toContain("server:");
-    expect(content).toContain("client:");
-    expect(content).toContain("layout:");
+    assert.ok(content.includes("interface ModuleMap"));
+    assert.ok(content.includes("server:"));
+    assert.ok(content.includes("client:"));
+    assert.ok(content.includes("layout:"));
   });
 
   it("should generate import paths from dist to src", () => {
@@ -212,6 +217,6 @@ describe("generateTypedModulesFile", () => {
       },
     ];
     const { content } = generateTypedModulesFile(entries);
-    expect(content).toContain("import('../src/");
+    assert.ok(content.includes("import('../src/"));
   });
 });

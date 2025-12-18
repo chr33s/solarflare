@@ -1,4 +1,5 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it } from "node:test";
+import * as assert from "node:assert/strict";
 import {
   Router,
   createRouter,
@@ -8,13 +9,13 @@ import {
   type RouteManifestEntry,
   type RouterConfig,
   type RouteMatch,
-} from "./router";
+} from "./router.ts";
 
 describe("supportsViewTransitions", () => {
   it("should return false in non-browser environment", () => {
-    // In Bun test environment, document is not defined
+    // In Nodejs test environment, document is not defined
     const result = supportsViewTransitions();
-    expect(typeof result).toBe("boolean");
+    assert.strictEqual(typeof result, "boolean");
   });
 });
 
@@ -22,12 +23,12 @@ describe("fetchWithRetry", () => {
   it("should return successful response", async () => {
     const mockResponse = new Response("OK", { status: 200 });
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => Promise.resolve(mockResponse)) as unknown as typeof fetch;
+    globalThis.fetch = (() => Promise.resolve(mockResponse)) as unknown as typeof fetch;
 
     try {
       const response = await fetchWithRetry("http://localhost/test");
-      expect(response.status).toBe(200);
-      expect(await response.text()).toBe("OK");
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(await response.text(), "OK");
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -36,7 +37,7 @@ describe("fetchWithRetry", () => {
   it("should retry on 5xx errors", async () => {
     let attempts = 0;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => {
+    globalThis.fetch = (() => {
       attempts++;
       if (attempts < 3) {
         return Promise.resolve(new Response("Error", { status: 500 }));
@@ -49,8 +50,8 @@ describe("fetchWithRetry", () => {
         maxRetries: 3,
         baseDelay: 10,
       });
-      expect(response.status).toBe(200);
-      expect(attempts).toBe(3);
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(attempts, 3);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -59,7 +60,7 @@ describe("fetchWithRetry", () => {
   it("should not retry on 4xx errors", async () => {
     let attempts = 0;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => {
+    globalThis.fetch = (() => {
       attempts++;
       return Promise.resolve(new Response("Not Found", { status: 404 }));
     }) as unknown as typeof fetch;
@@ -69,8 +70,8 @@ describe("fetchWithRetry", () => {
         maxRetries: 3,
         baseDelay: 10,
       });
-      expect(response.status).toBe(404);
-      expect(attempts).toBe(1);
+      assert.strictEqual(response.status, 404);
+      assert.strictEqual(attempts, 1);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -78,17 +79,16 @@ describe("fetchWithRetry", () => {
 
   it("should throw after max retries", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() =>
-      Promise.resolve(new Response("Error", { status: 500 })),
-    ) as unknown as typeof fetch;
+    globalThis.fetch = (() =>
+      Promise.resolve(new Response("Error", { status: 500 }))) as unknown as typeof fetch;
 
     try {
-      expect(
+      await assert.rejects(
         fetchWithRetry("http://localhost/test", undefined, {
           maxRetries: 2,
           baseDelay: 10,
         }),
-      ).rejects.toThrow();
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -97,7 +97,7 @@ describe("fetchWithRetry", () => {
   it("should retry on network errors", async () => {
     let attempts = 0;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => {
+    globalThis.fetch = (() => {
       attempts++;
       if (attempts < 2) {
         return Promise.reject(new Error("Network error"));
@@ -110,8 +110,8 @@ describe("fetchWithRetry", () => {
         maxRetries: 3,
         baseDelay: 10,
       });
-      expect(response.status).toBe(200);
-      expect(attempts).toBe(2);
+      assert.strictEqual(response.status, 200);
+      assert.strictEqual(attempts, 2);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -120,7 +120,7 @@ describe("fetchWithRetry", () => {
   it("should use custom retry predicate", async () => {
     let attempts = 0;
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => {
+    globalThis.fetch = (() => {
       attempts++;
       return Promise.resolve(new Response("Rate limited", { status: 429 }));
     }) as unknown as typeof fetch;
@@ -132,7 +132,7 @@ describe("fetchWithRetry", () => {
         retryOnStatus: (status) => status === 429 || status >= 500,
       });
     } catch {
-      expect(attempts).toBe(3); // Initial + 2 retries
+      assert.strictEqual(attempts, 3); // Initial + 2 retries
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -151,7 +151,7 @@ describe("Router", () => {
         { pattern: "/", tag: "sf-root", type: "client", params: [] },
       ]);
       const router = new Router(manifest);
-      expect(router).toBeInstanceOf(Router);
+      assert.ok(router instanceof Router);
     });
 
     it("should accept custom config", () => {
@@ -162,25 +162,25 @@ describe("Router", () => {
         scrollBehavior: "smooth",
       };
       const router = new Router(manifest, config);
-      expect(router).toBeInstanceOf(Router);
+      assert.ok(router instanceof Router);
     });
 
     it("should initialize current signal to null", () => {
       const manifest = createManifest();
       const router = new Router(manifest);
-      expect(router.current.value).toBeNull();
+      assert.strictEqual(router.current.value, null);
     });
 
     it("should initialize params as empty object", () => {
       const manifest = createManifest();
       const router = new Router(manifest);
-      expect(router.params.value).toEqual({});
+      assert.deepStrictEqual(router.params.value, {});
     });
 
     it("should initialize pathname as empty string", () => {
       const manifest = createManifest();
       const router = new Router(manifest);
-      expect(router.pathname.value).toBe("");
+      assert.strictEqual(router.pathname.value, "");
     });
   });
 
@@ -192,8 +192,8 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/");
       const match = router.match(url);
-      expect(match).not.toBeNull();
-      expect(match?.entry.tag).toBe("sf-root");
+      assert.notStrictEqual(match, null);
+      assert.strictEqual(match?.entry.tag, "sf-root");
     });
 
     it("should match static route", () => {
@@ -203,8 +203,8 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/about");
       const match = router.match(url);
-      expect(match).not.toBeNull();
-      expect(match?.entry.tag).toBe("sf-about");
+      assert.notStrictEqual(match, null);
+      assert.strictEqual(match?.entry.tag, "sf-about");
     });
 
     it("should match dynamic route and extract params", () => {
@@ -214,8 +214,8 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/blog/hello-world");
       const match = router.match(url);
-      expect(match).not.toBeNull();
-      expect(match?.params.slug).toBe("hello-world");
+      assert.notStrictEqual(match, null);
+      assert.strictEqual(match?.params.slug, "hello-world");
     });
 
     it("should match routes with multiple params", () => {
@@ -230,7 +230,7 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/users/123/posts/456");
       const match = router.match(url);
-      expect(match?.params).toEqual({ userId: "123", postId: "456" });
+      assert.deepStrictEqual(match?.params, { userId: "123", postId: "456" });
     });
 
     it("should return null for unmatched routes", () => {
@@ -240,7 +240,7 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/contact");
       const match = router.match(url);
-      expect(match).toBeNull();
+      assert.strictEqual(match, null);
     });
 
     it("should only match client routes", () => {
@@ -250,7 +250,7 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/api/data");
       const match = router.match(url);
-      expect(match).toBeNull();
+      assert.strictEqual(match, null);
     });
 
     it("should prefer more specific routes", () => {
@@ -261,7 +261,7 @@ describe("Router", () => {
       const router = new Router(manifest);
       const url = new URL("http://localhost/blog/featured");
       const match = router.match(url);
-      expect(match?.entry.tag).toBe("sf-blog-featured");
+      assert.strictEqual(match?.entry.tag, "sf-blog-featured");
     });
   });
 
@@ -279,8 +279,8 @@ describe("Router", () => {
         url: new URL("http://localhost/about"),
       };
 
-      expect(router.isActive("/about", true)).toBe(true);
-      expect(router.isActive("/about/team", true)).toBe(false);
+      assert.strictEqual(router.isActive("/about", true), true);
+      assert.strictEqual(router.isActive("/about/team", true), false);
     });
 
     it("should check prefix match", () => {
@@ -295,9 +295,9 @@ describe("Router", () => {
         url: new URL("http://localhost/blog/hello"),
       };
 
-      expect(router.isActive("/blog")).toBe(true);
-      expect(router.isActive("/blog", false)).toBe(true);
-      expect(router.isActive("/about")).toBe(false);
+      assert.strictEqual(router.isActive("/blog"), true);
+      assert.strictEqual(router.isActive("/blog", false), true);
+      assert.strictEqual(router.isActive("/about"), false);
     });
   });
 
@@ -311,7 +311,7 @@ describe("Router", () => {
       const isActiveBlog = router.isActiveSignal("/blog");
 
       // Initially false
-      expect(isActiveBlog.value).toBe(false);
+      assert.strictEqual(isActiveBlog.value, false);
 
       // Set current route
       router.current.value = {
@@ -321,7 +321,7 @@ describe("Router", () => {
       };
 
       // Now should be true
-      expect(isActiveBlog.value).toBe(true);
+      assert.strictEqual(isActiveBlog.value, true);
     });
   });
 
@@ -338,8 +338,8 @@ describe("Router", () => {
       });
 
       // Initial call with null
-      expect(calls).toHaveLength(1);
-      expect(calls[0]).toBeNull();
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0], null);
 
       // Update current
       const newMatch: RouteMatch = {
@@ -349,8 +349,8 @@ describe("Router", () => {
       };
       router.current.value = newMatch;
 
-      expect(calls).toHaveLength(2);
-      expect(calls[1]).toBe(newMatch);
+      assert.strictEqual(calls.length, 2);
+      assert.strictEqual(calls[1], newMatch);
 
       unsubscribe();
     });
@@ -361,9 +361,9 @@ describe("Router", () => {
       const manifest = createManifest();
       const router = new Router(manifest);
 
-      expect(typeof router.back).toBe("function");
-      expect(typeof router.forward).toBe("function");
-      expect(typeof router.go).toBe("function");
+      assert.strictEqual(typeof router.back, "function");
+      assert.strictEqual(typeof router.forward, "function");
+      assert.strictEqual(typeof router.go, "function");
     });
   });
 
@@ -372,8 +372,8 @@ describe("Router", () => {
       const manifest = createManifest();
       const router = new Router(manifest);
 
-      expect(typeof router.start).toBe("function");
-      expect(typeof router.stop).toBe("function");
+      assert.strictEqual(typeof router.start, "function");
+      assert.strictEqual(typeof router.stop, "function");
     });
 
     it("should return this from start/stop for chaining", () => {
@@ -382,7 +382,7 @@ describe("Router", () => {
 
       // In test environment without window.navigation, these should still work
       const result = router.stop();
-      expect(result).toBe(router);
+      assert.strictEqual(result, router);
     });
   });
 });
@@ -391,13 +391,13 @@ describe("createRouter", () => {
   it("should create router instance", () => {
     const manifest: RoutesManifest = { routes: [] };
     const router = createRouter(manifest);
-    expect(router).toBeInstanceOf(Router);
+    assert.ok(router instanceof Router);
   });
 
   it("should pass config to router", () => {
     const manifest: RoutesManifest = { routes: [] };
     const config: RouterConfig = { base: "/app" };
     const router = createRouter(manifest, config);
-    expect(router).toBeInstanceOf(Router);
+    assert.ok(router instanceof Router);
   });
 });

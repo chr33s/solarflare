@@ -1,52 +1,53 @@
-import { describe, it, expect } from "bun:test";
-import { isConsoleRequest, processConsoleLogs, generateClientScript } from "./console-forward";
+import { describe, it } from "node:test";
+import * as assert from "node:assert/strict";
+import { isConsoleRequest, processConsoleLogs, generateClientScript } from "./console-forward.ts";
 
 describe("isConsoleRequest", () => {
   it("should return true for POST to default endpoint", () => {
-    const request = new Request("http://localhost/__console", { method: "POST" });
-    expect(isConsoleRequest(request)).toBe(true);
+    const request = new Request("http://localhost/_console", { method: "POST" });
+    assert.strictEqual(isConsoleRequest(request), true);
   });
 
   it("should return false for GET to default endpoint", () => {
-    const request = new Request("http://localhost/__console", { method: "GET" });
-    expect(isConsoleRequest(request)).toBe(false);
+    const request = new Request("http://localhost/_console", { method: "GET" });
+    assert.strictEqual(isConsoleRequest(request), false);
   });
 
   it("should return false for POST to different endpoint", () => {
     const request = new Request("http://localhost/api/logs", { method: "POST" });
-    expect(isConsoleRequest(request)).toBe(false);
+    assert.strictEqual(isConsoleRequest(request), false);
   });
 
   it("should return true for custom endpoint", () => {
     const request = new Request("http://localhost/custom-logs", { method: "POST" });
-    expect(isConsoleRequest(request, { endpoint: "/custom-logs" })).toBe(true);
+    assert.strictEqual(isConsoleRequest(request, { endpoint: "/custom-logs" }), true);
   });
 
   it("should return false for different path", () => {
     const request = new Request("http://localhost/", { method: "POST" });
-    expect(isConsoleRequest(request)).toBe(false);
+    assert.strictEqual(isConsoleRequest(request), false);
   });
 
   it("should handle requests with query params", () => {
-    const request = new Request("http://localhost/__console?foo=bar", { method: "POST" });
-    expect(isConsoleRequest(request)).toBe(true);
+    const request = new Request("http://localhost/_console?foo=bar", { method: "POST" });
+    assert.strictEqual(isConsoleRequest(request), true);
   });
 });
 
 describe("processConsoleLogs", () => {
   it("should process valid log request", async () => {
     const logs = [{ level: "log", message: "Test message", timestamp: new Date().toISOString() }];
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: JSON.stringify({ logs }),
       headers: { "Content-Type": "application/json" },
     });
 
     const response = await processConsoleLogs(request);
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
 
     const body = (await response.json()) as { success: boolean };
-    expect(body.success).toBe(true);
+    assert.strictEqual(body.success, true);
   });
 
   it("should handle multiple logs", async () => {
@@ -55,14 +56,14 @@ describe("processConsoleLogs", () => {
       { level: "warn", message: "Message 2", timestamp: new Date().toISOString() },
       { level: "error", message: "Message 3", timestamp: new Date().toISOString() },
     ];
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: JSON.stringify({ logs }),
       headers: { "Content-Type": "application/json" },
     });
 
     const response = await processConsoleLogs(request);
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
   });
 
   it("should handle logs with stack traces", async () => {
@@ -74,14 +75,14 @@ describe("processConsoleLogs", () => {
         stacks: ["at Function.test (file.js:10:5)", "at main (file.js:20:3)"],
       },
     ];
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: JSON.stringify({ logs }),
       headers: { "Content-Type": "application/json" },
     });
 
     const response = await processConsoleLogs(request);
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
   });
 
   it("should handle logs with extra data", async () => {
@@ -93,28 +94,28 @@ describe("processConsoleLogs", () => {
         extra: [{ foo: "bar" }],
       },
     ];
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: JSON.stringify({ logs }),
       headers: { "Content-Type": "application/json" },
     });
 
     const response = await processConsoleLogs(request);
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
   });
 
   it("should return 400 for invalid JSON", async () => {
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: "invalid json",
       headers: { "Content-Type": "application/json" },
     });
 
     const response = await processConsoleLogs(request);
-    expect(response.status).toBe(400);
+    assert.strictEqual(response.status, 400);
 
     const body = (await response.json()) as { error: string };
-    expect(body.error).toBe("Invalid JSON");
+    assert.strictEqual(body.error, "Invalid JSON");
   });
 
   it("should filter logs based on log level", async () => {
@@ -122,7 +123,7 @@ describe("processConsoleLogs", () => {
       { level: "debug", message: "Debug message", timestamp: new Date().toISOString() },
       { level: "error", message: "Error message", timestamp: new Date().toISOString() },
     ];
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: JSON.stringify({ logs }),
       headers: { "Content-Type": "application/json" },
@@ -130,109 +131,109 @@ describe("processConsoleLogs", () => {
 
     // With "error" threshold, only error logs should show (but request still succeeds)
     const response = await processConsoleLogs(request, "error");
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
   });
 
   it("should handle empty logs array", async () => {
-    const request = new Request("http://localhost/__console", {
+    const request = new Request("http://localhost/_console", {
       method: "POST",
       body: JSON.stringify({ logs: [] }),
       headers: { "Content-Type": "application/json" },
     });
 
     const response = await processConsoleLogs(request);
-    expect(response.status).toBe(200);
+    assert.strictEqual(response.status, 200);
   });
 });
 
 describe("generateClientScript", () => {
   it("should generate valid JavaScript", () => {
     const script = generateClientScript();
-    expect(typeof script).toBe("string");
-    expect(script.length).toBeGreaterThan(0);
+    assert.strictEqual(typeof script, "string");
+    assert.ok(script.length > 0);
   });
 
   it("should include IIFE wrapper", () => {
     const script = generateClientScript();
-    expect(script).toContain("(function()");
-    expect(script).toContain("})();");
+    assert.ok(script.includes("(function()"));
+    assert.ok(script.includes("})();"));
   });
 
   it("should include default endpoint", () => {
     const script = generateClientScript();
-    expect(script).toContain("/__console");
+    assert.ok(script.includes("/_console"));
   });
 
   it("should use custom endpoint", () => {
     const script = generateClientScript({ endpoint: "/custom-logs" });
-    expect(script).toContain("/custom-logs");
+    assert.ok(script.includes("/custom-logs"));
   });
 
   it("should patch default console methods", () => {
     const script = generateClientScript();
-    expect(script).toContain("console.log");
-    expect(script).toContain("console.warn");
-    expect(script).toContain("console.error");
-    expect(script).toContain("console.info");
-    expect(script).toContain("console.debug");
+    assert.ok(script.includes("console.log"));
+    assert.ok(script.includes("console.warn"));
+    assert.ok(script.includes("console.error"));
+    assert.ok(script.includes("console.info"));
+    assert.ok(script.includes("console.debug"));
   });
 
   it("should patch only specified console methods", () => {
     const script = generateClientScript({ levels: ["error", "warn"] });
-    expect(script).toContain("console.error");
-    expect(script).toContain("console.warn");
+    assert.ok(script.includes("console.error"));
+    assert.ok(script.includes("console.warn"));
     // The original methods object still contains all methods
-    expect(script).toContain("originalMethods");
+    assert.ok(script.includes("originalMethods"));
   });
 
   it("should include sendBeacon for sending logs", () => {
     const script = generateClientScript();
-    expect(script).toContain("sendBeacon");
+    assert.ok(script.includes("sendBeacon"));
   });
 
   it("should include log buffering", () => {
     const script = generateClientScript();
-    expect(script).toContain("logBuffer");
-    expect(script).toContain("flushLogs");
+    assert.ok(script.includes("logBuffer"));
+    assert.ok(script.includes("flushLogs"));
   });
 
   it("should include flush on beforeunload", () => {
     const script = generateClientScript();
-    expect(script).toContain("beforeunload");
+    assert.ok(script.includes("beforeunload"));
   });
 
   it("should include periodic flush", () => {
     const script = generateClientScript();
-    expect(script).toContain("setInterval");
+    assert.ok(script.includes("setInterval"));
   });
 
   it("should handle stack traces option", () => {
     const scriptWithStacks = generateClientScript({ includeStacks: true });
-    expect(scriptWithStacks).toContain("true");
+    assert.ok(scriptWithStacks.includes("true"));
 
     const scriptWithoutStacks = generateClientScript({ includeStacks: false });
-    expect(scriptWithoutStacks).toContain("false");
+    assert.ok(scriptWithoutStacks.includes("false"));
   });
 
   it("should include original method bindings", () => {
     const script = generateClientScript();
-    expect(script).toContain("console.log.bind(console)");
-    expect(script).toContain("console.warn.bind(console)");
-    expect(script).toContain("console.error.bind(console)");
+    assert.ok(script.includes("console.log.bind(console)"));
+    assert.ok(script.includes("console.warn.bind(console)"));
+    assert.ok(script.includes("console.error.bind(console)"));
   });
 
   it("should include createLogEntry function", () => {
     const script = generateClientScript();
-    expect(script).toContain("createLogEntry");
+    assert.ok(script.includes("createLogEntry"));
   });
 
   it("should include timestamp in log entries", () => {
     const script = generateClientScript();
-    expect(script).toContain("toISOString");
+    assert.ok(script.includes("toISOString"));
   });
 
   it("should include url in log entries", () => {
     const script = generateClientScript();
-    expect(script).toContain("window.location.href");
+    assert.ok(script.includes("window.location.href"));
   });
 });

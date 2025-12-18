@@ -10,11 +10,11 @@ import {
   renderErrorPage,
   type ModuleMap,
 } from "./server";
-import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward";
-// @ts-ignore - Generated at build time
-import modules from "../../dist/.modules.generated";
-// @ts-ignore - Generated at build time
-import chunkManifest from "../../dist/.chunks.generated.json";
+import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
+// @ts-ignore - Generated at build time, aliased by bundler
+import modules from ".modules.generated";
+// @ts-ignore - Generated at build time, aliased by bundler
+import chunkManifest from ".chunks.generated.json";
 
 const typedModules = modules as ModuleMap;
 

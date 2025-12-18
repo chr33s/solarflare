@@ -1,15 +1,14 @@
 /** Server utilities for routing and streaming SSR. */
-import { type VNode, h } from "preact";
-import { type FunctionComponent } from "preact";
+import { type FunctionComponent, type VNode, h } from "preact";
 import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
-import { parsePath } from "./paths";
+import { parsePath } from "./paths.ts";
 import {
   initStore,
   setPathname,
   serializeStoreForHydration,
   serializeDataIsland,
   resetStore,
-} from "./store";
+} from "./store.ts";
 import {
   createHeadContext,
   setHeadContext,
@@ -24,7 +23,7 @@ import {
   type HeadInput,
   type HeadEntryOptions,
   type ActiveHeadEntry,
-} from "./head";
+} from "./head.ts";
 
 /** Marker for asset injection during streaming. */
 export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
@@ -588,4 +587,4 @@ export {
   params,
   serverData,
   pathname,
-} from "./store";
+} from "./store.ts";

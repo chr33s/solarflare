@@ -1,19 +1,33 @@
 /** TypeScript Compiler API utilities for validation and code generation. */
-import { join } from "path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { parsePath, type ParsedPath, type ModuleKind } from "./paths";
+import { parsePath, type ParsedPath, type ModuleKind } from "./paths.ts";
 
-/** Compiler options for TypeScript analysis. */
-const COMPILER_OPTIONS: ts.CompilerOptions = {
-  target: ts.ScriptTarget.Latest,
-  module: ts.ModuleKind.ESNext,
-  jsx: ts.JsxEmit.ReactJSX,
-  jsxImportSource: "preact",
-  strict: true,
-  skipLibCheck: true,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  noEmit: true,
-};
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Reads compiler options from tsconfig.json in the project root. */
+function readCompilerOptions(): ts.CompilerOptions {
+  const configPath = join(__dirname, "..", "tsconfig.json");
+  const configFile = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
+
+  if (configFile.error) {
+    console.warn("Failed to read tsconfig.json, using defaults");
+    return {};
+  }
+
+  const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, dirname(configPath));
+
+  if (parsed.errors.length > 0) {
+    console.warn("Errors parsing tsconfig.json, using defaults");
+    return {};
+  }
+
+  return parsed.options;
+}
+
+/** Compiler options for TypeScript analysis, read from tsconfig.json. */
+const COMPILER_OPTIONS: ts.CompilerOptions = readCompilerOptions();
 
 /** Creates a TypeScript program for analyzing multiple files. */
 export function createProgram(files: string[]): ts.Program {

@@ -1,42 +1,42 @@
-import { describe, it, expect } from "bun:test";
+import { createHash } from "node:crypto";
+import { describe, it } from "node:test";
+import * as assert from "node:assert/strict";
 
 describe("generateHash logic", () => {
   const generateHash = (content: string): string => {
-    const hasher = new Bun.CryptoHasher("sha256");
-    hasher.update(content);
-    return hasher.digest("hex").slice(0, 8);
+    return createHash("sha256").update(content).digest("hex").slice(0, 8);
   };
 
   it("should generate 8 character hash", () => {
     const hash = generateHash("test content");
-    expect(hash.length).toBe(8);
+    assert.strictEqual(hash.length, 8);
   });
 
   it("should generate hex characters only", () => {
     const hash = generateHash("test content");
-    expect(/^[0-9a-f]+$/.test(hash)).toBe(true);
+    assert.strictEqual(/^[0-9a-f]+$/.test(hash), true);
   });
 
   it("should generate same hash for same content", () => {
     const hash1 = generateHash("test content");
     const hash2 = generateHash("test content");
-    expect(hash1).toBe(hash2);
+    assert.strictEqual(hash1, hash2);
   });
 
   it("should generate different hashes for different content", () => {
     const hash1 = generateHash("content 1");
     const hash2 = generateHash("content 2");
-    expect(hash1).not.toBe(hash2);
+    assert.notStrictEqual(hash1, hash2);
   });
 
   it("should handle empty string", () => {
     const hash = generateHash("");
-    expect(hash.length).toBe(8);
+    assert.strictEqual(hash.length, 8);
   });
 
   it("should handle unicode content", () => {
     const hash = generateHash("Hello 世界 🌍");
-    expect(hash.length).toBe(8);
+    assert.strictEqual(hash.length, 8);
   });
 });
 
@@ -46,19 +46,19 @@ describe("normalizeAssetPath logic", () => {
   };
 
   it("should replace slashes with dots", () => {
-    expect(normalizeAssetPath("blog/posts/featured")).toBe("blog.posts.featured");
+    assert.strictEqual(normalizeAssetPath("blog/posts/featured"), "blog.posts.featured");
   });
 
   it("should handle single level path", () => {
-    expect(normalizeAssetPath("index")).toBe("index");
+    assert.strictEqual(normalizeAssetPath("index"), "index");
   });
 
   it("should handle path with leading slash", () => {
-    expect(normalizeAssetPath("/blog/post")).toBe(".blog.post");
+    assert.strictEqual(normalizeAssetPath("/blog/post"), ".blog.post");
   });
 
   it("should handle empty path", () => {
-    expect(normalizeAssetPath("")).toBe("");
+    assert.strictEqual(normalizeAssetPath(""), "");
   });
 });
 
@@ -74,31 +74,32 @@ describe("getChunkName logic", () => {
   };
 
   it("should generate chunk name for index", () => {
-    expect(getChunkName("index.client.tsx")).toBe("index.js");
+    assert.strictEqual(getChunkName("index.client.tsx"), "index.js");
   });
 
   it("should generate chunk name with hash", () => {
-    expect(getChunkName("index.client.tsx", "abc12345")).toBe("index.abc12345.js");
+    assert.strictEqual(getChunkName("index.client.tsx", "abc12345"), "index.abc12345.js");
   });
 
   it("should handle nested paths", () => {
-    expect(getChunkName("blog/posts/featured.client.tsx")).toBe("blog.posts.featured.js");
+    assert.strictEqual(getChunkName("blog/posts/featured.client.tsx"), "blog.posts.featured.js");
   });
 
   it("should strip .client.ts extension", () => {
-    expect(getChunkName("api.client.ts")).toBe("api.js");
+    assert.strictEqual(getChunkName("api.client.ts"), "api.js");
   });
 
   it("should strip .client.tsx extension", () => {
-    expect(getChunkName("component.client.tsx")).toBe("component.js");
+    assert.strictEqual(getChunkName("component.client.tsx"), "component.js");
   });
 
   it("should remove $ from dynamic segments", () => {
-    expect(getChunkName("blog/$slug.client.tsx")).toBe("blog.slug.js");
+    assert.strictEqual(getChunkName("blog/$slug.client.tsx"), "blog.slug.js");
   });
 
   it("should handle multiple dynamic segments", () => {
-    expect(getChunkName("users/$userId/posts/$postId.client.tsx")).toBe(
+    assert.strictEqual(
+      getChunkName("users/$userId/posts/$postId.client.tsx"),
       "users.userId.posts.postId.js",
     );
   });
@@ -140,25 +141,25 @@ describe("generateRoutesTypeFile logic", () => {
 
   it("should generate empty interface for no routes", () => {
     const result = generateRoutesTypeFile([]);
-    expect(result).toContain("export interface Routes");
+    assert.ok(result.includes("export interface Routes"));
   });
 
   it("should generate route type for index", () => {
     const result = generateRoutesTypeFile(["index.client.tsx"]);
-    expect(result).toContain("'/'");
-    expect(result).toContain("Record<string, never>");
+    assert.ok(result.includes("'/'"));
+    assert.ok(result.includes("Record<string, never>"));
   });
 
   it("should generate route type with params", () => {
     const result = generateRoutesTypeFile(["blog/$slug.client.tsx"]);
-    expect(result).toContain("'/blog/:slug'");
-    expect(result).toContain("slug: string");
+    assert.ok(result.includes("'/blog/:slug'"));
+    assert.ok(result.includes("slug: string"));
   });
 
   it("should generate route type with multiple params", () => {
     const result = generateRoutesTypeFile(["users/$userId/posts/$postId.client.tsx"]);
-    expect(result).toContain("userId: string");
-    expect(result).toContain("postId: string");
+    assert.ok(result.includes("userId: string"));
+    assert.ok(result.includes("postId: string"));
   });
 
   it("should only include client routes", () => {
@@ -167,8 +168,8 @@ describe("generateRoutesTypeFile logic", () => {
       "blog/$slug.server.tsx",
       "api/data.server.tsx",
     ]);
-    expect(result).toContain("'/blog/:slug'");
-    expect(result).not.toContain("api");
+    assert.ok(result.includes("'/blog/:slug'"));
+    assert.ok(!result.includes("api"));
   });
 });
 
@@ -189,7 +190,7 @@ describe("extractCssImports logic", () => {
   it("should extract single CSS import", () => {
     const content = `import './styles.css';`;
     const imports = extractCssImports(content);
-    expect(imports).toContain("./styles.css");
+    assert.ok(imports.includes("./styles.css"));
   });
 
   it("should extract multiple CSS imports", () => {
@@ -198,14 +199,14 @@ describe("extractCssImports logic", () => {
       import './theme.css';
     `;
     const imports = extractCssImports(content);
-    expect(imports).toContain("./base.css");
-    expect(imports).toContain("./theme.css");
+    assert.ok(imports.includes("./base.css"));
+    assert.ok(imports.includes("./theme.css"));
   });
 
   it("should handle double quotes", () => {
     const content = `import "./styles.css";`;
     const imports = extractCssImports(content);
-    expect(imports).toContain("./styles.css");
+    assert.ok(imports.includes("./styles.css"));
   });
 
   it("should return empty array for no CSS imports", () => {
@@ -214,7 +215,7 @@ describe("extractCssImports logic", () => {
       import './utils';
     `;
     const imports = extractCssImports(content);
-    expect(imports).toEqual([]);
+    assert.deepStrictEqual(imports, []);
   });
 });
 
@@ -226,19 +227,19 @@ describe("template scaffolding logic", () => {
   };
 
   it("should have index.ts template", () => {
-    expect(templates["index.ts"]).toContain("solarflare/worker");
-    expect(templates["index.ts"]).toContain("export default");
+    assert.ok(templates["index.ts"].includes("solarflare/worker"));
+    assert.ok(templates["index.ts"].includes("export default"));
   });
 
   it("should have _error.tsx template", () => {
-    expect(templates["_error.tsx"]).toContain("Error");
-    expect(templates["_error.tsx"]).toContain("error.message");
+    assert.ok(templates["_error.tsx"].includes("Error"));
+    assert.ok(templates["_error.tsx"].includes("error.message"));
   });
 
   it("should have _layout.tsx template", () => {
-    expect(templates["_layout.tsx"]).toContain("Layout");
-    expect(templates["_layout.tsx"]).toContain("children");
-    expect(templates["_layout.tsx"]).toContain("Assets");
+    assert.ok(templates["_layout.tsx"].includes("Layout"));
+    assert.ok(templates["_layout.tsx"].includes("children"));
+    assert.ok(templates["_layout.tsx"].includes("Assets"));
   });
 });
 
@@ -256,37 +257,37 @@ describe("route file pattern matching", () => {
   };
 
   it("should match client route files", () => {
-    expect(isRouteFile("index.client.tsx")).toBe(true);
-    expect(isRouteFile("blog/$slug.client.tsx")).toBe(true);
-    expect(isRouteFile("api.client.ts")).toBe(true);
+    assert.strictEqual(isRouteFile("index.client.tsx"), true);
+    assert.strictEqual(isRouteFile("blog/$slug.client.tsx"), true);
+    assert.strictEqual(isRouteFile("api.client.ts"), true);
   });
 
   it("should match server route files", () => {
-    expect(isRouteFile("index.server.tsx")).toBe(true);
-    expect(isRouteFile("api/data.server.ts")).toBe(true);
+    assert.strictEqual(isRouteFile("index.server.tsx"), true);
+    assert.strictEqual(isRouteFile("api/data.server.ts"), true);
   });
 
   it("should not match non-route files", () => {
-    expect(isRouteFile("utils.ts")).toBe(false);
-    expect(isRouteFile("component.tsx")).toBe(false);
+    assert.strictEqual(isRouteFile("utils.ts"), false);
+    assert.strictEqual(isRouteFile("component.tsx"), false);
   });
 
   it("should match layout files", () => {
-    expect(isLayoutFile("_layout.tsx")).toBe(true);
-    expect(isLayoutFile("blog/_layout.tsx")).toBe(true);
+    assert.strictEqual(isLayoutFile("_layout.tsx"), true);
+    assert.strictEqual(isLayoutFile("blog/_layout.tsx"), true);
   });
 
   it("should not match non-layout files", () => {
-    expect(isLayoutFile("layout.tsx")).toBe(false);
-    expect(isLayoutFile("_layout.ts")).toBe(false);
+    assert.strictEqual(isLayoutFile("layout.tsx"), false);
+    assert.strictEqual(isLayoutFile("_layout.ts"), false);
   });
 
   it("should match error files", () => {
-    expect(isErrorFile("_error.tsx")).toBe(true);
+    assert.strictEqual(isErrorFile("_error.tsx"), true);
   });
 
   it("should not match non-error files", () => {
-    expect(isErrorFile("error.tsx")).toBe(false);
-    expect(isErrorFile("_error.ts")).toBe(false);
+    assert.strictEqual(isErrorFile("error.tsx"), false);
+    assert.strictEqual(isErrorFile("_error.ts"), false);
   });
 });

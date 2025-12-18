@@ -2,7 +2,7 @@
 
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "diff-dom-streaming";
-import { resetHeadContext } from "./head";
+import { resetHeadContext } from "./head.ts";
 
 /** Route entry from build-time manifest. */
 export interface RouteManifestEntry {

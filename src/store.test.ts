@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
+import * as assert from "node:assert/strict";
 import {
   signal,
   computed,
@@ -13,7 +14,7 @@ import {
   pathname,
   serializeDataIsland,
   type StoreConfig,
-} from "./store";
+} from "./store.ts";
 
 beforeEach(() => {
   resetStore();
@@ -26,22 +27,22 @@ afterEach(() => {
 describe("initStore", () => {
   it("should initialize with default values", () => {
     initStore();
-    expect(params.value).toEqual({});
-    expect(serverData.value.data).toBe(null);
-    expect(serverData.value.loading).toBe(false);
-    expect(serverData.value.error).toBe(null);
+    assert.deepStrictEqual(params.value, {});
+    assert.strictEqual(serverData.value.data, null);
+    assert.strictEqual(serverData.value.loading, false);
+    assert.strictEqual(serverData.value.error, null);
   });
 
   it("should initialize with provided params", () => {
     initStore({ params: { slug: "hello-world" } });
-    expect(params.value).toEqual({ slug: "hello-world" });
+    assert.deepStrictEqual(params.value, { slug: "hello-world" });
   });
 
   it("should initialize with provided server data", () => {
     const data = { title: "Test", content: "Hello" };
     initStore({ serverData: data });
-    expect(serverData.value.data).toEqual(data);
-    expect(serverData.value.loading).toBe(false);
+    assert.deepStrictEqual(serverData.value.data, data);
+    assert.strictEqual(serverData.value.loading, false);
   });
 
   it("should initialize with both params and server data", () => {
@@ -50,28 +51,28 @@ describe("initStore", () => {
       serverData: { name: "Test" },
     };
     initStore(config);
-    expect(params.value).toEqual({ id: "123" });
-    expect(serverData.value.data).toEqual({ name: "Test" });
+    assert.deepStrictEqual(params.value, { id: "123" });
+    assert.deepStrictEqual(serverData.value.data, { name: "Test" });
   });
 });
 
 describe("setParams", () => {
   it("should update params signal", () => {
     setParams({ slug: "test-slug" });
-    expect(params.value).toEqual({ slug: "test-slug" });
+    assert.deepStrictEqual(params.value, { slug: "test-slug" });
   });
 
   it("should replace existing params", () => {
     setParams({ a: "1" });
     setParams({ b: "2" });
-    expect(params.value).toEqual({ b: "2" });
-    expect(params.value.a).toBeUndefined();
+    assert.deepStrictEqual(params.value, { b: "2" });
+    assert.strictEqual((params.value as Record<string, string>).a, undefined);
   });
 
   it("should handle empty params", () => {
     setParams({ slug: "test" });
     setParams({});
-    expect(params.value).toEqual({});
+    assert.deepStrictEqual(params.value, {});
   });
 });
 
@@ -79,22 +80,22 @@ describe("setServerData", () => {
   it("should update server data signal", () => {
     const data = { title: "Hello World" };
     setServerData(data);
-    expect(serverData.value.data).toEqual(data);
+    assert.deepStrictEqual(serverData.value.data, data);
   });
 
   it("should set loading to false", () => {
     setServerData({ loaded: true });
-    expect(serverData.value.loading).toBe(false);
+    assert.strictEqual(serverData.value.loading, false);
   });
 
   it("should clear error", () => {
     setServerData({ success: true });
-    expect(serverData.value.error).toBe(null);
+    assert.strictEqual(serverData.value.error, null);
   });
 
   it("should handle null data", () => {
     setServerData(null);
-    expect(serverData.value.data).toBe(null);
+    assert.strictEqual(serverData.value.data, null);
   });
 
   it("should handle complex data structures", () => {
@@ -106,24 +107,24 @@ describe("setServerData", () => {
       meta: { total: 2, page: 1 },
     };
     setServerData(complexData);
-    expect(serverData.value.data).toEqual(complexData);
+    assert.deepStrictEqual(serverData.value.data, complexData);
   });
 });
 
 describe("setPathname", () => {
   it("should update pathname signal", () => {
     setPathname("/blog/hello-world");
-    expect(pathname.value).toBe("/blog/hello-world");
+    assert.strictEqual(pathname.value, "/blog/hello-world");
   });
 
   it("should handle root pathname", () => {
     setPathname("/");
-    expect(pathname.value).toBe("/");
+    assert.strictEqual(pathname.value, "/");
   });
 
   it("should handle empty pathname", () => {
     setPathname("");
-    expect(pathname.value).toBe("");
+    assert.strictEqual(pathname.value, "");
   });
 });
 
@@ -131,13 +132,13 @@ describe("resetStore", () => {
   it("should reset params to empty object", () => {
     setParams({ slug: "test" });
     resetStore();
-    expect(params.value).toEqual({});
+    assert.deepStrictEqual(params.value, {});
   });
 
   it("should reset server data to initial state", () => {
     setServerData({ some: "data" });
     resetStore();
-    expect(serverData.value).toEqual({
+    assert.deepStrictEqual(serverData.value, {
       data: null,
       loading: false,
       error: null,
@@ -147,7 +148,7 @@ describe("resetStore", () => {
   it("should reset pathname to empty string", () => {
     setPathname("/some/path");
     resetStore();
-    expect(pathname.value).toBe("");
+    assert.strictEqual(pathname.value, "");
   });
 });
 
@@ -159,26 +160,26 @@ describe("batch operations", () => {
       setPathname("/test");
     });
 
-    expect(params.value).toEqual({ a: "1" });
-    expect(serverData.value.data).toEqual({ b: "2" });
-    expect(pathname.value).toBe("/test");
+    assert.deepStrictEqual(params.value, { a: "1" });
+    assert.deepStrictEqual(serverData.value.data, { b: "2" });
+    assert.strictEqual(pathname.value, "/test");
   });
 });
 
 describe("signal reactivity", () => {
   it("should create signals", () => {
     const count = signal(0);
-    expect(count.value).toBe(0);
+    assert.strictEqual(count.value, 0);
     count.value = 1;
-    expect(count.value).toBe(1);
+    assert.strictEqual(count.value, 1);
   });
 
   it("should create computed values", () => {
     const count = signal(2);
     const doubled = computed(() => count.value * 2);
-    expect(doubled.value).toBe(4);
+    assert.strictEqual(doubled.value, 4);
     count.value = 5;
-    expect(doubled.value).toBe(10);
+    assert.strictEqual(doubled.value, 10);
   });
 });
 
@@ -186,14 +187,14 @@ describe("serializeDataIsland", () => {
   it("should serialize data to script tag", async () => {
     const data = { title: "Test" };
     const result = await serializeDataIsland("test-island", data);
-    expect(result).toContain('<script type="application/json" data-island="test-island">');
-    expect(result).toContain("</script>");
+    assert.ok(result.includes('<script type="application/json" data-island="test-island">'));
+    assert.ok(result.includes("</script>"));
   });
 
   it("should include serialized data", async () => {
     const data = { count: 42 };
     const result = await serializeDataIsland("counter-data", data);
-    expect(result).toContain('data-island="counter-data"');
+    assert.ok(result.includes('data-island="counter-data"'));
   });
 
   it("should handle complex data types", async () => {
@@ -205,24 +206,24 @@ describe("serializeDataIsland", () => {
       nested: { a: "b" },
     };
     const result = await serializeDataIsland("complex", data);
-    expect(result).toContain('data-island="complex"');
+    assert.ok(result.includes('data-island="complex"'));
   });
 });
 
 describe("readonly signals", () => {
   it("params should be readonly", () => {
     // The params signal itself can be accessed but not directly modified
-    expect(typeof params.value).toBe("object");
+    assert.strictEqual(typeof params.value, "object");
   });
 
   it("serverData should be readonly", () => {
-    expect(typeof serverData.value).toBe("object");
-    expect(serverData.value).toHaveProperty("data");
-    expect(serverData.value).toHaveProperty("loading");
-    expect(serverData.value).toHaveProperty("error");
+    assert.strictEqual(typeof serverData.value, "object");
+    assert.ok("data" in serverData.value);
+    assert.ok("loading" in serverData.value);
+    assert.ok("error" in serverData.value);
   });
 
   it("pathname should be readonly", () => {
-    expect(typeof pathname.value).toBe("string");
+    assert.strictEqual(typeof pathname.value, "string");
   });
 });

@@ -1,8 +1,8 @@
-/** Signal-based reactive state management using @preact/signals. */
+/** Signal-based reactive state management using `@preact/signals`. */
 
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
-import { serializeToString, parseFromString } from "./serialize";
-import { serializeHeadState, hydrateHeadState } from "./head";
+import { serializeToString, parseFromString } from "./serialize.ts";
+import { serializeHeadState, hydrateHeadState } from "./head.ts";
 
 /** Server-rendered data. */
 export interface ServerData<T = unknown> {

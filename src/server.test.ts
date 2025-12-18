@@ -1,4 +1,5 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it } from "node:test";
+import * as assert from "node:assert/strict";
 import {
   parsePattern,
   createRouter,
@@ -8,52 +9,52 @@ import {
   generateAssetTags,
   type Route,
   type ModuleMap,
-} from "./server";
+} from "./server.ts";
 
 describe("parsePattern", () => {
   it("should parse static route", () => {
     const result = parsePattern("./about.server.tsx");
-    expect(result.pathname).toBe("/about");
-    expect(result.isStatic).toBe(true);
-    expect(result.params).toEqual([]);
+    assert.strictEqual(result.pathname, "/about");
+    assert.strictEqual(result.isStatic, true);
+    assert.deepStrictEqual(result.params, []);
   });
 
   it("should parse route with single param", () => {
     const result = parsePattern("./blog/$slug.server.tsx");
-    expect(result.pathname).toBe("/blog/:slug");
-    expect(result.isStatic).toBe(false);
-    expect(result.params).toHaveLength(1);
-    expect(result.params[0].name).toBe("slug");
+    assert.strictEqual(result.pathname, "/blog/:slug");
+    assert.strictEqual(result.isStatic, false);
+    assert.strictEqual(result.params.length, 1);
+    assert.strictEqual(result.params[0].name, "slug");
   });
 
   it("should parse route with multiple params", () => {
     const result = parsePattern("./users/$userId/posts/$postId.server.tsx");
-    expect(result.pathname).toBe("/users/:userId/posts/:postId");
-    expect(result.params).toHaveLength(2);
-    expect(result.params[0].name).toBe("userId");
-    expect(result.params[1].name).toBe("postId");
+    assert.strictEqual(result.pathname, "/users/:userId/posts/:postId");
+    assert.strictEqual(result.params.length, 2);
+    assert.strictEqual(result.params[0].name, "userId");
+    assert.strictEqual(result.params[1].name, "postId");
   });
 
   it("should parse index route", () => {
     const result = parsePattern("./index.server.tsx");
-    expect(result.pathname).toBe("/");
+    assert.strictEqual(result.pathname, "/");
   });
 
   it("should parse nested index route", () => {
     const result = parsePattern("./blog/index.server.tsx");
-    expect(result.pathname).toBe("/blog");
+    assert.strictEqual(result.pathname, "/blog");
   });
 
   it("should preserve original file path", () => {
     const path = "./custom/path.server.tsx";
     const result = parsePattern(path);
-    expect(result.filePath).toBe(path);
+    assert.strictEqual(result.filePath, path);
   });
 
   it("should calculate specificity", () => {
     const staticRoute = parsePattern("./blog/featured.server.tsx");
     const dynamicRoute = parsePattern("./blog/$slug.server.tsx");
-    expect(staticRoute.specificity).toBeGreaterThan(dynamicRoute.specificity);
+    assert.ok(staticRoute.specificity > dynamicRoute.specificity);
   });
 });
 
@@ -75,13 +76,13 @@ describe("createRouter", () => {
 
   it("should create routes from module map", () => {
     const routes = createRouter(mockModules);
-    expect(routes.length).toBeGreaterThan(0);
+    assert.ok(routes.length > 0);
   });
 
   it("should exclude private files (underscore prefix)", () => {
     const routes = createRouter(mockModules);
     const privatePaths = routes.filter((r) => r.path.includes("/_"));
-    expect(privatePaths).toEqual([]);
+    assert.deepStrictEqual(privatePaths, []);
   });
 
   it("should sort routes by specificity", () => {
@@ -90,7 +91,7 @@ describe("createRouter", () => {
     const aboutIndex = routes.findIndex((r) => r.path.includes("about"));
     const slugIndex = routes.findIndex((r) => r.path.includes("$slug"));
     if (aboutIndex !== -1 && slugIndex !== -1) {
-      expect(aboutIndex).toBeLessThan(slugIndex);
+      assert.ok(aboutIndex < slugIndex);
     }
   });
 
@@ -98,9 +99,9 @@ describe("createRouter", () => {
     const routes = createRouter(mockModules);
     for (const route of routes) {
       if (route.path.includes(".server.")) {
-        expect(route.type).toBe("server");
+        assert.strictEqual(route.type, "server");
       } else if (route.path.includes(".client.")) {
-        expect(route.type).toBe("client");
+        assert.strictEqual(route.type, "client");
       }
     }
   });
@@ -108,7 +109,7 @@ describe("createRouter", () => {
   it("should create URLPattern for each route", () => {
     const routes = createRouter(mockModules);
     for (const route of routes) {
-      expect(route.pattern).toBeInstanceOf(URLPattern);
+      assert.ok(route.pattern instanceof URLPattern);
     }
   });
 });
@@ -130,45 +131,45 @@ describe("matchRoute", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/");
     const match = matchRoute(routes, url);
-    expect(match).not.toBeNull();
-    expect(match?.route.path).toBe("./index.server.tsx");
+    assert.notStrictEqual(match, null);
+    assert.strictEqual(match?.route.path, "./index.server.tsx");
   });
 
   it("should match static route", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/about");
     const match = matchRoute(routes, url);
-    expect(match).not.toBeNull();
-    expect(match?.route.path).toBe("./about.server.tsx");
+    assert.notStrictEqual(match, null);
+    assert.strictEqual(match?.route.path, "./about.server.tsx");
   });
 
   it("should match dynamic route", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/blog/hello-world");
     const match = matchRoute(routes, url);
-    expect(match).not.toBeNull();
-    expect(match?.params.slug).toBe("hello-world");
+    assert.notStrictEqual(match, null);
+    assert.strictEqual(match?.params.slug, "hello-world");
   });
 
   it("should extract route params", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/blog/my-post-123");
     const match = matchRoute(routes, url);
-    expect(match?.params).toEqual({ slug: "my-post-123" });
+    assert.deepStrictEqual(match?.params, { slug: "my-post-123" });
   });
 
   it("should return null for unmatched routes", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/nonexistent/path");
     const match = matchRoute(routes, url);
-    expect(match).toBeNull();
+    assert.strictEqual(match, null);
   });
 
   it("should set complete flag for fully matched params", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/blog/test");
     const match = matchRoute(routes, url);
-    expect(match?.complete).toBe(true);
+    assert.strictEqual(match?.complete, true);
   });
 });
 
@@ -181,39 +182,42 @@ describe("findLayoutHierarchy", () => {
 
   it("should find root layout", () => {
     const result = findLayoutHierarchy("./index.server.tsx", mockLayoutModules);
-    expect(result.layouts.some((l) => l.path === "./_layout.tsx")).toBe(true);
+    assert.strictEqual(
+      result.layouts.some((l) => l.path === "./_layout.tsx"),
+      true,
+    );
   });
 
   it("should find nested layouts in order", () => {
     const result = findLayoutHierarchy("./blog/posts/featured.server.tsx", mockLayoutModules);
-    expect(result.layouts).toHaveLength(3);
-    expect(result.layouts[0].path).toBe("./_layout.tsx");
-    expect(result.layouts[1].path).toBe("./blog/_layout.tsx");
-    expect(result.layouts[2].path).toBe("./blog/posts/_layout.tsx");
+    assert.strictEqual(result.layouts.length, 3);
+    assert.strictEqual(result.layouts[0].path, "./_layout.tsx");
+    assert.strictEqual(result.layouts[1].path, "./blog/_layout.tsx");
+    assert.strictEqual(result.layouts[2].path, "./blog/posts/_layout.tsx");
   });
 
   it("should set correct depth for each layout", () => {
     const result = findLayoutHierarchy("./blog/posts/featured.server.tsx", mockLayoutModules);
-    expect(result.layouts[0].depth).toBe(0);
-    expect(result.layouts[1].depth).toBe(1);
-    expect(result.layouts[2].depth).toBe(2);
+    assert.strictEqual(result.layouts[0].depth, 0);
+    assert.strictEqual(result.layouts[1].depth, 1);
+    assert.strictEqual(result.layouts[2].depth, 2);
   });
 
   it("should return empty layouts when none exist", () => {
     const result = findLayoutHierarchy("./standalone.server.tsx", {});
-    expect(result.layouts).toEqual([]);
+    assert.deepStrictEqual(result.layouts, []);
   });
 
   it("should include checked paths", () => {
     const result = findLayoutHierarchy("./blog/posts/test.server.tsx", mockLayoutModules);
-    expect(result.checkedPaths).toContain("./_layout.tsx");
-    expect(result.checkedPaths).toContain("./blog/_layout.tsx");
-    expect(result.checkedPaths).toContain("./blog/posts/_layout.tsx");
+    assert.ok(result.checkedPaths.includes("./_layout.tsx"));
+    assert.ok(result.checkedPaths.includes("./blog/_layout.tsx"));
+    assert.ok(result.checkedPaths.includes("./blog/posts/_layout.tsx"));
   });
 
   it("should include segments", () => {
     const result = findLayoutHierarchy("./blog/posts/test.server.tsx", mockLayoutModules);
-    expect(result.segments).toEqual(["blog", "posts"]);
+    assert.deepStrictEqual(result.segments, ["blog", "posts"]);
   });
 });
 
@@ -229,46 +233,46 @@ describe("findLayouts", () => {
 
   it("should find layouts using module map", () => {
     const layouts = findLayouts("./blog/post.server.tsx", mockModules);
-    expect(layouts).toHaveLength(2);
+    assert.strictEqual(layouts.length, 2);
   });
 
   it("should return layouts in root-to-leaf order", () => {
     const layouts = findLayouts("./blog/post.server.tsx", mockModules);
-    expect(layouts[0].depth).toBeLessThan(layouts[1].depth);
+    assert.ok(layouts[0].depth < layouts[1].depth);
   });
 });
 
 describe("generateAssetTags", () => {
   it("should generate script tag", () => {
     const result = generateAssetTags("/app.js");
-    expect(result).toContain('<script type="module" src="/app.js"></script>');
+    assert.ok(result.includes('<script type="module" src="/app.js"></script>'));
   });
 
   it("should generate stylesheet links", () => {
     const result = generateAssetTags(undefined, ["/styles.css", "/theme.css"]);
-    expect(result).toContain('<link rel="stylesheet" href="/styles.css">');
-    expect(result).toContain('<link rel="stylesheet" href="/theme.css">');
+    assert.ok(result.includes('<link rel="stylesheet" href="/styles.css">'));
+    assert.ok(result.includes('<link rel="stylesheet" href="/theme.css">'));
   });
 
   it("should generate dev scripts", () => {
     const result = generateAssetTags(undefined, undefined, ["/dev.js"]);
-    expect(result).toContain('<script src="/dev.js"></script>');
+    assert.ok(result.includes('<script src="/dev.js"></script>'));
   });
 
   it("should generate all asset types together", () => {
     const result = generateAssetTags("/app.js", ["/styles.css"], ["/dev.js"]);
-    expect(result).toContain('<link rel="stylesheet" href="/styles.css">');
-    expect(result).toContain('<script src="/dev.js"></script>');
-    expect(result).toContain('<script type="module" src="/app.js"></script>');
+    assert.ok(result.includes('<link rel="stylesheet" href="/styles.css">'));
+    assert.ok(result.includes('<script src="/dev.js"></script>'));
+    assert.ok(result.includes('<script type="module" src="/app.js"></script>'));
   });
 
   it("should return empty string for no assets", () => {
     const result = generateAssetTags();
-    expect(result).toBe("");
+    assert.strictEqual(result, "");
   });
 
   it("should handle empty arrays", () => {
     const result = generateAssetTags(undefined, [], []);
-    expect(result).toBe("");
+    assert.strictEqual(result, "");
   });
 });

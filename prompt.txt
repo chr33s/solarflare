@@ -1148,24 +1148,32 @@ export default function Dashboard({ user, stats }: { user: User; stats: Stats })
 solarflare [options]
 ```
 
-| Option            | Description                        |
-| ----------------- | ---------------------------------- |
-| `--watch`, `-w`   | Watch for changes and rebuild      |
-| `--serve`, `-s`   | Start development server           |
-| `--clean`, `-c`   | Clean output before build          |
-| `--verbose`, `-v` | Verbose logging                    |
+| Option                | Description                    |
+| --------------------- | ------------------------------ |
+| `--clean`, `-c`       | Clean output before build      |
+| `--debug`, `-d`       | Enable debugging               |
+| `--production`, `-p`  | Optimize build for production  |
+| `--serve`, `-s`       | Start development server       |
+| `--watch`, `-w`       | Watch for changes and rebuild  |
 
 ## Development Workflow
 
 ```sh
 # Install dependencies
-bun install
+npm install
 
 # Start development server with hot reload
-bun run dev
+npm run dev
 
 # Build for production
-bun run build
+npm run build
+
+# Run tests
+npm run test
+
+# Deploy to Cloudflare
+wrangler deploy
+```
 
 # Deploy to Cloudflare
 wrangler deploy
@@ -1215,16 +1223,15 @@ wrangler deploy
 
 ```bash
 # Create new project
-bunx create-solarflare my-app
+npx create-solarflare my-app
 
 # Or add to existing project
-bun add @chr33s/solarflare
+npm add @chr33s/solarflare
 ```
 
 ## Requirements
 
-- [Bun](https://bun.sh) or pre-compiled binaries in `bin/`
-- [Node.js](https://nodejs.org) ≥22.18.0
+- [Node.js](https://nodejs.org) ≥24.12.0
 - Modern browser (Chrome 102+, Edge 102+, Safari 15.4+)
 
 </installation>
