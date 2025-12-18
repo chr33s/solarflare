@@ -8,6 +8,7 @@ import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
 import ts from "typescript";
 import { rolldown } from "rolldown";
+import { transform } from "lightningcss";
 import {
   createProgram,
   getDefaultExportInfo,
@@ -833,7 +834,18 @@ async function buildClient() {
         }
 
         const cssRelativePath = cssSourcePath.replace(APP_DIR + "/", "");
-        const cssContent = await readText(cssSourcePath);
+        let cssContent = await readText(cssSourcePath);
+
+        // Minify CSS in production
+        if (args.production) {
+          const result = transform({
+            code: Buffer.from(cssContent),
+            filename: cssSourcePath,
+            minify: true,
+          });
+          cssContent = result.code.toString();
+        }
+
         const cssHash = hash(cssContent);
         const cssBase = normalizeAssetPath(cssRelativePath.replace(/\.css$/, ""));
         const cssOutputName = `${cssBase}.${cssHash}.css`;
@@ -953,6 +965,25 @@ async function buildClient() {
     });
 
     await bundle.close();
+  }
+
+  // Post-process all CSS files for minification
+  if (args.production) {
+    // Match all CSS files including those starting with dots (.entry-*.css)
+    const cssFiles = await scanFiles("?(.)*.css", DIST_CLIENT);
+    for (const cssFile of cssFiles) {
+      const cssPath = join(DIST_CLIENT, cssFile);
+      let cssContent = await readText(cssPath);
+      const result = transform({
+        code: Buffer.from(cssContent),
+        filename: cssPath,
+        minify: true,
+      });
+      const minified = result.code.toString();
+      if (minified !== cssContent) {
+        await write(cssPath, minified);
+      }
+    }
   }
 
   // Build manifest mapping routes to their chunks
@@ -1087,12 +1118,34 @@ async function buildServer() {
   await bundle.write({
     dir: DIST_SERVER,
     format: "esm",
+    inlineDynamicImports: true,
     entryFileNames: "index.js",
     minify: args.production,
     ...(args.sourcemap && { sourcemap: true }),
   });
 
   await bundle.close();
+
+  // Post-process all CSS files for minification
+  if (args.production) {
+    const cssFiles: string[] = [];
+    for await (const file of glob("?(.)*.css", { cwd: DIST_SERVER, withFileTypes: false })) {
+      cssFiles.push(file as string);
+    }
+    for (const cssFile of cssFiles) {
+      const cssPath = join(DIST_SERVER, cssFile);
+      let cssContent = await readText(cssPath);
+      const result = transform({
+        code: Buffer.from(cssContent),
+        filename: cssPath,
+        minify: true,
+      });
+      const minified = result.code.toString();
+      if (minified !== cssContent) {
+        await write(cssPath, minified);
+      }
+    }
+  }
 
   console.log("✅ Server build complete");
 }
