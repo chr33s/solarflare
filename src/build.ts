@@ -86,6 +86,7 @@ const { values: args } = parseArgs({
     watch: { type: "boolean", short: "w", default: false },
     clean: { type: "boolean", short: "c", default: false },
     debug: { type: "boolean", short: "d", default: false },
+    sourcemap: { type: "boolean", default: false },
   },
 });
 
@@ -948,6 +949,7 @@ async function buildClient() {
       format: "esm",
       entryFileNames: meta.chunk,
       minify: args.production,
+      ...(args.sourcemap && { sourcemap: true }),
     });
 
     await bundle.close();
@@ -1087,6 +1089,7 @@ async function buildServer() {
     format: "esm",
     entryFileNames: "index.js",
     minify: args.production,
+    ...(args.sourcemap && { sourcemap: true }),
   });
 
   await bundle.close();

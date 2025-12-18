@@ -1192,6 +1192,7 @@ solarflare [options]
 | `--debug`, `-d`      | Enable debugging               |
 | `--production`, `-p` | Optimize build for production  |
 | `--serve`, `-s`      | Start development server (hmr) |
+| `--sourcemap`        | Generate source maps           |
 | `--watch`, `-w`      | Watch for changes and rebuild  |
 
 ## Development Workflow

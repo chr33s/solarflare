@@ -48,6 +48,13 @@ This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, 
    ```bash
    npm run build
    ```
+   Build CLI Options:
+   - `--clean` / `-c`: Clean output directory before building
+   - `--production` / `-p`: Optimize for production
+   - `--watch` / `-w`: Watch for changes and rebuild
+   - `--serve` / `-s`: Start development server with HMR
+   - `--debug` / `-d`: Enable debugging features
+   - `--sourcemap`: Generate source maps for debugging
 3. **Dev**: Start development mode.
    ```bash
    npm run dev
