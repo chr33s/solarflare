@@ -961,6 +961,10 @@ async function buildClient() {
       format: "esm",
       entryFileNames: meta.chunk,
       minify: args.production,
+      chunkFileNames: "[name].[hash].js",
+      advancedChunks: {
+        groups: [{ name: "vendor", test: /[\\/]node_modules[\\/]/ }],
+      },
       ...(args.sourcemap && { sourcemap: true }),
     });
 
