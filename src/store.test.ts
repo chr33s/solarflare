@@ -187,7 +187,11 @@ describe("serializeDataIsland", () => {
   it("should serialize data to script tag", async () => {
     const data = { title: "Test" };
     const result = await serializeDataIsland("test-island", data);
-    assert.ok(result.includes('<script type="application/json" data-island="test-island">'));
+    assert.ok(
+      result.includes(
+        '<script type="application/json" id="test-island" data-island="test-island">',
+      ),
+    );
     assert.ok(result.includes("</script>"));
   });
 

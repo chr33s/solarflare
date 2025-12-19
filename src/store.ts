@@ -185,7 +185,8 @@ export type { ReadonlySignal, Signal };
  */
 export async function serializeDataIsland(id: string, data: unknown): Promise<string> {
   const serialized = await serializeToString(data);
-  return /* html */ `<script type="application/json" data-island="${id}">${serialized}</script>`;
+  // Include id attribute for diff-dom-streaming to properly match/replace during SPA navigation
+  return /* html */ `<script type="application/json" id="${id}" data-island="${id}">${serialized}</script>`;
 }
 
 /**
