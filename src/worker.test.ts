@@ -5,7 +5,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
+
+async function waitForHydration(page: Page, tag = "sf-root"): Promise<void> {
+  // 1) Ensure the custom element class is registered
+  await page.waitForFunction((t) => !!customElements.get(String(t)), tag);
+
+  // 2) Ensure the element is present and mounted by preact-custom-element
+  // preact-custom-element sets `_vdom` on the host when it mounts.
+  await page.waitForFunction((t) => {
+    const el = document.querySelector(String(t)) as any;
+    return !!el && el._vdom != null;
+  }, tag);
+}
 
 // Helper to spawn a process and wait for it
 function spawnAsync(
@@ -309,15 +321,15 @@ describe("Response metadata extraction", () => {
   });
 
   it("should merge custom headers with defaults", () => {
-    const defaultHeaders = {
+    const defaultHeaders: Record<string, string> = {
       "Content-Type": "text/html; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
     };
-    const customHeaders = {
+    const customHeaders: Record<string, string> = {
       "X-Custom": "value",
       "Cache-Control": "max-age=3600",
     };
-    const finalHeaders = { ...defaultHeaders };
+    const finalHeaders: Record<string, string> = { ...defaultHeaders };
     if (customHeaders) {
       for (const [key, value] of Object.entries(customHeaders)) {
         finalHeaders[key] = value;
@@ -329,14 +341,14 @@ describe("Response metadata extraction", () => {
   });
 
   it("should allow custom headers to override defaults", () => {
-    const defaultHeaders = {
+    const defaultHeaders: Record<string, string> = {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-cache",
     };
-    const customHeaders = {
+    const customHeaders: Record<string, string> = {
       "Cache-Control": "max-age=3600",
     };
-    const finalHeaders = { ...defaultHeaders };
+    const finalHeaders: Record<string, string> = { ...defaultHeaders };
     if (customHeaders) {
       for (const [key, value] of Object.entries(customHeaders)) {
         finalHeaders[key] = value;
@@ -614,8 +626,7 @@ describe("e2e", { timeout: 120_000 }, () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
-    // Wait for scripts to execute
-    await page.waitForTimeout(500);
+    await waitForHydration(page);
 
     // Check if any scripts have executed by looking for hydration markers
     const scriptsExecuted = await page.evaluate(() => {
@@ -667,11 +678,9 @@ describe("e2e", { timeout: 120_000 }, () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
-    // Wait for hydration
-    await page.waitForTimeout(500);
+    await waitForHydration(page);
 
-    // Check that both title tags exist in the head
-    // The layout's base title and the hoisted title from components
+    // Check that only ONE title exists (deduplicated - component wins over layout)
     const titleInfo = await page.evaluate(() => {
       const titles = document.querySelectorAll("title");
       return {
@@ -679,26 +688,55 @@ describe("e2e", { timeout: 120_000 }, () => {
         texts: Array.from(titles).map((t) => t.textContent),
       };
     });
-    // Should have both the layout title and the hoisted component title
-    assert.ok(titleInfo.texts.includes("Solarflare"));
+    // Should have only the component title (deduplication: last wins)
+    assert.strictEqual(titleInfo.count, 1);
     assert.ok(titleInfo.texts.includes("Home | Solarflare"));
 
-    // Check meta description is in the head (hoisted from component)
-    const metaDescription = await page.evaluate(() => {
-      const meta = document.querySelector(
-        'meta[name="description"][content="Welcome to the Solarflare demo app"]',
-      );
-      return meta?.getAttribute("content");
+    // Check meta description is deduplicated (component wins over layout)
+    const metaDescriptions = await page.evaluate(() => {
+      const metas = document.querySelectorAll('meta[name="description"]');
+      return Array.from(metas).map((m) => m.getAttribute("content"));
     });
-    assert.strictEqual(metaDescription, "Welcome to the Solarflare demo app");
+    // Should have only ONE description (component's)
+    assert.strictEqual(metaDescriptions.length, 1);
+    assert.strictEqual(metaDescriptions[0], "Welcome to the Solarflare demo app");
+
+    await page.click('nav a[href="/blog/hello-world"]'); // Navigate to another page client side
+    await page.waitForURL("**/blog/hello-world");
+    await waitForHydration(page, "sf-blog-slug");
+
+    // Check that only ONE title exists on client side as well
+    const clientTitleInfo = await page.evaluate(() => {
+      const titles = document.querySelectorAll("title");
+      return {
+        count: titles.length,
+        texts: Array.from(titles).map((t) => t.textContent),
+      };
+    });
+    assert.strictEqual(clientTitleInfo.count, 1);
+    // Blog route should set a blog-specific title
+    assert.strictEqual(
+      clientTitleInfo.texts.some((t) => t?.includes("| Blog | Solarflare")),
+      true,
+    );
+
+    // Check meta description is deduplicated on client side as well
+    const clientMetaDescriptions = await page.evaluate(() => {
+      const metas = document.querySelectorAll('meta[name="description"]');
+      return Array.from(metas).map((m) => m.getAttribute("content"));
+    });
+    assert.strictEqual(clientMetaDescriptions.length, 1);
+    assert.strictEqual(
+      clientMetaDescriptions.some((c) => c?.includes("Blog post:")),
+      true,
+    );
   });
 
   it("should render dynamic head tags for route params", async () => {
     const page = await browser.newPage();
     await page.goto(`${BASE_URL}/blog/awesome-post`);
 
-    // Wait for hydration
-    await page.waitForTimeout(500);
+    await waitForHydration(page, "sf-blog-slug");
 
     // Check that the hoisted title from the blog component exists
     const titleInfo = await page.evaluate(() => {
@@ -767,8 +805,7 @@ describe("e2e", { timeout: 120_000 }, () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
 
-    // Wait for hydration
-    await page.waitForTimeout(500);
+    await waitForHydration(page);
 
     // Look for any interactive elements
     const hasInteractiveElements = await page.evaluate(() => {

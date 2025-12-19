@@ -164,11 +164,11 @@ function getTextContent(children: ComponentChildren): string {
   return "";
 }
 
-/** Tracks whether we're inside a <head> element to avoid double-processing. */
-let insideHeadElement = false;
-
 /** Whether head hoisting has been installed. */
 let hoistingInstalled = false;
+
+/** Track if head tags were collected during this render (for client-side DOM updates). */
+let headTagsCollectedThisRender = false;
 
 /** Installs the VNode hook to automatically hoist head tags. */
 export function installHeadHoisting(): void {
@@ -178,6 +178,8 @@ export function installHeadHoisting(): void {
   // Store the previous vnode hook (if any)
   // eslint-disable-next-line @typescript-eslint/unbound-method
   const prevVnode = options.vnode;
+  // eslint-disable-next-line @typescript-eslint/unbound-method
+  const prevDiffed = options.diffed;
 
   options.vnode = (vnode: VNode) => {
     // Call previous hook first
@@ -185,28 +187,42 @@ export function installHeadHoisting(): void {
 
     const type = vnode.type;
 
-    // Track when we enter/exit the <head> element
-    if (type === "head") {
-      insideHeadElement = true;
+    // Skip processing of structural elements
+    if (type === "head" || type === "body" || type === "html") {
       return;
     }
 
-    // Skip if inside the static <head> element (those are already in the document)
-    if (insideHeadElement) return;
-
-    // Check if this is a head tag that should be hoisted
+    // Check if this is a head tag that should be collected for deduplication
+    // ALL head tags (both in layout's <head> and in components) go through
+    // the head context for proper deduplication, then render at <Head /> marker
     if (typeof type === "string" && HEAD_TAG_NAMES.has(type)) {
       // Extract the head input from this vnode
       const input = vnodeToHeadInput(vnode);
       if (input) {
-        // Register with head context
+        // Register with head context for deduplication
         const ctx = headContext;
         if (ctx) {
           ctx.push(input);
+          headTagsCollectedThisRender = true;
         }
         // Replace the vnode with null to prevent it from rendering in place
+        // All head tags will be rendered (deduplicated) at the <Head /> marker
         vnode.type = NullComponent;
         (vnode as VNode<{ children?: ComponentChildren }>).props = { children: null };
+      }
+    }
+  };
+
+  // On client side, apply head tags to DOM after render completes
+  options.diffed = (vnode: VNode) => {
+    if (prevDiffed) prevDiffed(vnode);
+
+    // Only apply on client side, when head tags were collected
+    if (typeof document !== "undefined" && headTagsCollectedThisRender) {
+      headTagsCollectedThisRender = false;
+      const ctx = headContext;
+      if (ctx) {
+        applyHeadToDOM(ctx.resolveTags());
       }
     }
   };
@@ -275,7 +291,8 @@ function vnodeToHeadInput(vnode: VNode): HeadInput | null {
 
 /** Resets head element tracking (call between SSR requests). */
 export function resetHeadElementTracking(): void {
-  insideHeadElement = false;
+  // No-op: hoisting is now stateless (all head tags go through context)
+  // Kept for API compatibility
 }
 
 // ============================================================================
@@ -756,10 +773,23 @@ export function applyHeadToDOM(tags: HeadTag[]): void {
   }
 
   for (const tag of tags) {
+    // Skip title - handled separately via document.title to avoid duplicates
+    if (tag.tag === "title") continue;
+
     const key = tag._d || `${tag.tag}:${tag._p}`;
 
-    // Check for existing element with same key
-    const existing = existingByKey.get(key);
+    // Check for existing managed element with same key
+    let existing = existingByKey.get(key);
+
+    // If not found in managed elements, look for SSR-rendered element to adopt
+    if (!existing) {
+      existing = findMatchingSSRElement(head, tag);
+      if (existing) {
+        // Adopt this SSR element by marking it as managed
+        existing.setAttribute("data-sf-head", key);
+      }
+    }
+
     if (existing) {
       // Update existing element
       updateElement(existing, tag);
@@ -786,6 +816,50 @@ export function applyHeadToDOM(tags: HeadTag[]): void {
   }
 
   managedTags.value = newManagedTags;
+}
+
+/**
+ * Finds an SSR-rendered element that matches the given tag.
+ * Used to adopt existing elements instead of creating duplicates.
+ * @param head - The head element to search in
+ * @param tag - The HeadTag to match
+ * @returns Matching element or null
+ */
+function findMatchingSSRElement(head: HTMLHeadElement, tag: HeadTag): Element | null {
+  // Don't try to match elements that are already managed
+  const candidates = head.querySelectorAll(`${tag.tag}:not([data-sf-head])`);
+
+  for (const el of candidates) {
+    // For meta tags, match by name, property, or http-equiv
+    if (tag.tag === "meta") {
+      const name = tag.props.name;
+      const property = tag.props.property;
+      const httpEquiv = tag.props["http-equiv"];
+      const charset = tag.props.charset;
+
+      if (name && el.getAttribute("name") === name) return el;
+      if (property && el.getAttribute("property") === property) return el;
+      if (httpEquiv && el.getAttribute("http-equiv") === httpEquiv) return el;
+      if (charset !== undefined && el.hasAttribute("charset")) return el;
+    }
+
+    // For link tags, match by rel+href or id
+    if (tag.tag === "link") {
+      const rel = tag.props.rel;
+      const href = tag.props.href;
+      const id = tag.props.id;
+
+      if (id && el.getAttribute("id") === id) return el;
+      if (rel === "canonical" && el.getAttribute("rel") === "canonical") return el;
+      if (rel && href && el.getAttribute("rel") === rel && el.getAttribute("href") === href)
+        return el;
+    }
+
+    // For base tag, there should only be one
+    if (tag.tag === "base") return el;
+  }
+
+  return null;
 }
 
 /**

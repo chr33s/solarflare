@@ -496,8 +496,18 @@ import '@preact/signals-debug'
 ${debugImports}import { h, Component as PreactComponent } from 'preact';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
-import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland } from '@chr33s/solarflare/client';
+import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland, installHeadHoisting, createHeadContext, setHeadContext } from '@chr33s/solarflare/client';
 import BaseComponent from '../src/${meta.file}';
+
+// Initialize head hoisting for client-side rendering (prevents duplicate head tags)
+// Note: client bundles may include their own Preact instance. We must install hoisting per-bundle,
+// but still share a single head context across the page.
+if (typeof document !== 'undefined') {
+  const g = window;
+  g.__sfHeadContext ??= createHeadContext();
+  setHeadContext(g.__sfHeadContext);
+  installHeadHoisting();
+}
 
 // Initialize hydration coordinator for streaming SSR
 initHydrationCoordinator();

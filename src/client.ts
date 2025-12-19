@@ -3,12 +3,21 @@ import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./store.ts";
+import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
+
+// Re-export head utilities for client-side head tag management
+export { installHeadHoisting, createHeadContext, setHeadContext };
 
 /**
  * Initializes client-side store from SSR hydration data.
  * @returns Promise that resolves when initialization completes
  */
 export async function initClient(): Promise<void> {
+  // Set up head context and hoisting for client-side rendering
+  const headCtx = createHeadContext();
+  setHeadContext(headCtx);
+  installHeadHoisting();
+
   await hydrateStore();
   initHydrationCoordinator();
 }

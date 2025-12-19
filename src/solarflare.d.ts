@@ -17,6 +17,17 @@ interface ImportMeta {
   };
 }
 
+/**
+ * Globals used by Solarflare-generated client entries.
+ * Kept intentionally loose to avoid leaking internal types.
+ */
+interface Window {
+  /** Shared head context across per-route client chunks. */
+  __sfHeadContext?: unknown;
+  /** Legacy guard used by older generated entries. */
+  __sfHeadInit?: boolean;
+}
+
 declare module "*.css" {
   const classNames: Record<string, string>;
   export default classNames;
