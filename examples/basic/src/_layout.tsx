@@ -1,5 +1,5 @@
 import type { VNode } from "preact";
-import { Assets, Head } from "@chr33s/solarflare/server";
+import { Body, Head } from "@chr33s/solarflare/server";
 import { Nav } from "./_components/nav";
 
 export default function Layout({ children }: { children: VNode }) {
@@ -15,7 +15,7 @@ export default function Layout({ children }: { children: VNode }) {
       <body>
         <Nav />
         <div id="app">{children}</div>
-        <Assets />
+        <Body />
       </body>
     </html>
   );

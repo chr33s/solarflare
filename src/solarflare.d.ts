@@ -524,18 +524,18 @@ declare module "@chr33s/solarflare/server" {
   export function matchRoute(routes: Route[], url: URL): RouteMatch | null;
 
   /**
-   * Marker for asset injection - will be replaced with actual script/style tags
+   * Marker for body injection - will be replaced with actual script/style tags
    */
-  export const ASSETS_MARKER: string;
+  export const BODY_MARKER: string;
 
   /**
-   * Assets placeholder component
-   * Place this in your root layout's <head> to inject route-specific CSS and scripts
+   * Body placeholder component
+   * Place this at the end of your root layout's <body> to inject route-specific CSS and scripts
    */
-  export function Assets(): VNode<any>;
+  export function Body(): VNode<any>;
 
   /**
-   * Layout props - just children, assets are injected separately via <Assets />
+   * Layout props - just children, assets are injected separately via <Body />
    */
   export interface LayoutProps {
     children: VNode<any>;
@@ -749,7 +749,7 @@ declare module "@chr33s/solarflare/server" {
    */
   export interface DeferredData {
     tag: string;
-    promise: Promise<Record<string, unknown>>;
+    promises: Record<string, Promise<unknown>>;
   }
 
   /**

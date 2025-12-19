@@ -18,6 +18,14 @@
       "group": "none",
       "isBackground": true,
       "problemMatcher": []
+    },
+    {
+      "label": "test",
+      "type": "shell",
+      "command": "npm run test -- --watch",
+      "group": "none",
+      "isBackground": true,
+      "problemMatcher": []
     }
   ]
 }

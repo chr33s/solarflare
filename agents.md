@@ -35,6 +35,7 @@ This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, 
 - **Error Boundaries**: Wrap components using `<HMRErrorBoundary>` to isolate crashes without affecting the app.
 - **Scroll Restoration**: Automatically managed during HMR updates; ensure proper tags for state keys.
 - **Routing Patterns**: Define in `router.ts` as `URLPattern` and `RoutesManifest`.
+- **Deferred Streaming**: Promise-valued props returned by `*.server.ts(x)` are deferred and streamed independently; avoid aggregating them with `Promise.all` if you want true per-promise streaming.
 
 ---
 
@@ -61,7 +62,10 @@ This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, 
    ```
 4. **Test**: Run functional, integration & e2e tests
    ```bash
+   # Full test suite
    npm run test
+   # Partial test suite
+   node --test --test-name-pattern="{pattern}" src/{file}.test.ts
    ```
 
 ---

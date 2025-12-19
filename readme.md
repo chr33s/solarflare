@@ -75,6 +75,26 @@ export default async function server(
 }
 ```
 
+#### Streaming Deferred Props
+
+Any **Promise-valued** prop returned from a `*.server.tsx` handler is treated as **deferred**:
+
+- The page shell can start streaming without waiting for it.
+- Multiple deferred props are **independent**: each one is streamed as soon as it resolves.
+- On the client, deferred props are merged into the component props as they arrive.
+
+```tsx
+export default async function server() {
+  const user = await fetchUser(); // blocking
+
+  // non-blocking (deferred)
+  const analytics = fetchAnalytics();
+  const recommendations = fetchRecommendations();
+
+  return { user, analytics, recommendations };
+}
+```
+
 #### With Response Metadata
 
 Control HTTP status, status text, and headers from your server handler:
@@ -97,6 +117,7 @@ export default async function server(
 ```
 
 **Notes:**
+
 - `_status` defaults to 200 if not provided
 - `_headers` are merged with default headers (custom headers take priority)
 - All `_*` prefixed properties are reserved for response metadata and won't be passed as component props

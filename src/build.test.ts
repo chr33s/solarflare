@@ -223,7 +223,7 @@ describe("template scaffolding logic", () => {
   const templates: Record<string, string> = {
     "index.ts": `import worker from "@chr33s/solarflare/worker";\nexport default { fetch: worker };\n`,
     "_error.tsx": `export default function Error({ error }: { error: Error }) {\n  return <div><h1>Error</h1><p>{error.message}</p></div>;\n}\n`,
-    "_layout.tsx": `import type { VNode } from "preact";\nimport { Assets } from "@chr33s/solarflare/server";\n\nexport default function Layout({ children }: { children: VNode }) {\n  return <html><head><Assets /></head><body>{children}</body></html>;\n}\n`,
+    "_layout.tsx": `import type { VNode } from "preact";\nimport { Body, Head } from "@chr33s/solarflare/server";\n\nexport default function Layout({ children }: { children: VNode }) {\n  return <html><head><Head /></head><body>{children}<Body /></body></html>;\n}\n`,
   };
 
   it("should have index.ts template", () => {
@@ -239,7 +239,7 @@ describe("template scaffolding logic", () => {
   it("should have _layout.tsx template", () => {
     assert.ok(templates["_layout.tsx"].includes("Layout"));
     assert.ok(templates["_layout.tsx"].includes("children"));
-    assert.ok(templates["_layout.tsx"].includes("Assets"));
+    assert.ok(templates["_layout.tsx"].includes("Body"));
   });
 });
 

@@ -1,16 +1,11 @@
 {
-  "name": "@chr33s/solarflare-examples-basic",
+  "name": "@chr33s/solarflare-examples-node",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "imports": {
-    "#app/*": "./src/*"
-  },
   "scripts": {
     "build": "solarflare",
-    "dev": "solarflare --serve --watch",
-    "deploy": "solarflare --production && wrangler deploy",
-    "start": "wrangler dev"
+    "start": "node ./dist/server/index.js"
   },
   "dependencies": {
     "@chr33s/solarflare": "file:../../"

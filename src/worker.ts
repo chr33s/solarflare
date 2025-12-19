@@ -103,7 +103,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
 
   const headers = {
     "Content-Type": "text/html; charset=utf-8",
-    "Content-Encoding": "identity", // Workaround: https://github.com/cloudflare/workers-sdk/issues/8004
+    "Content-Encoding": "identity",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Transfer-Encoding": "chunked",
     "X-Content-Type-Options": "nosniff",
@@ -162,7 +162,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
 
     // Load props from server loader if available
     let shellData: Record<string, unknown> = {};
-    let deferredPromise: Promise<Record<string, unknown>> | null = null;
+    let deferredData: Record<string, Promise<unknown>> | null = null;
     let responseHeaders: Record<string, string> | undefined;
     let responseStatus: number | undefined;
     let responseStatusText: string | undefined;
@@ -182,14 +182,14 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       responseStatusText = result._statusText;
 
       const immediateData: Record<string, unknown> = {};
-      const deferredData: Record<string, Promise<unknown>> = {};
+      const deferredPromises: Record<string, Promise<unknown>> = {};
 
       // Filter out underscore-prefixed properties (response metadata)
       const dataEntries = Object.entries(result).filter(([key]) => !key.startsWith("_"));
 
       for (const [key, value] of dataEntries) {
         if (value instanceof Promise) {
-          deferredData[key] = value;
+          deferredPromises[key] = value;
         } else {
           immediateData[key] = value;
         }
@@ -197,20 +197,8 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
 
       shellData = immediateData;
 
-      // If there are deferred promises, combine them into a single promise
-      const deferredKeys = Object.keys(deferredData);
-      if (deferredKeys.length > 0) {
-        deferredPromise = (async () => {
-          const resolved: Record<string, unknown> = {};
-          const entries = await Promise.all(
-            deferredKeys.map(async (key) => [key, await deferredData[key]]),
-          );
-          for (const [key, value] of entries) {
-            resolved[key as string] = value;
-          }
-          return resolved;
-        })();
-      }
+      const deferredKeys = Object.keys(deferredPromises);
+      deferredData = deferredKeys.length > 0 ? deferredPromises : null;
     }
 
     // Combine params and shell data as initial props
@@ -242,7 +230,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
       script: scriptPath,
       styles: stylesheets,
       devScripts,
-      deferred: deferredPromise ? { tag: route.tag, promise: deferredPromise } : undefined,
+      deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
       _headers: responseHeaders,
       _status: responseStatus,
       _statusText: responseStatusText,

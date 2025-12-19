@@ -16,6 +16,11 @@
   "bin": {
     "solarflare": "./src/build.ts"
   },
+  "files": [
+    "src",
+    "!src/*.test.ts",
+    "tsconfig.json"
+  ],
   "scripts": {
     "check": "oxfmt --check && oxlint --type-aware --type-check",
     "fix": "oxfmt && oxlint --type-aware --fix",

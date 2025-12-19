@@ -931,7 +931,6 @@ export const HEAD_MARKER = "<!--SOLARFLARE_HEAD-->";
  * <head>
  *   <meta charset="UTF-8" />
  *   <Head />
- *   <Assets />
  * </head>
  */
 export function Head(): VNode<any> {

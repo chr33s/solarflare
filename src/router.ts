@@ -328,7 +328,11 @@ export class Router {
 
     for (const island of dataIslands) {
       const dataIslandId = island.getAttribute("data-island");
-      if (!dataIslandId?.endsWith("-deferred")) continue;
+
+      if (!dataIslandId) continue;
+
+      const deferredIndex = dataIslandId.indexOf("-deferred-");
+      if (deferredIndex === -1) continue;
 
       if (processedIslands.has(dataIslandId)) {
         island.remove();
@@ -336,7 +340,7 @@ export class Router {
       }
       processedIslands.add(dataIslandId);
 
-      const tag = dataIslandId.replace(/-deferred$/, "");
+      const tag = dataIslandId.slice(0, deferredIndex);
 
       if (!document.querySelector(tag)) {
         island.remove();
@@ -404,6 +408,8 @@ export class Router {
   /** Sets up Navigation API interception. */
   #setupNavigationAPI(): void {
     const nav = (window as any).navigation;
+    if (!nav) return; // Navigation API not supported (e.g., Safari)
+
     const handler = (event: any) => {
       if (!event.canIntercept || event.downloadRequest) return;
 

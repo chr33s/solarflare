@@ -12,9 +12,9 @@
   },
   "files.insertFinalNewline": true,
   "oxc.enable": true,
-  "oxc.fmt.experimental": true,
   "oxc.typeAware": true,
   "terminal.integrated.suggest.enabled": true,
   "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "workbench.externalBrowser": "chrome"
 }

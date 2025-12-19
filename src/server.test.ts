@@ -245,7 +245,7 @@ describe("findLayouts", () => {
 describe("generateAssetTags", () => {
   it("should generate script tag", () => {
     const result = generateAssetTags("/app.js");
-    assert.ok(result.includes('<script type="module" src="/app.js"></script>'));
+    assert.ok(result.includes('<script type="module" src="/app.js" async></script>'));
   });
 
   it("should generate stylesheet links", () => {
@@ -256,14 +256,14 @@ describe("generateAssetTags", () => {
 
   it("should generate dev scripts", () => {
     const result = generateAssetTags(undefined, undefined, ["/dev.js"]);
-    assert.ok(result.includes('<script src="/dev.js"></script>'));
+    assert.ok(result.includes('<script src="/dev.js" async></script>'));
   });
 
   it("should generate all asset types together", () => {
     const result = generateAssetTags("/app.js", ["/styles.css"], ["/dev.js"]);
     assert.ok(result.includes('<link rel="stylesheet" href="/styles.css">'));
-    assert.ok(result.includes('<script src="/dev.js"></script>'));
-    assert.ok(result.includes('<script type="module" src="/app.js"></script>'));
+    assert.ok(result.includes('<script src="/dev.js" async></script>'));
+    assert.ok(result.includes('<script type="module" src="/app.js" async></script>'));
   });
 
   it("should return empty string for no assets", () => {
@@ -356,17 +356,69 @@ describe("renderToStream with response metadata", () => {
     const { h } = await import("preact");
     const vnode = h("div", null, "test");
     const customHeaders = { "X-Deferred": "true" };
-    const deferredPromise = Promise.resolve({ data: "deferred" });
+    const deferredPromise = Promise.resolve("deferred");
     const stream = await import("./server.ts").then((m) =>
       m.renderToStream(vnode, {
         _status: 202,
         _statusText: "Accepted",
         _headers: customHeaders,
-        deferred: { tag: "test-component", promise: deferredPromise },
+        deferred: { tag: "test-component", promises: { data: deferredPromise } },
       }),
     );
     assert.strictEqual(stream.status, 202);
     assert.strictEqual(stream.statusText, "Accepted");
     assert.deepStrictEqual(stream.headers, customHeaders);
+  });
+
+  it("should stream multiple deferred props independently", async () => {
+    const { h } = await import("preact");
+    const vnode = h("div", null, "test");
+
+    // Use real delays to simulate production behavior
+    const fast = new Promise((resolve) => setTimeout(() => resolve("FAST"), 50));
+    const slow = new Promise((resolve) => setTimeout(() => resolve("SLOW"), 150));
+
+    const stream = await import("./server.ts").then((m) =>
+      m.renderToStream(vnode, {
+        deferred: { tag: "test-component", promises: { fast, slow } },
+      }),
+    );
+
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let seen = "";
+    const timestamps: { fast?: number; slow?: number } = {};
+    const start = Date.now();
+
+    // Read until both data islands appear, recording when each is first seen
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        seen += decoder.decode(value, { stream: true });
+        if (!timestamps.fast && seen.includes('data-island="test-component-deferred-fast"')) {
+          timestamps.fast = Date.now() - start;
+        }
+        if (!timestamps.slow && seen.includes('data-island="test-component-deferred-slow"')) {
+          timestamps.slow = Date.now() - start;
+        }
+      }
+    }
+
+    assert.ok(seen.includes('data-island="test-component-deferred-fast"'));
+    assert.ok(seen.includes('data-island="test-component-deferred-slow"'));
+
+    // Fast should arrive before slow (with some tolerance for timing)
+    assert.ok(
+      timestamps.fast! < timestamps.slow!,
+      `Fast chunk (${timestamps.fast}ms) should arrive before slow chunk (${timestamps.slow}ms)`,
+    );
+
+    // Verify they arrived at different times (not batched)
+    const timeDiff = timestamps.slow! - timestamps.fast!;
+    assert.ok(
+      timeDiff > 50,
+      `Chunks should arrive ~100ms apart, but only ${timeDiff}ms difference`,
+    );
   });
 });

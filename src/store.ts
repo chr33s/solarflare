@@ -229,7 +229,7 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
 
   if (data && typeof data === "object") {
     element.removeAttribute("data-loading");
-    element._sfDeferred = data;
+    element._sfDeferred = { ...element._sfDeferred, ...data };
 
     element.dispatchEvent(
       new CustomEvent("sf:hydrate", {
@@ -244,6 +244,7 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
 let hydrationReady = false;
 const hydrationQueue: [string, string][] = [];
 let eventListenerAttached = false;
+let processingQueue = false;
 
 /** Handles hydration queue events. */
 function handleQueueHydrateEvent(e: Event): void {
@@ -251,16 +252,39 @@ function handleQueueHydrateEvent(e: Event): void {
   queueHydration(tag, id);
 }
 
+/** Processes the hydration queue sequentially. */
+async function processHydrationQueue(): Promise<void> {
+  if (processingQueue) return;
+  processingQueue = true;
+
+  while (hydrationQueue.length > 0) {
+    const item = hydrationQueue.shift();
+    if (!item) continue;
+
+    const [tag, dataIslandId] = item;
+    // Skip stale entries for elements no longer in the DOM
+    if (!document.querySelector(tag)) continue;
+
+    try {
+      await hydrateComponent(tag, dataIslandId);
+    } catch (err) {
+      console.error("[solarflare] hydrateComponent error:", err);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  processingQueue = false;
+}
+
 /**
- * Queues a hydration call or executes immediately if coordinator is ready.
+ * Queues a hydration call.
  * @param tag - Custom element tag name
  * @param dataIslandId - Data island identifier
  */
 export function queueHydration(tag: string, dataIslandId: string): void {
+  hydrationQueue.push([tag, dataIslandId]);
   if (hydrationReady) {
-    void hydrateComponent(tag, dataIslandId);
-  } else {
-    hydrationQueue.push([tag, dataIslandId]);
+    void processHydrationQueue();
   }
 }
 
@@ -284,15 +308,8 @@ export function initHydrationCoordinator(): void {
 
   if (hydrationReady) return;
 
-  // Process any queued hydration calls
-  for (const [tag, dataIslandId] of hydrationQueue) {
-    // Skip stale entries for elements no longer in the DOM
-    if (!document.querySelector(tag)) continue;
-    void hydrateComponent(tag, dataIslandId);
-  }
-  hydrationQueue.length = 0;
-
   hydrationReady = true;
+  void processHydrationQueue();
 }
 
 /** Cleans up the hydration coordinator (call on app unmount/navigation). */
@@ -305,5 +322,6 @@ export function cleanupHydrationCoordinator(): void {
   }
 
   hydrationReady = false;
+  processingQueue = false;
   hydrationQueue.length = 0;
 }

@@ -105,10 +105,10 @@ export default { fetch: worker };
 }
 `,
     "_layout.tsx": `import type { VNode } from "preact";
-import { Assets } from "@chr33s/solarflare/server";
+import { Head, Body } from "@chr33s/solarflare/server";
 
 export default function Layout({ children }: { children: VNode }) {
-  return <html><head><Assets /></head><body>{children}</body></html>;
+  return <html><head><Head /></head><body>{children}<Body /></body></html>;
 }
 `,
   };
@@ -494,6 +494,7 @@ import '@preact/signals-debug'
 
   return /* js */ `/** Auto-generated: ${meta.chunk} */
 ${debugImports}import { h, Component as PreactComponent } from 'preact';
+import { useMemo } from 'preact/hooks';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
 import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland, installHeadHoisting, createHeadContext, setHeadContext } from '@chr33s/solarflare/client';
@@ -721,8 +722,18 @@ function ensureRouter() {
 
 /** HMR wrapper with deferred data hydration and error boundary. */
 function Component(props) {
-  const deferredProps = useSignal(null);
-  const _ = hmrVersion.value;
+  const deferredSignals = useMemo(() => new Map(), []);
+  const deferredVersion = useSignal(0);
+  const hmrVer = hmrVersion.value;
+
+  const getOrCreateSignal = (key, value) => {
+    if (!deferredSignals.has(key)) {
+      deferredSignals.set(key, signal(value));
+      deferredVersion.value++;
+    } else {
+      deferredSignals.get(key).value = value;
+    }
+  };
 
   useSignalEffect(() => {
     const el = document.querySelector('${meta.tag}');
@@ -730,18 +741,39 @@ function Component(props) {
     
     const extractDeferred = () => {
       if (el._sfDeferred) {
-        deferredProps.value = el._sfDeferred;
+        for (const [key, value] of Object.entries(el._sfDeferred)) {
+          getOrCreateSignal(key, value);
+        }
         delete el._sfDeferred;
-      } else {
-        extractDataIsland('${meta.tag}-deferred').then(data => {
-          if (data) deferredProps.value = data;
-        });
+        return;
       }
+      
+      const scripts = document.querySelectorAll('script[type="application/json"][data-island^="${meta.tag}-deferred"]');
+      if (!scripts.length) return;
+
+      (async () => {
+        for (const script of scripts) {
+          const id = script.getAttribute('data-island');
+          if (!id) continue;
+          const data = await extractDataIsland(id);
+          if (data && typeof data === 'object') {
+            for (const [key, value] of Object.entries(data)) {
+              getOrCreateSignal(key, value);
+            }
+          }
+          await new Promise(r => setTimeout(r, 0));
+        }
+      })();
     };
     
     extractDeferred();
     
-    const hydrateHandler = (e) => { deferredProps.value = e.detail };
+    const hydrateHandler = (e) => {
+      for (const [key, value] of Object.entries(e.detail)) {
+        getOrCreateSignal(key, value);
+      }
+      delete el._sfDeferred;
+    };
     el.addEventListener('sf:hydrate', hydrateHandler);
     
     const navHandler = () => setTimeout(extractDeferred, 0);
@@ -762,12 +794,16 @@ function Component(props) {
     }
   }
 
-  const finalProps = deferredProps.value 
-    ? { ...cleanProps, ...deferredProps.value } 
-    : cleanProps;
+  const _ver = deferredVersion.value;
+  
+  const deferredProps = {};
+  for (const [key, sig] of deferredSignals) {
+    deferredProps[key] = sig.value;
+  }
 
-  // Wrap in error boundary with HMR recovery
-  return h(HMRErrorBoundary, { hmrVersion: hmrVersion.value },
+  const finalProps = { ...cleanProps, ...deferredProps };
+
+  return h(HMRErrorBoundary, { hmrVersion: hmrVer },
     h(CurrentComponent, finalProps)
   );
 }
@@ -901,6 +937,7 @@ async function buildClient() {
   }
 
   if (!args.production) {
+    await mkdir(DIST_CLIENT, { recursive: true });
     const consoleScript = generateClientScript();
     const consoleScriptPath = join(DIST_CLIENT, "console-forward.js");
     await write(consoleScriptPath, consoleScript);

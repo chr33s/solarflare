@@ -26,14 +26,14 @@ import {
 } from "./head.ts";
 
 /** Marker for asset injection during streaming. */
-export const ASSETS_MARKER = "<!--SOLARFLARE_ASSETS-->";
+export const BODY_MARKER = "<!--SOLARFLARE_BODY-->";
 
 /**
- * Assets placeholder component for layout injection.
- * @returns VNode with assets marker
+ * Body placeholder component for layout injection.
+ * @returns VNode with body marker
  */
-export function Assets(): VNode<any> {
-  return h("solarflare-assets", { dangerouslySetInnerHTML: { __html: ASSETS_MARKER } });
+export function Body(): VNode<any> {
+  return h("solarflare-body", { dangerouslySetInnerHTML: { __html: BODY_MARKER } });
 }
 
 // Re-export head components
@@ -316,13 +316,13 @@ export function generateAssetTags(
   // Add dev mode scripts (like console forwarding)
   if (devScripts && devScripts.length > 0) {
     for (const src of devScripts) {
-      html += `<script src="${src}"></script>`;
+      html += `<script src="${src}" async></script>`;
     }
   }
 
   // Add script tag
   if (script) {
-    html += `<script type="module" src="${script}"></script>`;
+    html += `<script type="module" src="${script}" async></script>`;
   }
 
   return html;
@@ -402,8 +402,8 @@ export async function renderErrorPage(
 export interface DeferredData {
   /** Component tag to hydrate */
   tag: string;
-  /** Promise that resolves to additional props */
-  promise: Promise<Record<string, unknown>>;
+  /** Multiple independent deferred props, streamed as each promise resolves. */
+  promises: Record<string, Promise<unknown>>;
 }
 
 /** Streaming render options. */
@@ -469,7 +469,7 @@ function createAssetInjectionTransformer(
   let buffer = "";
   let doctypeInjected = false;
   let headInjected = false;
-  const assetsMarker = `<solarflare-assets>${ASSETS_MARKER}</solarflare-assets>`;
+  const bodyMarker = `<solarflare-body>${BODY_MARKER}</solarflare-body>`;
   const headMarker = `<solarflare-head>${HEAD_MARKER}</solarflare-head>`;
 
   return new TransformStream({
@@ -496,21 +496,21 @@ function createAssetInjectionTransformer(
         }
       }
 
-      // Check if we have the complete assets marker
-      const markerIndex = buffer.indexOf(assetsMarker);
+      // Check if we have the complete body marker
+      const markerIndex = buffer.indexOf(bodyMarker);
       if (markerIndex !== -1) {
         // Generate replacement content
         const assetTags = generateAssetTags(script, styles, devScripts);
 
         // Replace marker with assets + store hydration
-        buffer = buffer.replace(assetsMarker, assetTags + storeScript);
+        buffer = buffer.replace(bodyMarker, assetTags + storeScript);
 
         // Flush everything before and including the replacement
         controller.enqueue(encoder.encode(buffer));
         buffer = "";
-      } else if (buffer.length > assetsMarker.length * 2) {
+      } else if (buffer.length > bodyMarker.length * 2) {
         // If buffer is getting large and no marker found, flush safe portion
-        const safeLength = buffer.length - assetsMarker.length;
+        const safeLength = buffer.length - bodyMarker.length;
         controller.enqueue(encoder.encode(buffer.slice(0, safeLength)));
         buffer = buffer.slice(safeLength);
       }
@@ -534,11 +534,11 @@ function createAssetInjectionTransformer(
             buffer = buffer.replace(headMarker, headHtml);
           }
         }
-        // Final check for assets marker in remaining content
-        const markerIndex = buffer.indexOf(assetsMarker);
+        // Final check for body marker in remaining content
+        const markerIndex = buffer.indexOf(bodyMarker);
         if (markerIndex !== -1) {
           const assetTags = generateAssetTags(script, styles, devScripts);
-          buffer = buffer.replace(assetsMarker, assetTags + storeScript);
+          buffer = buffer.replace(bodyMarker, assetTags + storeScript);
         }
         controller.enqueue(encoder.encode(buffer));
       }
@@ -577,8 +577,7 @@ export async function renderToStream(
   const transformedStream = stream.pipeThrough(transformer);
 
   if (options.deferred) {
-    const { tag, promise } = options.deferred;
-    const resultStream = createDeferredStream(transformedStream, tag, promise);
+    const resultStream = createDeferredStream(transformedStream, options.deferred);
     (resultStream as SolarflareStream).allReady = stream.allReady;
     (resultStream as SolarflareStream).status = options._status ?? 200;
     (resultStream as SolarflareStream).statusText = options._statusText;
@@ -603,12 +602,56 @@ export async function renderToStream(
  */
 function createDeferredStream(
   inputStream: ReadableStream<Uint8Array>,
-  tag: string,
-  promise: Promise<Record<string, unknown>>,
+  deferred: DeferredData,
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
   let controller: ReadableStreamDefaultController<Uint8Array>;
+
+  const tag = deferred.tag;
+
+  let inputDone = false;
+  let pendingDeferred = 0;
+  let allowDeferredFlush = true;
+  let closed = false;
+  const pendingChunks: Uint8Array[] = [];
+
+  function maybeClose(): void {
+    if (closed) return;
+    if (!inputDone) return;
+    if (pendingDeferred !== 0) return;
+    if (!allowDeferredFlush) return;
+    closed = true;
+    controller.close();
+  }
+
+  function flushPendingChunks(): void {
+    if (!allowDeferredFlush) return;
+
+    while (pendingChunks.length > 0) {
+      controller.enqueue(pendingChunks.shift()!);
+    }
+
+    maybeClose();
+  }
+
+  function enqueueDeferredChunk(html: string): void {
+    const chunk = encoder.encode(html);
+    if (allowDeferredFlush) {
+      controller.enqueue(chunk);
+      maybeClose();
+    } else {
+      pendingChunks.push(chunk);
+    }
+  }
+
+  /** Builds data island HTML with deferred hydration trigger. */
+  async function buildDeferredHtml(dataIslandId: string, data: unknown, hydrateScriptId: string) {
+    const dataIsland = await serializeDataIsland(dataIslandId, data);
+    const hydrationDetail = JSON.stringify({ tag, id: dataIslandId });
+    const hydrationScript = `<script id="${hydrateScriptId}">setTimeout(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})),0)</script>`;
+    return dataIsland + hydrationScript;
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     start(ctrl) {
@@ -628,23 +671,35 @@ function createDeferredStream(
           return;
         }
 
-        try {
-          const data = await promise;
-          const dataIslandId = `${tag}-deferred`;
-          const dataIsland = await serializeDataIsland(dataIslandId, data);
-          // Dispatch a custom event that the hydration coordinator listens for
-          // Use JSON.stringify to safely escape tag/id values and prevent injection
-          // Add id to script so diff-dom-streaming can identify it and avoid duplicates
-          const hydrationDetail = JSON.stringify({ tag, id: dataIslandId });
-          const hydrationScript = `<script id="${tag}-hydrate">requestAnimationFrame(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})))</script>`;
-          controller.enqueue(encoder.encode(dataIsland + hydrationScript));
-        } catch (err) {
-          const errorScript = `<script>console.error("[solarflare] Deferred error:", ${JSON.stringify((err as Error).message)})</script>`;
-          controller.enqueue(encoder.encode(errorScript));
-        }
-
-        controller.close();
+        inputDone = true;
+        flushPendingChunks();
+        maybeClose();
       })();
+
+      const entries = Object.entries(deferred.promises);
+      pendingDeferred = entries.length;
+
+      entries.forEach(([key, promise]) => {
+        void Promise.resolve(promise)
+          .then(async (value) => {
+            const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, "_");
+            const dataIslandId = `${tag}-deferred-${safeKey}`;
+            const html = await buildDeferredHtml(
+              dataIslandId,
+              { [key]: value },
+              `${tag}-hydrate-${safeKey}`,
+            );
+            enqueueDeferredChunk(html);
+          })
+          .catch((err) => {
+            const errorScript = `<script>console.error("[solarflare] Deferred error (${JSON.stringify(key)}):", ${JSON.stringify((err as Error).message)})</script>`;
+            enqueueDeferredChunk(errorScript);
+          })
+          .finally(() => {
+            pendingDeferred--;
+            maybeClose();
+          });
+      });
     },
   });
 

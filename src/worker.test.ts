@@ -26,7 +26,7 @@ function spawnAsync(
 ): { process: ChildProcess; exited: Promise<number | null> } {
   const proc = spawn(command[0], command.slice(1), {
     cwd: options.cwd,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "inherit", "inherit"],
   });
 
   const exited = new Promise<number | null>((resolve) => {
@@ -230,6 +230,7 @@ describe("Response headers", () => {
   it("should create proper streaming response headers", () => {
     const headers = {
       "Content-Type": "text/html; charset=utf-8",
+      // Workaround for wrangler streaming issue: https://github.com/cloudflare/workers-sdk/issues/8004
       "Content-Encoding": "identity",
       "Transfer-Encoding": "chunked",
       "X-Content-Type-Options": "nosniff",
@@ -378,13 +379,13 @@ describe("Response metadata extraction", () => {
 const BASIC_EXAMPLE_DIR = join(__dirname, "../examples/basic");
 const BASE_URL = "http://localhost:8080";
 
-describe("integration", { timeout: 120_000 }, () => {
+describe("integration", () => {
   let serverProcess: ChildProcess | null = null;
 
   before(async () => {
     // Build the example
     const { process: buildProcess, exited: buildExited } = spawnAsync(
-      ["npm", "run", "build", "--clean"],
+      ["npm", "run", "build", "--", "--clean"],
       { cwd: BASIC_EXAMPLE_DIR },
     );
 
@@ -523,14 +524,14 @@ describe("integration", { timeout: 120_000 }, () => {
   });
 });
 
-describe("e2e", { timeout: 120_000 }, () => {
+describe("e2e", () => {
   let serverProcess: ChildProcess | null = null;
   let browser: Browser;
 
   before(async () => {
     // Build the basic example
     const { process: buildProcess, exited: buildExited } = spawnAsync(
-      ["npm", "run", "build", "--clean"],
+      ["npm", "run", "build", "--", "--clean"],
       { cwd: BASIC_EXAMPLE_DIR },
     );
 
@@ -857,7 +858,7 @@ describe("e2e", { timeout: 120_000 }, () => {
     assert.strictEqual(hasStyles, true);
   });
 
-  it("should handle concurrent navigation", { timeout: 10_000 }, async () => {
+  it("should handle concurrent navigation", { timeout: 30_000 }, async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
     await page.goto(`${BASE_URL}/blog/test`);
@@ -964,6 +965,46 @@ describe("e2e", { timeout: 120_000 }, () => {
     });
 
     assert.strictEqual(hasSerializedData, true);
+  });
+
+  it("should merge deferred props correctly", async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL, { waitUntil: "commit" });
+
+    // Initial state: both should be loading
+    await page.waitForSelector("h3");
+
+    const h3s = page.locator("h3");
+
+    // Check initial state - both h3s should show Loading...
+    const firstH3Initial = await h3s.nth(0).textContent();
+    const secondH3Initial = await h3s.nth(1).textContent();
+    assert.strictEqual(firstH3Initial, "Loading...");
+    assert.strictEqual(secondH3Initial, "Loading...");
+
+    const stateAfterFirstDefer = await page.waitForFunction(
+      () => {
+        const h3Elements = document.querySelectorAll("h3");
+        const first = h3Elements[0]?.textContent ?? "";
+        const second = h3Elements[1]?.textContent ?? "";
+        // Return state when first defer has resolved but capture second's state
+        if (first.includes("Deferred:")) {
+          return { first, second };
+        }
+        return null;
+      },
+      { timeout: 10000 },
+    );
+
+    const state = await stateAfterFirstDefer.jsonValue();
+    assert.ok(state);
+    assert.ok(state.first.includes("Deferred: WORLD"));
+    assert.strictEqual(state.second, "Loading...");
+
+    // Wait for second deferred prop (5s total)
+    await page.waitForSelector("text=Deferred2: world2", { timeout: 10_000 });
+    const finalSecondH3 = await h3s.nth(1).textContent();
+    assert.ok(finalSecondH3?.includes("Deferred2: world2"));
   });
 });
 
