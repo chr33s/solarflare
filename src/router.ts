@@ -269,6 +269,15 @@ export class Router {
   async #loadRoute(match: RouteMatch, url: URL, useTransition: boolean): Promise<void> {
     const { entry } = match;
 
+    // Preload the route chunk *before* DOM diffing so any custom elements for the
+    // incoming HTML are already defined when inserted.
+    // This avoids edge-cases where upgraded callbacks/hydration don't run reliably
+    // when elements are inserted first and defined later.
+    if (entry.chunk) {
+      const absoluteChunk = new URL(entry.chunk, location.origin).href;
+      await import(absoluteChunk);
+    }
+
     const response = await fetchWithRetry(
       url.href,
       { headers: { Accept: "text/html" } },
@@ -280,6 +289,18 @@ export class Router {
     }
 
     await diff(document, response.body!, { transition: useTransition });
+
+    // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree.
+    // If the subtree is already mounted by preact-custom-element, external DOM mutations can
+    // desync Preact's event delegation/handlers, leading to "dead" UI after navigation.
+    //
+    // To keep semantics simple and reliable, remount the route's root island by swapping
+    // the host element node (this triggers disconnected/connected lifecycle and a fresh mount).
+    const host = document.querySelector(entry.tag) as HTMLElement & { _vdom?: unknown };
+    if (host) {
+      const replacement = host.cloneNode(true) as HTMLElement;
+      host.replaceWith(replacement);
+    }
 
     // Reset head context after navigation - the new HTML has fresh head tags
     // and any new useHead calls from hydrated components will be fresh
@@ -297,11 +318,6 @@ export class Router {
           document.head.appendChild(link);
         }
       }
-    }
-
-    if (entry.chunk) {
-      const absoluteChunk = new URL(entry.chunk, location.origin).href;
-      await import(absoluteChunk);
     }
   }
 

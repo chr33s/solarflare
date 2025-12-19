@@ -867,6 +867,41 @@ describe("e2e", { timeout: 120_000 }, () => {
     assert.strictEqual(finalUrl, `${BASE_URL}/`);
   });
 
+  it("should keep button interactivity after client-side roundtrip navigation", async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL);
+
+    await waitForHydration(page);
+
+    // The basic example has a counter button with text like: "count is 0".
+    // Be explicit to avoid clicking the PostForm submit button.
+    const countButton = page.getByRole("button", { name: /count is/i });
+    const getCountText = async () => (await countButton.textContent()) ?? "";
+
+    const before = await getCountText();
+    await countButton.click();
+    const after = await getCountText();
+    assert.notStrictEqual(after, before);
+
+    // Navigate to blog (client-side via nav), then back home (client-side).
+    await page.click('nav a[href="/blog/hello-world"]');
+    await page.waitForURL("**/blog/hello-world");
+    await waitForHydration(page, "sf-blog-slug");
+
+    await page.click('nav a[href="/"]');
+    await page.waitForURL("**/");
+    await waitForHydration(page);
+
+    const beforeReturn = await getCountText();
+    await countButton.click();
+    const afterReturn = await getCountText();
+    assert.notStrictEqual(
+      afterReturn,
+      beforeReturn,
+      "Counter button should remain interactive after navigating back to /",
+    );
+  });
+
   it("should support browser back navigation", async () => {
     const page = await browser.newPage();
     await page.goto(BASE_URL);
