@@ -934,52 +934,55 @@ async function buildClient() {
 
   console.log("📦 Building client chunks...");
 
-  // Build each entry with rolldown
+  // Build all entries in a single rolldown bundle so chunks (e.g. vendor) can be shared.
   await mkdir(DIST_CLIENT, { recursive: true });
 
+  const input: Record<string, string> = {};
   for (const entryPath of entryPaths) {
     const meta = entryToMeta[entryPath];
-
-    const bundle = await rolldown({
-      input: entryPath,
-      platform: "browser",
-      tsconfig: true,
-      moduleTypes: {
-        ".svg": "asset",
-        ".png": "asset",
-        ".jpg": "asset",
-        ".jpeg": "asset",
-        ".gif": "asset",
-        ".webp": "asset",
-        ".ico": "asset",
-      },
-      resolve: {
-        alias: {
-          "#app": APP_DIR,
-        },
-      },
-      transform: {
-        jsx: {
-          runtime: "automatic",
-          development: false,
-        },
-      },
-    });
-
-    await bundle.write({
-      dir: DIST_CLIENT,
-      format: "esm",
-      entryFileNames: meta.chunk,
-      minify: args.production,
-      chunkFileNames: "[name].[hash].js",
-      advancedChunks: {
-        groups: [{ name: "vendor", test: /[\\/]node_modules[\\/]/ }],
-      },
-      ...(args.sourcemap && { sourcemap: true }),
-    });
-
-    await bundle.close();
+    // Ensure output is exactly `${meta.chunk}` by using `[name].js` and stripping `.js` from the input name.
+    input[meta.chunk.replace(/\.js$/, "")] = entryPath;
   }
+
+  const bundle = await rolldown({
+    input,
+    platform: "browser",
+    tsconfig: true,
+    moduleTypes: {
+      ".svg": "asset",
+      ".png": "asset",
+      ".jpg": "asset",
+      ".jpeg": "asset",
+      ".gif": "asset",
+      ".webp": "asset",
+      ".ico": "asset",
+    },
+    resolve: {
+      alias: {
+        "#app": APP_DIR,
+      },
+    },
+    transform: {
+      jsx: {
+        runtime: "automatic",
+        development: false,
+      },
+    },
+  });
+
+  await bundle.write({
+    dir: DIST_CLIENT,
+    format: "esm",
+    entryFileNames: "[name].js",
+    minify: args.production,
+    chunkFileNames: "[name].[hash].js",
+    advancedChunks: {
+      groups: [{ name: "vendor", test: /[\\/]node_modules[\\/]/ }],
+    },
+    ...(args.sourcemap && { sourcemap: true }),
+  });
+
+  await bundle.close();
 
   // Post-process all CSS files for minification
   if (args.production) {
@@ -1107,8 +1110,14 @@ async function buildServer() {
       "preact",
       "preact/hooks",
       "preact/compat",
+      // Automatic JSX runtime entrypoints (can otherwise get inlined)
+      "preact/jsx-runtime",
+      "preact/jsx-dev-runtime",
+      // Optional/debug entrypoints
+      "preact/debug",
       "@preact/signals",
       "@preact/signals-core",
+      "@preact/signals-debug",
       "preact-render-to-string",
       "preact-render-to-string/stream",
       // Client-only library - avoid bundling for server
