@@ -217,6 +217,186 @@ describe("extractCssImports logic", () => {
     const imports = extractCssImports(content);
     assert.deepStrictEqual(imports, []);
   });
+
+  it("should handle nested path CSS imports", () => {
+    const content = `import '../shared/components.css';`;
+    const imports = extractCssImports(content);
+    assert.ok(imports.includes("../shared/components.css"));
+  });
+
+  it("should handle absolute path CSS imports", () => {
+    const content = `import '/styles/global.css';`;
+    const imports = extractCssImports(content);
+    assert.ok(imports.includes("/styles/global.css"));
+  });
+});
+
+describe("extractAllCssImports recursive logic", () => {
+  type FileEntry = { css: string[]; deps: string[] };
+
+  // Simulates the recursive CSS extraction behavior
+  const extractAllCssImports = (
+    files: Map<string, FileEntry>,
+    startFile: string,
+    visited: Set<string> = new Set(),
+  ): string[] => {
+    if (visited.has(startFile)) return [];
+    visited.add(startFile);
+
+    const file = files.get(startFile);
+    if (!file) return [];
+
+    const allCss: string[] = [...file.css];
+
+    for (const dep of file.deps) {
+      allCss.push(...extractAllCssImports(files, dep, visited));
+    }
+
+    return allCss;
+  };
+
+  it("should extract CSS from single file", () => {
+    const files = new Map<string, FileEntry>();
+    files.set("index.tsx", { css: ["./index.css"], deps: [] });
+
+    const result = extractAllCssImports(files, "index.tsx");
+    assert.deepStrictEqual(result, ["./index.css"]);
+  });
+
+  it("should recursively extract CSS from dependencies", () => {
+    const files = new Map<string, FileEntry>();
+    files.set("index.tsx", { css: ["./index.css"], deps: ["./header.tsx"] });
+    files.set("./header.tsx", { css: ["./header.css"], deps: [] });
+
+    const result = extractAllCssImports(files, "index.tsx");
+    assert.ok(result.includes("./index.css"));
+    assert.ok(result.includes("./header.css"));
+  });
+
+  it("should handle deep dependency chains", () => {
+    const files = new Map<string, FileEntry>();
+    files.set("a.tsx", { css: ["./a.css"], deps: ["./b.tsx"] });
+    files.set("./b.tsx", { css: ["./b.css"], deps: ["./c.tsx"] });
+    files.set("./c.tsx", { css: ["./c.css"], deps: [] });
+
+    const result = extractAllCssImports(files, "a.tsx");
+    assert.strictEqual(result.length, 3);
+    assert.deepStrictEqual(result, ["./a.css", "./b.css", "./c.css"]);
+  });
+
+  it("should avoid circular dependencies", () => {
+    const files = new Map<string, FileEntry>();
+    files.set("a.tsx", { css: ["./a.css"], deps: ["./b.tsx"] });
+    files.set("./b.tsx", { css: ["./b.css"], deps: ["a.tsx"] }); // Circular
+
+    const result = extractAllCssImports(files, "a.tsx");
+    assert.strictEqual(result.length, 2);
+  });
+
+  it("should handle missing dependencies gracefully", () => {
+    const files = new Map<string, FileEntry>();
+    files.set("index.tsx", { css: ["./index.css"], deps: ["./missing.tsx"] });
+
+    const result = extractAllCssImports(files, "index.tsx");
+    assert.deepStrictEqual(result, ["./index.css"]);
+  });
+
+  it("should handle files without CSS", () => {
+    const files = new Map<string, FileEntry>();
+    files.set("index.tsx", { css: [], deps: ["./utils.tsx"] });
+    files.set("./utils.tsx", { css: [], deps: [] });
+
+    const result = extractAllCssImports(files, "index.tsx");
+    assert.deepStrictEqual(result, []);
+  });
+});
+
+describe("generateChunkedClientEntry CSS integration", () => {
+  // Simplified version of generateChunkedClientEntry for CSS handling
+  const generateCssImports = (cssFiles: string[]): string => {
+    return cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
+  };
+
+  const generateCssRegistrations = (cssFiles: string[], tag: string): string => {
+    return cssFiles
+      .map((file, i) => `stylesheets.register('${file}', css${i}, { consumer: '${tag}' });`)
+      .join("\n");
+  };
+
+  it("should generate raw CSS imports with ?raw suffix", () => {
+    const cssFiles = ["./styles.css", "./theme.css"];
+    const imports = generateCssImports(cssFiles);
+
+    assert.ok(imports.includes("import css0 from './styles.css?raw'"));
+    assert.ok(imports.includes("import css1 from './theme.css?raw'"));
+  });
+
+  it("should generate stylesheet registrations with consumer", () => {
+    const cssFiles = ["./button.css"];
+    const registrations = generateCssRegistrations(cssFiles, "sf-button");
+
+    assert.ok(registrations.includes("stylesheets.register"));
+    assert.ok(registrations.includes("consumer: 'sf-button'"));
+  });
+
+  it("should handle empty CSS files array", () => {
+    const imports = generateCssImports([]);
+    const registrations = generateCssRegistrations([], "sf-empty");
+
+    assert.strictEqual(imports, "");
+    assert.strictEqual(registrations, "");
+  });
+
+  it("should use sequential variable names for multiple CSS files", () => {
+    const cssFiles = ["./a.css", "./b.css", "./c.css"];
+    const imports = generateCssImports(cssFiles);
+
+    assert.ok(imports.includes("css0"));
+    assert.ok(imports.includes("css1"));
+    assert.ok(imports.includes("css2"));
+  });
+});
+
+describe("CSS HMR code generation", () => {
+  const generateCssHmr = (cssFiles: string[]): string => {
+    return cssFiles
+      .map(
+        (file) => `hmr.on('sf:css:${file}', (newCss) => {
+    if (newCss) {
+      stylesheets.update('${file}', newCss);
+    }
+  });`,
+      )
+      .join("\n");
+  };
+
+  it("should generate HMR event handlers for CSS files", () => {
+    const cssFiles = ["./styles.css"];
+    const hmr = generateCssHmr(cssFiles);
+
+    assert.ok(hmr.includes("hmr.on('sf:css:./styles.css'"));
+    assert.ok(hmr.includes("stylesheets.update"));
+  });
+
+  it("should check for newCss", () => {
+    const cssFiles = ["./theme.css"];
+    const hmr = generateCssHmr(cssFiles);
+
+    assert.ok(hmr.includes("if (newCss)"));
+  });
+
+  it("should handle multiple CSS files", () => {
+    const cssFiles = ["./a.css", "./b.css"];
+    const hmr = generateCssHmr(cssFiles);
+
+    assert.ok(hmr.includes("sf:css:./a.css"));
+    assert.ok(hmr.includes("sf:css:./b.css"));
+  });
+
+  it("should return empty string for no CSS files", () => {
+    const hmr = generateCssHmr([]);
+    assert.strictEqual(hmr, "");
+  });
 });
 
 describe("template scaffolding logic", () => {

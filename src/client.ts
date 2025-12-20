@@ -275,3 +275,15 @@ export {
   dispatchHMREvent,
   onHMREvent,
 } from "./hmr.ts";
+
+// Re-export stylesheet utilities for Constructable Stylesheets support
+export { stylesheets, supportsConstructableStylesheets, StylesheetManager } from "./stylesheets.ts";
+
+export {
+  generateStylePreloadScript,
+  getPreloadedStylesheet,
+  hydratePreloadedStyles,
+} from "./ssr-styles.ts";
+
+export { hmr } from "./hmr-client.ts";
+export type { HmrApi, HmrCallback } from "./hmr-client.ts";

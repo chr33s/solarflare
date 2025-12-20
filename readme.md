@@ -11,6 +11,7 @@ File-based routing for Preact + Cloudflare Workers with SSR streaming and web co
 - **SSR streaming** — Server-side rendering with Cloudflare Workers
 - **Web component hydration** — Auto-registration via `preact-custom-element`
 - **SPA navigation** — Navigation API with View Transitions
+- **Constructable Stylesheets** - Designed for component-based styling via `CSSStyleSheet.insertRule()`
 - **Type-safe** — Full TypeScript support
 
 ## Performance Optimizations

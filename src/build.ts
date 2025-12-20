@@ -8,6 +8,7 @@ import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
 import ts from "typescript";
 import { rolldown } from "rolldown";
+import { replacePlugin } from "rolldown/plugins";
 import { transform } from "lightningcss";
 import {
   createProgram,
@@ -480,9 +481,14 @@ interface RoutesManifest {
  * Generates virtual client entry for a single component with HMR support.
  * @param meta - Component metadata
  * @param routesManifest - Routes manifest for routing
+ * @param cssFiles - CSS files to import as Constructable Stylesheets
  * @returns Generated JavaScript entry code
  */
-function generateChunkedClientEntry(meta: ComponentMeta, routesManifest: RoutesManifest): string {
+function generateChunkedClientEntry(
+  meta: ComponentMeta,
+  routesManifest: RoutesManifest,
+  cssFiles: string[] = [],
+): string {
   const debugImports = args.debug
     ? `import 'preact/debug'
 import '@preact/signals-debug'
@@ -492,12 +498,74 @@ import '@preact/signals-debug'
   // Inline the routes manifest to avoid fetch
   const inlinedRoutes = JSON.stringify(routesManifest);
 
+  // Generate CSS imports as raw strings for Constructable Stylesheets
+  const cssImports = cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
+
+  const cssRegistrations = cssFiles
+    .map(
+      (file, i) => `
+    const preloaded${i} = getPreloadedStylesheet('${file}');
+    if (!preloaded${i}) {
+      stylesheets.register('${file}', css${i}, { consumer: '${meta.tag}' });
+    }`,
+    )
+    .join("");
+
+  const cssHmr = cssFiles
+    .map(
+      (file, _i) => `
+  hmr.on('sf:css:${file}', (newCss) => {
+    if (newCss) {
+      stylesheets.update('${file}', newCss);
+      console.log('[HMR] Updated stylesheet: ${file}');
+    }
+  });`,
+    )
+    .join("");
+
+  const stylesheetImports =
+    cssFiles.length > 0
+      ? `
+import { stylesheets, supportsConstructableStylesheets, getPreloadedStylesheet } from '@chr33s/solarflare/client';
+${cssImports}`
+      : "";
+
+  const stylesheetSetup =
+    cssFiles.length > 0
+      ? `
+// ============================================================================
+// Constructable Stylesheets Setup
+// ============================================================================
+if (typeof document !== 'undefined') {
+  if (supportsConstructableStylesheets()) {
+    // Check for SSR-preloaded stylesheets first, register if not preloaded
+    ${cssRegistrations}
+    
+    // Adopt stylesheets to document for light DOM components
+    const sheets = stylesheets.getForConsumer('${meta.tag}');
+    document.adoptedStyleSheets = [
+      ...document.adoptedStyleSheets.filter(s => !sheets.includes(s)),
+      ...sheets
+    ];
+  }
+}
+`
+      : "";
+
+  const stylesheetHmr =
+    cssFiles.length > 0
+      ? `
+  // CSS Hot Module Replacement via Constructable Stylesheets
+  ${cssHmr}
+`
+      : "";
+
   return /* js */ `/** Auto-generated: ${meta.chunk} */
 ${debugImports}import { h, Component as PreactComponent } from 'preact';
 import { useMemo } from 'preact/hooks';
 import { signal, useSignal, useSignalEffect } from '@preact/signals';
 import register from 'preact-custom-element';
-import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland, installHeadHoisting, createHeadContext, setHeadContext } from '@chr33s/solarflare/client';
+import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland, installHeadHoisting, createHeadContext, setHeadContext, hmr } from '@chr33s/solarflare/client';${stylesheetImports}
 import BaseComponent from '../src/${meta.file}';
 
 // Initialize head hoisting for client-side rendering (prevents duplicate head tags)
@@ -512,7 +580,7 @@ if (typeof document !== 'undefined') {
 
 // Initialize hydration coordinator for streaming SSR
 initHydrationCoordinator();
-
+${stylesheetSetup}
 let CurrentComponent = BaseComponent;
 const hmrVersion = signal(0);
 
@@ -574,12 +642,11 @@ function reloadStylesheets() {
   console.log('[HMR] Reloaded stylesheets');
 }
 
-// Listen for CSS-only updates
-if (import.meta.hot) {
-  import.meta.hot.on('sf:css-update', () => {
-    reloadStylesheets();
-  });
-}
+// Listen for CSS-only updates via framework HMR
+${stylesheetHmr}
+hmr.on('sf:css-update', () => {
+  reloadStylesheets();
+});
 
 // ============================================================================
 // HMR Error Boundary
@@ -671,42 +738,40 @@ class HMRErrorBoundary extends PreactComponent {
 // ============================================================================
 // HMR Support
 // ============================================================================
-if (import.meta.hot) {
-  import.meta.hot.accept('../src/${meta.file}', (newModule) => {
-    if (newModule?.default) {
-      // Save scroll position before update
-      saveScrollPosition();
-      
-      // Save hook state from existing instances
-      const el = document.querySelector('${meta.tag}');
-      if (el?._vdom) saveHookState(el._vdom);
-      
-      CurrentComponent = newModule.default;
-      console.log('[HMR] Updated <${meta.tag}>');
-      hmrVersion.value++;
-      
-      // Restore scroll position after render
-      requestAnimationFrame(() => {
-        restoreScrollPosition();
-        // Attempt to restore hook state
-        const el = document.querySelector('${meta.tag}');
-        if (el?._vdom) restoreHookState(el._vdom);
-      });
-      
-      document.dispatchEvent(new CustomEvent('sf:hmr:update', { 
-        detail: { tag: '${meta.tag}' } 
-      }));
-    }
-  });
-  
-  import.meta.hot.dispose(() => {
-    console.log('[HMR] Disposing <${meta.tag}>');
-    // Save state before disposal
+hmr.on('sf:module:${meta.tag}', (newModule) => {
+  if (newModule?.default) {
+    // Save scroll position before update
     saveScrollPosition();
+    
+    // Save hook state from existing instances
     const el = document.querySelector('${meta.tag}');
     if (el?._vdom) saveHookState(el._vdom);
-  });
-}
+    
+    CurrentComponent = newModule.default;
+    console.log('[HMR] Updated <${meta.tag}>');
+    hmrVersion.value++;
+    
+    // Restore scroll position after render
+    requestAnimationFrame(() => {
+      restoreScrollPosition();
+      // Attempt to restore hook state
+      const el = document.querySelector('${meta.tag}');
+      if (el?._vdom) restoreHookState(el._vdom);
+    });
+    
+    document.dispatchEvent(new CustomEvent('sf:hmr:update', { 
+      detail: { tag: '${meta.tag}' } 
+    }));
+  }
+});
+
+hmr.dispose(() => {
+  console.log('[HMR] Disposing <${meta.tag}>');
+  // Save state before disposal
+  saveScrollPosition();
+  const el = document.querySelector('${meta.tag}');
+  if (el?._vdom) saveHookState(el._vdom);
+});
 
 const routesManifest = ${inlinedRoutes};
 
@@ -962,7 +1027,21 @@ async function buildClient() {
   await mkdir(DIST_DIR, { recursive: true });
 
   for (const meta of metas) {
-    const entryContent = generateChunkedClientEntry(meta, inlineRoutesManifest);
+    // Extract CSS imports for this component
+    const componentPath = join(APP_DIR, meta.file);
+    const componentCssImports = await extractAllCssImports(componentPath);
+
+    // Resolve CSS paths for imports from dist/ to src/
+    // extractAllCssImports returns paths relative to APP_DIR (e.g. "./index.css")
+    // Entry files are at dist/.entry-*.tsx so imports should be "../src/{path}"
+    const cssFiles: string[] = [];
+    for (const cssImport of componentCssImports) {
+      // Strip leading "./" and prepend "../src/"
+      const cleanPath = cssImport.replace(/^\.\//, "");
+      cssFiles.push(`../src/${cleanPath}`);
+    }
+
+    const entryContent = generateChunkedClientEntry(meta, inlineRoutesManifest, cssFiles);
     const entryPath = join(DIST_DIR, `.entry-${meta.chunk.replace(".js", "")}.generated.tsx`);
     await write(entryPath, entryContent);
     entryPaths.push(entryPath);
@@ -994,6 +1073,44 @@ async function buildClient() {
       ".webp": "asset",
       ".ico": "asset",
     },
+    plugins: [
+      // Replace globalThis.__SF_DEV__ with build mode for HMR tree-shaking
+      replacePlugin({ "globalThis.__SF_DEV__": JSON.stringify(!args.production) }),
+      {
+        name: "raw-css-loader",
+        resolveId(source: string, importer: string | undefined) {
+          // Handle ?raw suffix for CSS files
+          if (source.endsWith("?raw") && source.includes(".css")) {
+            const realPath = source.replace(/\?raw$/, "");
+            if (importer) {
+              const importerDir = importer.split("/").slice(0, -1).join("/");
+              return { id: join(importerDir, realPath) + "?raw", external: false };
+            }
+            return { id: realPath + "?raw", external: false };
+          }
+          return null;
+        },
+        async load(id: string) {
+          // Load CSS files with ?raw suffix as text modules
+          if (id.endsWith("?raw")) {
+            const realPath = id.replace(/\?raw$/, "");
+            try {
+              const content = await readFile(realPath, "utf-8");
+              // Return as a module that exports the CSS string
+              return {
+                code: `export default ${JSON.stringify(content)};`,
+                moduleType: "js",
+              };
+            } catch {
+              // File not found - return empty string
+              console.warn(`[raw-css-loader] Could not load: ${realPath}`);
+              return { code: `export default "";`, moduleType: "js" };
+            }
+          }
+          return null;
+        },
+      },
+    ],
     resolve: {
       alias: {
         "#app": APP_DIR,
