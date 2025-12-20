@@ -1,9 +1,6 @@
 {
   "compilerOptions": {
-    "types": [
-      "@chr33s/solarflare",
-      "@types/node"
-    ]
+    "types": ["@chr33s/solarflare", "@types/node"]
   },
   "extends": "@chr33s/solarflare/tsconfig.json",
   "include": ["./src"]

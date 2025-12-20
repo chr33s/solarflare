@@ -17,8 +17,8 @@
     "solarflare": "./src/build.ts"
   },
   "files": [
-    "src",
     "!src/*.test.ts",
+    "src",
     "tsconfig.json"
   ],
   "scripts": {
