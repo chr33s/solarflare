@@ -22,6 +22,7 @@ File-based routing for Preact + Cloudflare Workers with SSR streaming and web co
 
 - [**Minimal**](examples/minimal/readme.md) — Single route with server/client pair
 - [**Basic**](examples/basic/readme.md) — Layouts, dynamic routes, API endpoints, components
+- [**Node**](examples/node/readme.md) — Using `node:http` instead of Cloudflare Workers
 
 ## CLI
 

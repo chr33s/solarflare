@@ -674,7 +674,7 @@ export default function Layout({ children }: { children: VNode }) {
 ## Dynamic Head Updates
 
 ```typescript
-import { useHead } from "@chr33s/solarflare/client";
+import { useHead } from "@chr33s/solarflare/server";
 
 function DynamicPage({ data }: { data: PageData }) {
   // Programmatic head management

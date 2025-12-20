@@ -74,7 +74,7 @@ This repository, `chr33s/solarflare`, is a platform designed for streaming SSR, 
 
 - **`src/`**: Core logic for routing, HMR, SSR, and state:
   - `build.ts`: Node.js build script using rolldown.
-  - `test-utils.ts`: Test utilities with expect() API.
+  - `client.ts`: Client-side hydration and web component registration.
   - `server.ts`: SSR utilities.
   - `store.ts`: Signal state layers.
   - `router.ts`: SPA routing.
