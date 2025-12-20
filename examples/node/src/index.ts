@@ -27,7 +27,7 @@ const MIME_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-async function serveStatic(request: Request): Promise<Response | null> {
+async function serve(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   const filePath = join(STATIC_DIR, url.pathname);
 
@@ -59,7 +59,7 @@ async function serveStatic(request: Request): Promise<Response | null> {
 
 async function handler(request: Request): Promise<Response> {
   // Try static files first
-  const staticResponse = await serveStatic(request);
+  const staticResponse = await serve(request);
   if (staticResponse) {
     return staticResponse;
   }
@@ -78,7 +78,12 @@ const server = http.createServer(async (req, res) => {
   const host = headers.get("Host") ?? "localhost";
   const url = new URL(req.url ?? "/", `http://${host}`);
 
-  const request = new Request(url, { method, headers });
+  // Include body for methods that support it
+  const hasBody = method !== "GET" && method !== "HEAD";
+  const body = hasBody ? req : undefined;
+
+  // @ts-expect-error Node.js IncomingMessage is compatible with BodyInit
+  const request = new Request(url, { method, headers, body, duplex: "half" });
 
   try {
     const response = await handler(request);
