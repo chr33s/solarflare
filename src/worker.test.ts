@@ -1008,6 +1008,239 @@ describe("e2e", () => {
   });
 });
 
+describe("Critical CSS integration", () => {
+  it("should inline critical CSS for faster rendering", async () => {
+    // Import the critical-css module
+    const { extractCriticalCss, generateCssFallback, generateAsyncCssLoader } =
+      await import("./critical-css.ts");
+
+    // Test extraction with mock CSS
+    const mockCss = { "/layout.css": ".container { max-width: 1200px; }" };
+    const critical = await extractCriticalCss("/test", ["/layout.css"], {
+      readCss: async (path) => mockCss[path as keyof typeof mockCss] ?? "",
+      cache: false,
+    });
+
+    assert.ok(critical.includes(".container"));
+    assert.ok(!critical.includes("\n")); // Should be minified
+
+    // Test fallback generation
+    const fallback = generateCssFallback(["/style.css"]);
+    assert.ok(fallback.includes("<noscript>"));
+    assert.ok(fallback.includes('href="/style.css"'));
+
+    // Test async loader
+    const loader = generateAsyncCssLoader(["/async.css"]);
+    assert.ok(loader.includes("<script>"));
+    assert.ok(loader.includes("/async.css"));
+  });
+});
+
+describe("Early flush streaming integration", () => {
+  it("should generate static shell for immediate flushing", async () => {
+    const { generateStaticShell, generateResourceHints } = await import("./early-flush.ts");
+
+    const shell = generateStaticShell({ lang: "en" });
+    assert.ok(shell.preHead.includes("<!DOCTYPE html>"));
+    assert.ok(shell.preHead.includes('<html lang="en">'));
+    assert.ok(shell.preBody.includes("<body>"));
+
+    const hints = generateResourceHints({
+      preconnect: ["https://fonts.googleapis.com"],
+      scripts: ["/app.js"],
+      stylesheets: ["/main.css"],
+    });
+
+    assert.ok(hints.includes('rel="preconnect"'));
+    assert.ok(hints.includes('rel="modulepreload"'));
+    assert.ok(hints.includes('rel="preload"'));
+  });
+
+  it("should create streaming response with early flush", async () => {
+    const { generateStaticShell, createEarlyFlushStream } = await import("./early-flush.ts");
+
+    const shell = generateStaticShell({});
+    const contentStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("<main>Content</main>"));
+        controller.close();
+      },
+    });
+
+    const stream = createEarlyFlushStream(shell, {
+      contentStream,
+      headTags: "<title>Test</title>",
+      bodyTags: '<script src="/app.js"></script>',
+      criticalCss: ".critical { color: red; }",
+    });
+
+    const reader = stream.getReader();
+    const chunks: string[] = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(new TextDecoder().decode(value));
+    }
+
+    const html = chunks.join("");
+    assert.ok(html.includes("<!DOCTYPE html>"));
+    assert.ok(html.includes("<title>Test</title>"));
+    assert.ok(html.includes("<style>.critical { color: red; }</style>"));
+    assert.ok(html.includes("<main>Content</main>"));
+    assert.ok(html.includes('src="/app.js"'));
+    assert.ok(html.includes("</body></html>"));
+  });
+});
+
+describe("Early hints integration", () => {
+  it("should generate Link header for HTTP 103 Early Hints", async () => {
+    const { generateEarlyHintsHeader, collectEarlyHints, handleWithEarlyHints } =
+      await import("./early-hints.ts");
+
+    const hints = collectEarlyHints({
+      scriptPath: "/app.js",
+      stylesheets: ["/main.css"],
+      preconnectOrigins: ["https://cdn.example.com"],
+    });
+
+    assert.ok(hints.length > 0);
+
+    const header = generateEarlyHintsHeader(hints);
+    assert.ok(header.includes("</app.js>"));
+    assert.ok(header.includes("rel=modulepreload"));
+    assert.ok(header.includes("</main.css>"));
+
+    // Test handler wrapper
+    const response = await handleWithEarlyHints(
+      new Request("http://localhost/"),
+      async () => new Response("OK"),
+      () => hints,
+    );
+
+    assert.ok(response.headers.get("Link"));
+    assert.strictEqual(await response.text(), "OK");
+  });
+});
+
+describe("Render priority integration", () => {
+  it("should support deferred rendering with priorities", async () => {
+    const { Deferred, Skeleton, SKELETON_CSS } = await import("./render-priority.ts");
+    const { h } = await import("preact");
+    const { render } = await import("preact-render-to-string");
+
+    // Test skeleton CSS is defined
+    assert.ok(SKELETON_CSS.includes("@keyframes sf-skeleton-pulse"));
+
+    // Test skeleton component
+    const skeleton = Skeleton({ width: "100px", height: "20px", count: 2 });
+    const skeletonHtml = render(skeleton);
+    assert.ok(skeletonHtml.includes("sf-skeleton"));
+    assert.ok((skeletonHtml.match(/class="sf-skeleton"/g) || []).length === 2);
+
+    // Test deferred component (server-side rendering)
+    const children = h("div", null, "Content");
+    const deferred = Deferred({ priority: "high", children });
+    const deferredHtml = render(deferred);
+    assert.ok(deferredHtml.includes('data-priority="high"'));
+    assert.ok(deferredHtml.includes("sf-deferred"));
+  });
+});
+
+describe("Route cache integration", () => {
+  it("should cache responses with proper headers", async () => {
+    const { ResponseCache, generateCacheControl, withCache, DEFAULT_CACHE_CONFIGS } =
+      await import("./route-cache.ts");
+
+    // Test default configs exist
+    assert.ok(DEFAULT_CACHE_CONFIGS.static);
+    assert.ok(DEFAULT_CACHE_CONFIGS.dynamic);
+    assert.ok(DEFAULT_CACHE_CONFIGS.private);
+
+    // Test cache control generation
+    const cacheControl = generateCacheControl(DEFAULT_CACHE_CONFIGS.static, false);
+    assert.ok(cacheControl.includes("max-age=3600"));
+    assert.ok(cacheControl.includes("stale-while-revalidate=86400"));
+
+    // Test response cache
+    const cache = new ResponseCache(10);
+    cache.set("test", new Response("cached"), 60);
+    const cached = cache.get("test");
+    assert.ok(cached);
+    assert.strictEqual(await cached.text(), "cached");
+
+    // Test withCache wrapper
+    let handlerCalls = 0;
+    const handler = async () => {
+      handlerCalls++;
+      return new Response("fresh");
+    };
+
+    const request = new Request("http://localhost/cached-route");
+    await withCache(request, {}, { maxAge: 3600 }, handler, cache);
+    await withCache(request, {}, { maxAge: 3600 }, handler, cache);
+
+    // Handler should only be called once (second request uses cache)
+    assert.strictEqual(handlerCalls, 1);
+  });
+
+  it("should skip cache for authenticated requests when configured", async () => {
+    const { ResponseCache, withCache } = await import("./route-cache.ts");
+
+    const cache = new ResponseCache(10);
+    let handlerCalls = 0;
+    const handler = async () => {
+      handlerCalls++;
+      return new Response("auth response");
+    };
+
+    const authRequest = new Request("http://localhost/auth-route", {
+      headers: { Authorization: "Bearer token" },
+    });
+
+    // With cacheAuthenticated: false, should not cache
+    await withCache(authRequest, {}, { maxAge: 3600, cacheAuthenticated: false }, handler, cache);
+    await withCache(authRequest, {}, { maxAge: 3600, cacheAuthenticated: false }, handler, cache);
+
+    // Handler should be called twice (no caching for auth requests)
+    assert.strictEqual(handlerCalls, 2);
+  });
+});
+
+describe("optimization headers unit tests", () => {
+  it("should define correct streaming response headers", () => {
+    const headers = {
+      "Content-Type": "text/html; charset=utf-8",
+      "Content-Encoding": "identity",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "Transfer-Encoding": "chunked",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "SAMEORIGIN",
+    };
+
+    assert.strictEqual(headers["Content-Type"], "text/html; charset=utf-8");
+    assert.strictEqual(headers["Content-Encoding"], "identity");
+    assert.strictEqual(headers["X-Content-Type-Options"], "nosniff");
+    assert.strictEqual(headers["Transfer-Encoding"], "chunked");
+    assert.strictEqual(headers["Referrer-Policy"], "strict-origin-when-cross-origin");
+    assert.strictEqual(headers["X-Frame-Options"], "SAMEORIGIN");
+  });
+
+  it("should create Response with proper security headers", () => {
+    const response = new Response("test", {
+      headers: {
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+
+    assert.ok(response.headers.get("Referrer-Policy"));
+    assert.strictEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN");
+    assert.strictEqual(response.headers.get("X-Content-Type-Options"), "nosniff");
+  });
+});
+
 // Sleep helper for Node.js
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

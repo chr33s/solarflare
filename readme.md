@@ -13,6 +13,16 @@ File-based routing for Preact + Cloudflare Workers with SSR streaming and web co
 - **SPA navigation** — Navigation API with View Transitions
 - **Type-safe** — Full TypeScript support
 
+## Performance Optimizations
+
+- Early Flush
+- Critical CSS Inlining
+- 103 Early Hints
+- Resource Hints
+- Route Caching
+- Render Priority
+- Async CSS Loading
+
 ## Requirements
 
 - [Node.js](https://nodejs.org) ≥v24.12.0 (primary runtime)
@@ -114,6 +124,53 @@ export default async function server(
     },
     title: "Resource Created"
   }
+}
+```
+
+### Performance Optimizations
+
+```tsx
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta name="sf:preconnect" content="https://fonts.googleapis.com,https://cdn.example.com" />
+        <meta name="sf:early-flush" content="true" />
+        <meta name="sf:critical-css" content="true" />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+
+export default function BlogLayout({ children }) {
+  return (
+    <>
+      <meta name="sf:cache-max-age" content="300" />
+      <meta name="sf:cache-swr" content="3600" />
+      {children}
+    </>
+  );
+}
+
+// OR
+
+import { useHead } from '@chr33s/solarflare';
+import { workerConfigMeta } from '@chr33s/solarflare/worker';
+
+export default function Layout({ children }) {
+  useHead({
+    htmlAttrs: { lang: 'en' },
+    meta: workerConfigMeta({
+      preconnect: ['https://cdn.example.com', 'https://api.example.com'],
+      cacheMaxAge: 300,      // 5 min cache
+      cacheSwr: 3600,        // 1 hour stale-while-revalidate
+      earlyFlush: true,      // Enable early flush streaming
+      criticalCss: true,     // Enable critical CSS inlining
+    }),
+  });
+
+  return <>{children}</>;
 }
 ```
 

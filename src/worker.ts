@@ -11,6 +11,18 @@ import {
   type ModuleMap,
 } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
+import {
+  generateStaticShell,
+  createEarlyFlushStream,
+  generateResourceHints,
+  type StreamingShell,
+} from "./early-flush.ts";
+import { extractCriticalCss, generateAsyncCssLoader } from "./critical-css.ts";
+import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
+import { ResponseCache, withCache } from "./route-cache.ts";
+import { parseMetaConfig, workerConfigMeta } from "./worker-config.ts";
+export { workerConfigMeta };
+import { getHeadContext } from "./head.ts";
 // @ts-ignore - Generated at build time, aliased by bundler
 import modules from ".modules.generated";
 // @ts-ignore - Generated at build time, aliased by bundler
@@ -27,6 +39,36 @@ interface ChunkManifest {
 }
 
 const manifest = chunkManifest as ChunkManifest;
+
+// Initialize response cache for route-level caching
+const responseCache = new ResponseCache(100);
+
+// Lazy-initialized static shell cache (keyed by lang)
+const staticShellCache = new Map<string, StreamingShell>();
+
+/**
+ * Gets or creates a static shell for the given language.
+ * @param lang - HTML lang attribute
+ * @returns Cached or newly generated static shell
+ */
+function getStaticShell(lang: string): StreamingShell {
+  let shell = staticShellCache.get(lang);
+  if (!shell) {
+    shell = generateStaticShell({ lang });
+    staticShellCache.set(lang, shell);
+  }
+  return shell;
+}
+
+/** Worker optimization options. */
+export interface WorkerOptimizations {
+  /** Enable early flush for faster TTFB */
+  earlyFlush?: boolean;
+  /** Enable critical CSS inlining */
+  criticalCss?: boolean;
+  /** CSS file reader for critical CSS extraction */
+  readCss?: (path: string) => Promise<string>;
+}
 
 /**
  * Gets the script path for a route from the chunk manifest.
@@ -83,6 +125,8 @@ function findPairedModule(path: string): string | null {
 interface WorkerEnv {
   /** Log level for console forwarding */
   WRANGLER_LOG?: LogLevel;
+  /** Performance optimizations */
+  SF_OPTIMIZATIONS?: WorkerOptimizations;
   [key: string]: unknown;
 }
 
@@ -222,33 +266,103 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     const stylesheets = getStylesheets(route.parsedPattern.pathname);
     const devScripts = getDevScripts();
 
-    // Render to streaming response with signal context
-    const stream = await renderToStream(content, {
-      params,
-      serverData: shellData,
-      pathname: url.pathname,
-      script: scriptPath,
-      styles: stylesheets,
-      devScripts,
-      deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
-      _headers: responseHeaders,
-      _status: responseStatus,
-      _statusText: responseStatusText,
+    // Get rendered head HTML to extract meta config
+    // useHead calls have already populated the context during component rendering
+    const headCtx = getHeadContext();
+    const headHtml = headCtx.renderToString();
+
+    // Parse worker configuration from meta tags
+    // Supports: sf:preconnect, sf:cache-max-age, sf:cache-swr, sf:early-flush, sf:critical-css
+    const metaConfig = parseMetaConfig(headHtml);
+
+    // Collect early hints using meta-configured preconnect origins
+    const earlyHints = collectEarlyHints({
+      scriptPath,
+      stylesheets,
+      preconnectOrigins: metaConfig.preconnectOrigins,
     });
 
-    // Merge custom headers with defaults, custom headers take priority
-    const finalHeaders: Record<string, string> = { ...headers };
-    if (stream.headers) {
-      for (const [key, value] of Object.entries(stream.headers)) {
-        finalHeaders[key] = value;
+    // Generate resource hints HTML for <head>
+    const resourceHints = generateResourceHints({
+      scripts: scriptPath ? [scriptPath] : [],
+      stylesheets,
+    });
+
+    // Get optimization settings from environment (can override meta)
+    const envOptimizations = env?.SF_OPTIMIZATIONS ?? {};
+    const useEarlyFlush = envOptimizations.earlyFlush ?? metaConfig.earlyFlush;
+    const useCriticalCss = envOptimizations.criticalCss ?? metaConfig.criticalCss;
+
+    // Render function (potentially cached)
+    const render = async (): Promise<Response> => {
+      // Render to streaming response with signal context
+      const ssrStream = await renderToStream(content, {
+        params,
+        serverData: shellData,
+        pathname: url.pathname,
+        script: scriptPath,
+        styles: useEarlyFlush ? [] : stylesheets, // Styles loaded async with early flush
+        devScripts,
+        deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
+        _headers: responseHeaders,
+        _status: responseStatus,
+        _statusText: responseStatusText,
+      });
+
+      // Merge custom headers with defaults, custom headers take priority
+      const finalHeaders: Record<string, string> = { ...headers };
+      if (ssrStream.headers) {
+        for (const [key, value] of Object.entries(ssrStream.headers)) {
+          finalHeaders[key] = value;
+        }
       }
+
+      // Add Link header for early hints
+      if (earlyHints.length > 0) {
+        finalHeaders["Link"] = generateEarlyHintsHeader(earlyHints);
+      }
+
+      // Use early flush stream for faster TTFB if enabled
+      if (useEarlyFlush) {
+        const staticShell = getStaticShell(metaConfig.lang);
+
+        // Extract critical CSS if enabled and reader provided
+        let criticalCss = "";
+        if (useCriticalCss && envOptimizations.readCss) {
+          criticalCss = await extractCriticalCss(route.parsedPattern.pathname, stylesheets, {
+            readCss: envOptimizations.readCss,
+            cache: true,
+          });
+        }
+
+        const optimizedStream = createEarlyFlushStream(staticShell, {
+          criticalCss,
+          preloadHints: resourceHints,
+          contentStream: ssrStream,
+          headTags: "", // Head tags handled by existing system
+          bodyTags: generateAsyncCssLoader(stylesheets),
+        });
+
+        return new Response(optimizedStream, {
+          headers: finalHeaders,
+          status: ssrStream.status ?? 200,
+          statusText: ssrStream.statusText,
+        });
+      }
+
+      return new Response(ssrStream, {
+        headers: finalHeaders,
+        status: ssrStream.status ?? 200,
+        statusText: ssrStream.statusText,
+      });
+    };
+
+    // Use cache if meta-configured for this route
+    if (metaConfig.cacheConfig) {
+      return withCache(request, params, metaConfig.cacheConfig, render, responseCache);
     }
 
-    return new Response(stream, {
-      headers: finalHeaders,
-      status: stream.status ?? 200,
-      statusText: stream.statusText,
-    });
+    return render();
   } catch (error) {
     // Render 500 error page wrapped in layouts
     const serverError = error instanceof Error ? error : new Error(String(error));
