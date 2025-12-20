@@ -101,7 +101,7 @@ async function scaffoldTemplates(): Promise<void> {
     "index.ts": `import worker from "@chr33s/solarflare/worker";
 export default { fetch: worker };
 `,
-    "_error.tsx": `export default function Error({ error }: { error: Error }) {
+    "_error.tsx": `export default function ErrorPage({ error }: { error: Error }) {
   return <div><h1>Error</h1><p>{error.message}</p></div>;
 }
 `,
