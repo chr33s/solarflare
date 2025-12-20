@@ -11,6 +11,8 @@ import {
   type ModuleMap,
 } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
+import { isHmrRequest, handleHmrRequest } from "./hmr-server.ts";
+export { broadcastHmrUpdate, type HmrEventType } from "./hmr-server.ts";
 import {
   generateStaticShell,
   createEarlyFlushStream,
@@ -138,6 +140,11 @@ interface WorkerEnv {
  */
 async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
+
+  // Handle HMR WebSocket upgrade requests in dev mode
+  if (isHmrRequest(request)) {
+    return handleHmrRequest();
+  }
 
   // Handle console forward requests in dev mode
   if (isConsoleRequest(request)) {

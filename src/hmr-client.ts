@@ -49,7 +49,7 @@ function createDevHmr(): HmrApi {
   // Connect to dev server WebSocket
   if (typeof WebSocket !== "undefined" && typeof location !== "undefined") {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    ws = new WebSocket(`${protocol}//${location.host}/_sf/hmr`);
+    ws = new WebSocket(`${protocol}//${location.host}/_hmr`);
 
     ws.onopen = () => {
       console.log("[HMR] Connected to dev server");
