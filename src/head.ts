@@ -783,7 +783,7 @@ export function applyHeadToDOM(tags: HeadTag[]): void {
 
     // If not found in managed elements, look for SSR-rendered element to adopt
     if (!existing) {
-      existing = findMatchingSSRElement(head, tag);
+      existing = findMatchingSSRElement(head, tag) ?? undefined;
       if (existing) {
         // Adopt this SSR element by marking it as managed
         existing.setAttribute("data-sf-head", key);

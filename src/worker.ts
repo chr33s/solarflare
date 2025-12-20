@@ -237,7 +237,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     });
 
     // Merge custom headers with defaults, custom headers take priority
-    const finalHeaders = { ...headers };
+    const finalHeaders: Record<string, string> = { ...headers };
     if (stream.headers) {
       for (const [key, value] of Object.entries(stream.headers)) {
         finalHeaders[key] = value;

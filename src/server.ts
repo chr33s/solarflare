@@ -422,6 +422,12 @@ export interface StreamRenderOptions {
   devScripts?: string[];
   /** Deferred data to stream after shell */
   deferred?: DeferredData;
+  /** HTTP status code to return */
+  _status?: number;
+  /** HTTP status text to return */
+  _statusText?: string;
+  /** Custom HTTP headers to merge */
+  _headers?: Record<string, string>;
 }
 
 /**
@@ -550,6 +556,12 @@ function createAssetInjectionTransformer(
 export interface SolarflareStream extends ReadableStream<Uint8Array> {
   /** Resolves when all content has been rendered */
   allReady: Promise<void>;
+  /** HTTP status code */
+  status?: number;
+  /** HTTP status text */
+  statusText?: string;
+  /** Custom HTTP headers */
+  headers?: Record<string, string>;
 }
 
 /**
