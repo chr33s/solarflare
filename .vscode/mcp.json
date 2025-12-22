@@ -1,0 +1,25 @@
+{
+  "inputs": [],
+  "servers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"]
+    },
+    "cloudflare": {
+      "type": "sse",
+      "url": "https://docs.mcp.cloudflare.com/mcp"
+    },
+    "node.js": {
+      "type": "sse",
+      "url": "https://gitmcp.io/nodejs/node"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "preact": {
+      "type": "sse",
+      "url": "https://gitmcp.io/preactjs/preact"
+    }
+  }
+}

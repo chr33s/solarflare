@@ -1,39 +1,19 @@
 # Solarflare
 
-File-based routing for Preact + Cloudflare Workers with SSR streaming and web component hydration.
-
-> [!IMPORTANT]  
-> Authoritative Prompt: See prompt.txt for the workflow, strict binding validation, security guidance, and AI usage rules.
+Streaming SSR for Preact + Cloudflare Workers with file-based routing and web component hydration.
 
 ## Features
 
-- **File-based routing** — Routes derived from file structure
-- **SSR streaming** — Server-side rendering with Cloudflare Workers
-- **Web component hydration** — Auto-registration via `preact-custom-element`
-- **SPA navigation** — Navigation API with View Transitions
-- **Constructable Stylesheets** - Designed for component-based styling via `CSSStyleSheet.insertRule()`
-- **Type-safe** — Full TypeScript support
-
-## Performance Optimizations
-
-- Early Flush
-- Critical CSS Inlining
-- 103 Early Hints
-- Resource Hints
-- Route Caching
-- Render Priority
-- Async CSS Loading
+- File-based routing with SSR streaming
+- Web component hydration via `preact-custom-element`
+- SPA navigation (Navigation API + View Transitions)
+- Constructable Stylesheets
+- TypeScript
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) ≥v24.12.0 (primary runtime)
+- [Node.js](https://nodejs.org) ≥v24.12.0
 - Modern browser (Chrome 102+, Edge 102+, Safari 15.4+)
-
-## Examples
-
-- [**Minimal**](examples/minimal/readme.md) — Single route with server/client pair
-- [**Basic**](examples/basic/readme.md) — Layouts, dynamic routes, API endpoints, components
-- [**Node**](examples/node/readme.md) — Using `srvx` instead of Cloudflare Workers
 
 ## CLI
 
@@ -41,145 +21,67 @@ File-based routing for Preact + Cloudflare Workers with SSR streaming and web co
 solarflare [options]
 ```
 
-| Option               | Description                    |
-| -------------------- | ------------------------------ |
-| `--clean`, `-c`      | Clean output before build      |
-| `--debug`, `-d`      | Enable debugging               |
-| `--production`, `-p` | Optimize build for production  |
-| `--serve`, `-s`      | Start development server (hmr) |
-| `--sourcemap`        | Generate source maps           |
-| `--watch`, `-w`      | Watch for changes and rebuild  |
+| Option               | Description               |
+| -------------------- | ------------------------- |
+| `--clean`, `-c`      | Clean output before build |
+| `--debug`, `-d`      | Enable debugging          |
+| `--production`, `-p` | Optimize for production   |
+| `--serve`, `-s`      | Start dev server with HMR |
+| `--sourcemap`        | Generate source maps      |
+| `--watch`, `-w`      | Watch and rebuild         |
 
-## Folder Conventions
+## Conventions
 
-| Directory | Purpose                               |
-| --------- | ------------------------------------- |
-| `./src`   | Original (source) human readable code |
-| `./dist`  | Compiled (distribution) output code   |
+| Directory      | Purpose                                   |
+| -------------- | ----------------------------------------- |
+| `./src`        | Original (source) human readable code     |
+| `./dist`       | Compiled (distribution) output code       |
 
-## File Conventions
+| File           | Purpose                                   |
+| -------------- | ----------------------------------------- |
+| `*.client.tsx` | Client component (web component)          |
+| `*.server.tsx` | Server handler (Workers runtime)          |
+| `_layout.tsx`  | Layout wrapper                            |
+| `_*`           | Private (not routed)                      |
+| `$param`       | Dynamic segment → `:param`                |
+| `index.*`      | Directory root                            |
 
-| Pattern        | Purpose                                            |
-| -------------- | -------------------------------------------------- |
-| `*.client.tsx` | Client component, auto-registered as web component |
-| `*.server.tsx` | Server handler, runs in Workers runtime            |
-| `_layout.tsx`  | Layout component, wraps child routes               |
-| `_*`           | Private (not routed)                               |
-| `$param`       | Dynamic URL segment → `:param`                     |
-| `index.*`      | Matches directory root                             |
-
-## Path Conventions
-
-| Pattern | Purpose                                               |
-| ------- | ----------------------------------------------------- |
-| `/_`    | is reserved for internal framework (e.g. `/_console`) |
+| Path           | Purpose                                   |
+| -------------- | ----------------------------------------- |
+| `/_*`          | reserved internal use (e.g. `/_console`)  |
 
 ## API
 
 ### Server Handler
 
 ```tsx
-export default async function server(
-  request: Request,
-  params: Record<string, string>
-) {
-  return { title: "Hello" }  // Props for client component
+export default async function server(request: Request, params: Record<string, string>) {
+  return { title: "Hello" }
 }
 ```
 
-#### Streaming Deferred Props
-
-Any **Promise-valued** prop returned from a `*.server.tsx` handler is treated as **deferred**:
-
-- The page shell can start streaming without waiting for it.
-- Multiple deferred props are **independent**: each one is streamed as soon as it resolves.
-- On the client, deferred props are merged into the component props as they arrive.
+Promise-valued props are streamed independently (deferred):
 
 ```tsx
 export default async function server() {
-  const user = await fetchUser(); // blocking
-
-  // non-blocking (deferred)
-  const analytics = fetchAnalytics();
-  const recommendations = fetchRecommendations();
-
+  const user = await fetchUser();                 // blocking
+  const analytics = fetchAnalytics();             // deferred
+  const recommendations = fetchRecommendations(); // deferred
   return { user, analytics, recommendations };
 }
 ```
 
-#### With Response Metadata
-
-Control HTTP status, status text, and headers from your server handler:
+Response metadata via `_*` prefixed props:
 
 ```tsx
-export default async function server(
-  request: Request,
-  params: Record<string, string>
-) {
+export default async function server() {
   return {
     _status: 201,
-    _statusText: "Created",
-    _headers: {
-      "X-Custom-Header": "value",
-      "Cache-Control": "max-age=3600"
-    },
-    title: "Resource Created"
+    _headers: { "Cache-Control": "max-age=3600" },
+    title: "Created"
   }
 }
 ```
-
-### Performance Optimizations
-
-```tsx
-export default function RootLayout({ children }) {
-  return (
-    <html lang="en">
-      <head>
-        <meta name="sf:preconnect" content="https://fonts.googleapis.com,https://cdn.example.com" />
-        <meta name="sf:early-flush" content="true" />
-        <meta name="sf:critical-css" content="true" />
-      </head>
-      <body>{children}</body>
-    </html>
-  );
-}
-
-export default function BlogLayout({ children }) {
-  return (
-    <>
-      <meta name="sf:cache-max-age" content="300" />
-      <meta name="sf:cache-swr" content="3600" />
-      {children}
-    </>
-  );
-}
-
-// OR
-
-import { useHead } from '@chr33s/solarflare';
-import { workerConfigMeta } from '@chr33s/solarflare/worker';
-
-export default function Layout({ children }) {
-  useHead({
-    htmlAttrs: { lang: 'en' },
-    meta: workerConfigMeta({
-      preconnect: ['https://cdn.example.com', 'https://api.example.com'],
-      cacheMaxAge: 300,      // 5 min cache
-      cacheSwr: 3600,        // 1 hour stale-while-revalidate
-      earlyFlush: true,      // Enable early flush streaming
-      criticalCss: true,     // Enable critical CSS inlining
-    }),
-  });
-
-  return <>{children}</>;
-}
-```
-
-**Notes:**
-
-- `_status` defaults to 200 if not provided
-- `_headers` are merged with default headers (custom headers take priority)
-- All `_*` prefixed properties are reserved for response metadata and won't be passed as component props
 
 ### Client Component
 
@@ -197,11 +99,20 @@ export default function Layout({ children }: { children: ComponentChildren }) {
 }
 ```
 
+### Performance Meta Tags
+
+```tsx
+<meta name="sf:preconnect" content="https://cdn.example.com" />
+<meta name="sf:early-flush" content="true" />
+<meta name="sf:critical-css" content="true" />
+<meta name="sf:cache-max-age" content="300" />
+<meta name="sf:cache-swr" content="3600" />
+```
+
 ### Custom Web Component
 
 ```tsx
 import { define } from '@chr33s/solarflare/client'
-
 export default define(MyComponent, { shadow: true })
 ```
 
@@ -209,29 +120,19 @@ export default define(MyComponent, { shadow: true })
 
 ```tsx
 import { onHMREvent } from "@chr33s/solarflare/client"
-
 onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`))
-onHMREvent("error", ({ tag, error }) => console.error(`Error:`, error))
 ```
+
+## Examples
+
+- [Minimal](examples/minimal/readme.md) — Single route
+- [Basic](examples/basic/readme.md) — Layouts, dynamic routes, API, components
+- [Node](examples/node/readme.md) — Using `srvx` instead of Workers
 
 ## Development
 
-### Node.js (Primary)
-
 ```sh
 npm install && npm run dev
-```
-
-## Build
-
-```sh
-npm install && npm run build
-```
-
-## Testing
-
-```sh
-npm run test
 ```
 
 ## License
