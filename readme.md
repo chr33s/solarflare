@@ -1,3 +1,6 @@
+> [!WARNING]  
+> Experimental: API is unstable and not production-ready.
+
 # Solarflare
 
 Streaming SSR for Preact + Cloudflare Workers with file-based routing and web component hydration.
