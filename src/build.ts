@@ -75,6 +75,39 @@ const MODULES_PATH = join(DIST_DIR, ".modules.generated.ts");
 const CHUNKS_PATH = join(DIST_DIR, ".chunks.generated.json");
 const ROUTES_TYPE_PATH = join(DIST_DIR, "routes.d.ts");
 
+/** Cached package imports map from package.json. */
+let packageImportsCache: Record<string, string> | null = null;
+
+/** Reads package.json imports field and converts to resolve.alias format. */
+async function getPackageImports(): Promise<Record<string, string>> {
+  if (packageImportsCache) return packageImportsCache;
+
+  const pkgPath = join(ROOT_DIR, "package.json");
+  try {
+    const content = await readText(pkgPath);
+    const pkg = JSON.parse(content) as { imports?: Record<string, string> };
+    const imports = pkg.imports ?? {};
+
+    // Convert package imports to resolve.alias format
+    // e.g. "#app/*": "./src/*" -> "#app": "/absolute/path/to/src"
+    packageImportsCache = {};
+    for (const [key, value] of Object.entries(imports)) {
+      // Strip trailing /* from both key and value
+      const aliasKey = key.replace(/\/\*$/, "");
+      const aliasValue = value.replace(/\/\*$/, "");
+      // Resolve relative paths to absolute
+      packageImportsCache[aliasKey] = aliasValue.startsWith(".")
+        ? join(ROOT_DIR, aliasValue)
+        : aliasValue;
+    }
+    return packageImportsCache;
+  } catch {
+    // No package.json or no imports field - use default
+    packageImportsCache = { "#app": APP_DIR };
+    return packageImportsCache;
+  }
+}
+
 // CLI entry point - parse args early so they're available
 const { values: args } = parseArgs({
   args: argv.slice(2),
@@ -314,17 +347,13 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
   const imports: string[] = [];
 
   // Match import statements for local .tsx/.ts files (starting with ./ or ../)
-  // Also match #app/* aliases
+  // Also match #* package imports (e.g. #app/*, #lib/*)
   const importRegex = /import\s+(?:{[^}]+}|\w+)\s+from\s+['"]([^'"]+)['"]/g;
   let match;
   while ((match = importRegex.exec(content)) !== null) {
     const importPath = match[1];
-    // Only follow local imports and app aliases, skip node_modules
-    if (
-      importPath.startsWith("./") ||
-      importPath.startsWith("../") ||
-      importPath.startsWith("#app/")
-    ) {
+    // Only follow local imports and package imports, skip node_modules
+    if (importPath.startsWith("./") || importPath.startsWith("../") || importPath.startsWith("#")) {
       imports.push(importPath);
     }
   }
@@ -336,21 +365,29 @@ async function extractComponentImports(filePath: string): Promise<string[]> {
 async function resolveImportPath(importPath: string, fromFile: string): Promise<string | null> {
   const fromDir = fromFile.split("/").slice(0, -1).join("/");
 
-  // Handle #app/* alias
-  if (importPath.startsWith("#app/")) {
-    const relativePath = importPath.replace("#app/", "");
-    // Try .tsx, .ts, /index.tsx, /index.ts extensions
-    const extensions = [".tsx", ".ts", "/index.tsx", "/index.ts"];
-    for (const ext of extensions) {
-      const fullPath = join(APP_DIR, relativePath + ext);
-      if (await exists(fullPath)) {
-        return fullPath;
+  // Handle #* package imports
+  if (importPath.startsWith("#")) {
+    const imports = await getPackageImports();
+    // Find matching import alias (e.g. #app, #lib)
+    for (const [alias, target] of Object.entries(imports)) {
+      if (importPath === alias || importPath.startsWith(alias + "/")) {
+        const relativePath = importPath.slice(alias.length + 1); // Strip alias + "/"
+        const baseDir = target;
+        // Try .tsx, .ts, /index.tsx, /index.ts extensions
+        const extensions = [".tsx", ".ts", "/index.tsx", "/index.ts"];
+        for (const ext of extensions) {
+          const fullPath = relativePath ? join(baseDir, relativePath + ext) : baseDir + ext;
+          if (await exists(fullPath)) {
+            return fullPath;
+          }
+        }
+        // Try without extension (might already have it)
+        const fullPath = relativePath ? join(baseDir, relativePath) : baseDir;
+        if (await exists(fullPath)) {
+          return fullPath;
+        }
+        return null;
       }
-    }
-    // Try without extension (might already have it)
-    const fullPath = join(APP_DIR, relativePath);
-    if (await exists(fullPath)) {
-      return fullPath;
     }
     return null;
   }
@@ -998,6 +1035,9 @@ async function buildClient() {
     input[meta.chunk.replace(/\.js$/, "")] = entryPath;
   }
 
+  // Load package imports for resolve.alias
+  const packageImports = await getPackageImports();
+
   const bundle = await rolldown({
     input,
     platform: "browser",
@@ -1050,9 +1090,7 @@ async function buildClient() {
       },
     ],
     resolve: {
-      alias: {
-        "#app": APP_DIR,
-      },
+      alias: packageImports,
     },
     transform: {
       jsx: {
@@ -1183,6 +1221,9 @@ async function buildServer() {
 
   await mkdir(DIST_SERVER, { recursive: true });
 
+  // Load package imports for resolve.alias
+  const packageImports = await getPackageImports();
+
   const bundle = await rolldown({
     input: join(APP_DIR, "index.ts"),
     platform: "node",
@@ -1217,7 +1258,7 @@ async function buildServer() {
     ],
     resolve: {
       alias: {
-        "#app": APP_DIR,
+        ...packageImports,
         ".modules.generated": MODULES_PATH,
         ".chunks.generated.json": CHUNKS_PATH,
       },
