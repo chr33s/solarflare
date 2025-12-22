@@ -1,7 +1,4 @@
-/**
- * HMR support for Constructable Stylesheets.
- * Enables instant style updates without page reload.
- */
+/** HMR support for Constructable Stylesheets. */
 
 import { stylesheets } from "./stylesheets.ts";
 
@@ -17,10 +14,7 @@ export interface CssHmrUpdate {
   }>;
 }
 
-/**
- * Handles CSS HMR updates.
- * Uses insertRule/deleteRule for granular updates when possible.
- */
+/** Handles CSS HMR updates. */
 export function handleCssHmrUpdate(update: CssHmrUpdate): void {
   const { id, css, changedRules } = update;
 
@@ -36,14 +30,11 @@ export function handleCssHmrUpdate(update: CssHmrUpdate): void {
   // Fall back to full replacement
   const updated = stylesheets.update(id, css);
   if (updated) {
-    console.log(`[HMR] Replaced stylesheet:  ${id}`);
+    console.log(`[HMR] Replaced stylesheet: ${id}`);
   }
 }
 
-/**
- * Applies granular rule updates using insertRule/deleteRule.
- * This is faster than replaceSync for small changes.
- */
+/** Applies granular rule updates using insertRule/deleteRule. */
 function applyGranularUpdates(id: string, changes: CssHmrUpdate["changedRules"]): boolean {
   if (!changes) return false;
 
@@ -98,10 +89,7 @@ function applyGranularUpdates(id: string, changes: CssHmrUpdate["changedRules"])
   }
 }
 
-/**
- * Registers HMR handlers for CSS files.
- * @param hmr - HMR API instance from hmr-client
- */
+/** Registers HMR handlers for CSS files. */
 export function setupCssHmr(hmr: {
   on: (event: string, cb: (data: unknown) => void) => void;
 }): void {

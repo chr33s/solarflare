@@ -6,10 +6,6 @@ import { parsePath, type ParsedPath, type ModuleKind } from "./paths.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/**
- * Reads compiler options from tsconfig.json in the project root.
- * @returns TypeScript compiler options
- */
 function readCompilerOptions(): ts.CompilerOptions {
   const configPath = join(__dirname, "..", "tsconfig.json");
   const configFile = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
@@ -29,34 +25,21 @@ function readCompilerOptions(): ts.CompilerOptions {
   return parsed.options;
 }
 
-/** Compiler options for TypeScript analysis, read from tsconfig.json. */
 const COMPILER_OPTIONS: ts.CompilerOptions = readCompilerOptions();
 
-/**
- * Creates a TypeScript program for analyzing multiple files.
- * @param files - File paths to include in the program
- * @returns TypeScript program instance
- */
 export function createProgram(files: string[]): ts.Program {
   return ts.createProgram(files, COMPILER_OPTIONS);
 }
 
 export interface ExportInfo {
-  /** TypeScript type */
   type: ts.Type;
-  /** Call signatures */
   signatures: readonly ts.Signature[];
-  /** Type as string */
   typeString: string;
-  /** Is a function */
   isFunction: boolean;
-  /** Function parameters */
   parameters: ParameterInfo[];
-  /** Function return type */
   returnType: string | null;
 }
 
-/** Information about a function parameter. */
 export interface ParameterInfo {
   name: string;
   type: string;
@@ -64,12 +47,7 @@ export interface ParameterInfo {
   properties: string[];
 }
 
-/**
- * Gets detailed information about a module's default export.
- * @param checker - TypeScript type checker instance
- * @param sourceFile - Source file to analyze
- * @returns Export information or null if no default export
- */
+/** Gets detailed information about a module's default export. */
 export function getDefaultExportInfo(
   checker: ts.TypeChecker,
   sourceFile: ts.SourceFile,
@@ -116,7 +94,6 @@ export function getDefaultExportInfo(
   };
 }
 
-/** Validation result for a module. */
 export interface ValidationResult {
   file: string;
   kind: ModuleKind;
@@ -126,13 +103,6 @@ export interface ValidationResult {
   exportInfo: ExportInfo | null;
 }
 
-/**
- * Validates a module against expected patterns.
- * @param program - TypeScript program
- * @param filePath - Relative file path to validate
- * @param baseDir - Base directory for resolution
- * @returns Validation result with errors and warnings
- */
 export function validateModule(
   program: ts.Program,
   filePath: string,
@@ -183,11 +153,6 @@ export function validateModule(
   return result;
 }
 
-/**
- * Validates a server module.
- * @param result - Validation result to populate
- * @param exportInfo - Export info from the module
- */
 function validateServerModule(result: ValidationResult, exportInfo: ExportInfo): void {
   if (!exportInfo.isFunction) {
     result.valid = false;
@@ -206,11 +171,6 @@ function validateServerModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-/**
- * Validates a client module.
- * @param result - Validation result to populate
- * @param exportInfo - Export info from the module
- */
 function validateClientModule(result: ValidationResult, exportInfo: ExportInfo): void {
   if (!exportInfo.isFunction) {
     result.valid = false;
@@ -231,11 +191,6 @@ function validateClientModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-/**
- * Validates a layout module.
- * @param result - Validation result to populate
- * @param exportInfo - Export info from the module
- */
 function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo): void {
   if (!exportInfo.isFunction) {
     result.valid = false;
@@ -255,18 +210,12 @@ function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-/** Module entry for code generation. */
 export interface ModuleEntry {
   path: string;
   parsed: ParsedPath;
   validation: ValidationResult | null;
 }
 
-/**
- * Generates a TypeScript type declaration for a module kind.
- * @param kind - Module kind to generate declaration for
- * @returns TypeScript type declaration string
- */
 export function getTypeDeclaration(kind: ModuleKind): string {
   switch (kind) {
     case "server":
@@ -282,11 +231,6 @@ export function getTypeDeclaration(kind: ModuleKind): string {
   }
 }
 
-/**
- * Generates a type-safe modules file.
- * @param entries - Module entries to include
- * @returns Generated content and any validation errors
- */
 export function generateTypedModulesFile(entries: ModuleEntry[]): {
   content: string;
   errors: string[];

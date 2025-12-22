@@ -8,10 +8,7 @@ import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.t
 // Re-export head utilities for client-side head tag management
 export { installHeadHoisting, createHeadContext, setHeadContext };
 
-/**
- * Initializes client-side store from SSR hydration data.
- * @returns Promise that resolves when initialization completes
- */
+/** Initializes client-side store from SSR hydration data. */
 export async function initClient(): Promise<void> {
   // Set up head context and hoisting for client-side rendering
   const headCtx = createHeadContext();
@@ -24,35 +21,23 @@ export async function initClient(): Promise<void> {
 
 /** Tag metadata from file path. */
 export interface TagMeta {
-  /** Custom element tag name */
   tag: string;
-  /** Original file path */
   filePath: string;
-  /** Route segments */
   segments: string[];
-  /** Dynamic param names (from $param) */
+  /** Dynamic param names (from $param). */
   paramNames: string[];
-  /** Root/index component */
   isRoot: boolean;
-  /** Component type */
   type: "client" | "server" | "unknown";
 }
 
 /** Validation result for tag generation. */
 export interface TagValidation {
-  /** Whether the tag is valid */
   valid: boolean;
-  /** Validation errors */
   errors: string[];
-  /** Validation warnings */
   warnings: string[];
 }
 
-/**
- * Parses file path into structured tag metadata.
- * @param path - File path to parse
- * @returns Tag metadata including tag name, segments, and params
- */
+/** Parses file path into structured tag metadata. */
 export function parseTagMeta(path: string): TagMeta {
   const parsed = parsePath(path);
 
@@ -70,11 +55,7 @@ export function parseTagMeta(path: string): TagMeta {
   };
 }
 
-/**
- * Validates a tag against web component naming rules.
- * @param meta - Tag metadata to validate
- * @returns Validation result with errors and warnings
- */
+/** Validates a tag against web component naming rules. */
 export function validateTag(meta: TagMeta): TagValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -143,13 +124,7 @@ export interface DefineOptions {
   validate?: boolean;
 }
 
-/**
- * Registers a Preact component as a web component (build-time macro).
- * @template P - Props type extending Record<string, any>
- * @param Component - Preact function component to register
- * @param options - Registration options
- * @returns The original component (pass-through for composition)
- */
+/** Registers a Preact component as a web component (build-time macro). */
 export function define<P extends Record<string, any>>(
   Component: FunctionComponent<P>,
   options?: DefineOptions,

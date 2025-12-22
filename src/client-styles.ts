@@ -1,7 +1,4 @@
-/**
- * Client-side style integration for solarflare components.
- * Uses Constructable Stylesheets for optimal performance.
- */
+/** Client-side style integration using Constructable Stylesheets. */
 
 import { stylesheets, supportsConstructableStylesheets } from "./stylesheets.ts";
 
@@ -41,7 +38,7 @@ export async function loadComponentStyles(
         const css = await response.text();
         sheet = stylesheets.register(url, css, { consumer: tag });
       } catch (e) {
-        console.warn(`[styles] Failed to load ${url}: `, e);
+        console.warn(`[styles] Failed to load ${url}:`, e);
         continue;
       }
     }

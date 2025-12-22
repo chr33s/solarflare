@@ -6,24 +6,17 @@ import { resetHeadContext } from "./head.ts";
 
 /** Route entry from build-time manifest. */
 export interface RouteManifestEntry {
-  /** URL pattern pathname, e.g., '/blog/:slug' */
   pattern: string;
-  /** Custom element tag name */
   tag: string;
-  /** JS chunk path */
   chunk?: string;
-  /** CSS stylesheet paths */
   styles?: string[];
-  /** Route type */
   type: "client" | "server";
-  /** Dynamic parameter names */
   params: string[];
 }
 
 /** Build-time routes manifest. */
 export interface RoutesManifest {
   routes: RouteManifestEntry[];
-  /** Base path for all routes */
   base?: string;
 }
 
@@ -35,47 +28,33 @@ interface Route {
 
 /** Route match result. */
 export interface RouteMatch {
-  /** Matched manifest entry */
   entry: RouteManifestEntry;
-  /** Extracted URL parameters */
   params: Record<string, string>;
-  /** The matched URL */
   url: URL;
 }
 
 /** Navigation options. */
 export interface NavigateOptions {
-  /** Replace current history entry instead of pushing */
   replace?: boolean;
-  /** State to associate with the history entry */
   state?: unknown;
-  /** Skip view transition entirely */
   skipTransition?: boolean;
 }
 
 /** Router configuration. */
 export interface RouterConfig {
-  /** Base path for all routes */
   base?: string;
-  /** Enable view transitions (default: true if supported) */
+  /** Enable view transitions (default: true if supported). */
   viewTransitions?: boolean;
-  /** Scroll behavior after navigation */
   scrollBehavior?: "auto" | "smooth" | "instant" | false;
-  /** Called when no route matches */
   onNotFound?: (url: URL) => void;
-  /** Called after navigation completes */
   onNavigate?: (match: RouteMatch) => void;
-  /** Called when navigation fails with an error */
   onError?: (error: Error, url: URL) => void;
 }
 
 /** Subscription callback for route changes. */
 export type RouteSubscriber = (match: RouteMatch | null) => void;
 
-/**
- * Checks if View Transitions API is supported.
- * @returns Whether the browser supports view transitions
- */
+/** Checks if View Transitions API is supported. */
 export function supportsViewTransitions(): boolean {
   return typeof document !== "undefined" && "startViewTransition" in document;
 }
@@ -90,14 +69,7 @@ export interface FetchRetryOptions {
   retryOnStatus?: (status: number) => boolean;
 }
 
-/**
- * Fetch with exponential backoff retry for transient failures.
- * @param input - Request URL or RequestInfo
- * @param init - Optional fetch init options
- * @param options - Retry configuration
- * @returns Response from successful fetch
- * @throws Error if all retries are exhausted
- */
+/** Fetch with exponential backoff retry for transient failures. */
 export async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -472,23 +444,14 @@ export class Router {
   }
 }
 
-/**
- * Creates a router from a build-time routes manifest.
- * @param manifest - Routes manifest from build
- * @param config - Optional router configuration
- * @returns Configured Router instance
- */
+/** Creates a router from a build-time routes manifest. */
 export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
   return new Router(manifest, config);
 }
 
 let globalRouter: Router | null = null;
 
-/**
- * Gets the global router instance.
- * @returns Global Router instance
- * @throws Error if router not initialized
- */
+/** Gets the global router instance (throws if not initialized). */
 export function getRouter(): Router {
   if (!globalRouter) {
     throw new Error("[solarflare] Router not initialized. Call initRouter() first.");
@@ -496,33 +459,18 @@ export function getRouter(): Router {
   return globalRouter;
 }
 
-/**
- * Initializes the global router instance.
- * @param manifest - Routes manifest from build
- * @param config - Optional router configuration
- * @returns Initialized Router instance
- */
+/** Initializes the global router instance. */
 export function initRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
   globalRouter = createRouter(manifest, config);
   return globalRouter;
 }
 
-/**
- * Navigates using the global router.
- * @param to - Target URL or path
- * @param options - Navigation options
- * @returns Promise that resolves when navigation completes
- */
+/** Navigates using the global router. */
 export function navigate(to: string | URL, options?: NavigateOptions): Promise<void> {
   return getRouter().navigate(to, options);
 }
 
-/**
- * Checks if path is active using global router.
- * @param path - Path to check
- * @param exact - Require exact match
- * @returns Whether the path is active
- */
+/** Checks if path is active using global router. */
 export function isActive(path: string, exact = false): boolean {
   return getRouter().isActive(path, exact);
 }

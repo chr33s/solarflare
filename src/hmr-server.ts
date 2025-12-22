@@ -12,21 +12,13 @@ interface SseClient {
 // Track connected HMR clients for broadcasting updates
 const hmrClients = new Set<SseClient>();
 
-/**
- * Checks if request is an HMR SSE request.
- * @param request - Incoming request
- * @returns Whether this is an HMR request
- */
+/** Checks if request is an HMR SSE request. */
 export function isHmrRequest(request: Request): boolean {
   const url = new URL(request.url);
   return url.pathname === "/_hmr" && request.method === "GET";
 }
 
-/**
- * Handles HMR SSE request.
- * Returns a streaming response for Server-Sent Events.
- * @returns SSE streaming response
- */
+/** Handles HMR SSE request. Returns a streaming response for Server-Sent Events. */
 export function handleHmrRequest(): Response {
   const encoder = new TextEncoder();
   let client: SseClient;
@@ -67,11 +59,7 @@ export function handleHmrRequest(): Response {
   });
 }
 
-/**
- * Broadcasts an HMR update to all connected clients.
- * @param type - Event type (e.g., 'update', 'full-reload', 'css-update')
- * @param path - Changed file path (optional)
- */
+/** Broadcasts an HMR update to all connected clients. */
 export function broadcastHmrUpdate(type: HmrEventType, path?: string): void {
   const message = JSON.stringify({ type, path, timestamp: Date.now() });
   for (const client of hmrClients) {

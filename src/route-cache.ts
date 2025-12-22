@@ -1,19 +1,11 @@
-/**
- * Route-level response caching for static/semi-static content.
- * Dramatically improves TTFB for cacheable routes.
- */
+/** Route-level response caching for static/semi-static content. */
 
 /** Cache configuration per route. */
 export interface RouteCacheConfig {
-  /** Cache duration in seconds */
   maxAge: number;
-  /** Stale-while-revalidate duration */
   staleWhileRevalidate?: number;
-  /** Cache key generator */
   keyGenerator?: (request: Request, params: Record<string, string>) => string;
-  /** Whether to cache for authenticated users */
   cacheAuthenticated?: boolean;
-  /** Vary headers */
   vary?: string[];
 }
 

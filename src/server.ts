@@ -16,7 +16,6 @@ import {
   resetHeadContext,
   HEAD_MARKER,
   Head,
-  HeadOutlet,
   useHead,
   installHeadHoisting,
   resetHeadElementTracking,
@@ -28,63 +27,42 @@ import {
 /** Marker for asset injection during streaming. */
 export const BODY_MARKER = "<!--SOLARFLARE_BODY-->";
 
-/**
- * Body placeholder component for layout injection.
- * @returns VNode with body marker
- */
+/** Body placeholder component for layout injection. */
 export function Body(): VNode<any> {
   return h("solarflare-body", { dangerouslySetInnerHTML: { __html: BODY_MARKER } });
 }
 
 // Re-export head components
-export { Head, HeadOutlet, useHead, HEAD_MARKER, installHeadHoisting };
+export { Head, useHead, HEAD_MARKER, installHeadHoisting };
 export type { HeadInput, HeadEntryOptions, ActiveHeadEntry };
 
 /** Route parameter definition. */
 export interface RouteParamDef {
-  /** Parameter name, e.g., "slug" from ":slug" */
   name: string;
-  /** Whether optional */
   optional: boolean;
-  /** Original pattern segment */
   segment: string;
 }
 
 /** Parsed route pattern. */
 export interface ParsedPattern {
-  /** Original file path */
   filePath: string;
-  /** URLPattern pathname */
   pathname: string;
-  /** Parameter definitions */
   params: RouteParamDef[];
-  /** Static route (no params) */
   isStatic: boolean;
-  /** Specificity score for sorting */
   specificity: number;
 }
 
 /** Route definition. */
 export interface Route {
-  /** URLPattern for matching */
   pattern: URLPattern;
-  /** Parsed pattern metadata */
   parsedPattern: ParsedPattern;
-  /** File path */
   path: string;
-  /** Custom element tag */
   tag: string;
-  /** Dynamic module loader */
   loader: () => Promise<{ default: unknown }>;
-  /** Route type */
   type: "client" | "server";
 }
 
-/**
- * Converts file path to URLPattern with parsed metadata.
- * @param filePath - File path to parse
- * @returns Parsed pattern with pathname and params
- */
+/** Converts file path to URLPattern with parsed metadata. */
 export function parsePattern(filePath: string): ParsedPattern {
   const parsed = parsePath(filePath);
 
@@ -112,11 +90,7 @@ export interface ModuleMap {
   error?: () => Promise<{ default: unknown }>;
 }
 
-/**
- * Creates router from module map, returning sorted routes array.
- * @param modules - Module map with server, client, layout entries
- * @returns Sorted array of route definitions
- */
+/** Creates router from module map, returning sorted routes array. */
 export function createRouter(modules: ModuleMap): Route[] {
   // Combine server and client modules for routing (layouts are handled separately)
   const routeModules = { ...modules.server, ...modules.client };
@@ -148,32 +122,27 @@ export function createRouter(modules: ModuleMap): Route[] {
 
 /** Layout definition. */
 export interface Layout {
-  /** File path */
+  /** File path. */
   path: string;
-  /** Module loader */
+  /** Module loader. */
   loader: () => Promise<{ default: unknown }>;
-  /** Nesting depth (0 = root) */
+  /** Nesting depth (0 = root). */
   depth: number;
-  /** Directory scope */
+  /** Directory scope. */
   directory: string;
 }
 
 /** Layout hierarchy result. */
 export interface LayoutHierarchy {
-  /** Layouts from root to leaf */
+  /** Layouts from root to leaf. */
   layouts: Layout[];
-  /** Route path segments */
+  /** Route path segments. */
   segments: string[];
-  /** Checked directory paths */
+  /** Checked directory paths. */
   checkedPaths: string[];
 }
 
-/**
- * Finds all ancestor layouts for a route path, root to leaf order.
- * @param routePath - Route file path
- * @param modules - Layout module loaders
- * @returns Layout hierarchy with layouts and segments
- */
+/** Finds all ancestor layouts for a route path, root to leaf order. */
 export function findLayoutHierarchy(
   routePath: string,
   modules: Record<string, () => Promise<{ default: unknown }>>,
@@ -217,34 +186,24 @@ export function findLayoutHierarchy(
   return { layouts, segments, checkedPaths };
 }
 
-/**
- * Finds ancestor layouts for a route using structured module map.
- * @param routePath - Route file path
- * @param modules - Module map
- * @returns Array of layouts from root to leaf
- */
+/** Finds ancestor layouts for a route using structured module map. */
 export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
   return findLayoutHierarchy(routePath, modules.layout).layouts;
 }
 
 /** Route match result. */
 export interface RouteMatch {
-  /** Matched route */
+  /** Matched route. */
   route: Route;
-  /** Extracted URL parameters */
+  /** Extracted URL parameters. */
   params: Record<string, string>;
-  /** Parameter definitions */
+  /** Parameter definitions. */
   paramDefs: RouteParamDef[];
-  /** All required params matched */
+  /** All required params matched. */
   complete: boolean;
 }
 
-/**
- * Matches URL against routes using URLPattern.
- * @param routes - Array of routes to match against
- * @param url - URL to match
- * @returns Route match or null if no match
- */
+/** Matches URL against routes using URLPattern. */
 export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
   for (const route of routes) {
     const result = route.pattern.exec(url);
@@ -273,12 +232,7 @@ export interface LayoutProps {
   children: VNode<any>;
 }
 
-/**
- * Wraps content in nested layouts (root to leaf order).
- * @param content - VNode content to wrap
- * @param layouts - Array of layouts to apply
- * @returns VNode wrapped in all layouts
- */
+/** Wraps content in nested layouts (root to leaf order). */
 export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>> {
   let wrapped: VNode<any> = content;
 
@@ -292,13 +246,7 @@ export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): P
   return wrapped;
 }
 
-/**
- * Generates asset HTML tags for injection.
- * @param script - Script path
- * @param styles - Stylesheet paths
- * @param devScripts - Development scripts
- * @returns HTML string with asset tags
- */
+/** Generates asset HTML tags for injection. */
 export function generateAssetTags(
   script?: string,
   styles?: string[],
@@ -328,13 +276,7 @@ export function generateAssetTags(
   return html;
 }
 
-/**
- * Renders a component with its tag wrapper for hydration.
- * @param Component - Preact component to render
- * @param tag - Custom element tag name
- * @param props - Component props
- * @returns VNode wrapped in custom element tag
- */
+/** Renders a component with its tag wrapper for hydration. */
 export function renderComponent(
   Component: FunctionComponent<any>,
   tag: string,
@@ -358,14 +300,7 @@ export interface ErrorPageProps {
   reset?: () => void;
 }
 
-/**
- * Renders an error page wrapped in layouts.
- * @param error - Error to display
- * @param url - Request URL
- * @param modules - Module map
- * @param statusCode - HTTP status code
- * @returns VNode for error page
- */
+/** Renders an error page wrapped in layouts. */
 export async function renderErrorPage(
   error: Error,
   url: URL,
@@ -400,7 +335,7 @@ export async function renderErrorPage(
 
 /** Deferred data configuration for streaming. */
 export interface DeferredData {
-  /** Component tag to hydrate */
+  /** Component tag to hydrate. */
   tag: string;
   /** Multiple independent deferred props, streamed as each promise resolves. */
   promises: Record<string, Promise<unknown>>;
@@ -408,32 +343,29 @@ export interface DeferredData {
 
 /** Streaming render options. */
 export interface StreamRenderOptions {
-  /** Route parameters */
+  /** Route parameters. */
   params?: Record<string, string>;
-  /** Server-loaded data for immediate render */
+  /** Server-loaded data for immediate render. */
   serverData?: unknown;
-  /** Current pathname */
+  /** Current pathname. */
   pathname?: string;
-  /** Script path to inject */
+  /** Script path to inject. */
   script?: string;
-  /** Stylesheet paths */
+  /** Stylesheet paths. */
   styles?: string[];
-  /** Dev scripts (e.g., console forwarding) */
+  /** Dev scripts (e.g., console forwarding). */
   devScripts?: string[];
-  /** Deferred data to stream after shell */
+  /** Deferred data to stream after shell. */
   deferred?: DeferredData;
-  /** HTTP status code to return */
+  /** HTTP status code to return. */
   _status?: number;
-  /** HTTP status text to return */
+  /** HTTP status text to return. */
   _statusText?: string;
-  /** Custom HTTP headers to merge */
+  /** Custom HTTP headers to merge. */
   _headers?: Record<string, string>;
 }
 
-/**
- * Initializes server-side store with request context.
- * @param options - Stream render options
- */
+/** Initializes server-side store with request context. */
 export function initServerContext(options: StreamRenderOptions): void {
   resetStore();
   resetHeadContext();
@@ -456,14 +388,7 @@ export function initServerContext(options: StreamRenderOptions): void {
   }
 }
 
-/**
- * Transforms stream to inject assets, head tags, and store hydration.
- * @param storeScript - Serialized store script
- * @param script - Script path
- * @param styles - Stylesheet paths
- * @param devScripts - Development scripts
- * @returns TransformStream for asset injection
- */
+/** Transforms stream to inject assets, head tags, and store hydration. */
 function createAssetInjectionTransformer(
   storeScript: string,
   script?: string,
@@ -491,7 +416,7 @@ function createAssetInjectionTransformer(
         }
       }
 
-      // Inject head tags at HeadOutlet marker (only once)
+      // Inject head tags at Head marker (only once)
       if (!headInjected) {
         const headMarkerIndex = buffer.indexOf(headMarker);
         if (headMarkerIndex !== -1) {
@@ -554,22 +479,17 @@ function createAssetInjectionTransformer(
 
 /** Extended stream interface with allReady promise. */
 export interface SolarflareStream extends ReadableStream<Uint8Array> {
-  /** Resolves when all content has been rendered */
+  /** Resolves when all content has been rendered. */
   allReady: Promise<void>;
-  /** HTTP status code */
+  /** HTTP status code. */
   status?: number;
-  /** HTTP status text */
+  /** HTTP status text. */
   statusText?: string;
-  /** Custom HTTP headers */
+  /** Custom HTTP headers. */
   headers?: Record<string, string>;
 }
 
-/**
- * Renders a VNode to a streaming response with asset injection.
- * @param vnode - Preact VNode to render
- * @param options - Streaming render options
- * @returns Streaming response with allReady promise
- */
+/** Renders a VNode to a streaming response with asset injection. */
 export async function renderToStream(
   vnode: VNode<any>,
   options: StreamRenderOptions = {},
@@ -605,13 +525,7 @@ export async function renderToStream(
   return resultStream;
 }
 
-/**
- * Creates stream that flushes HTML immediately, then appends deferred data.
- * @param inputStream - Source stream to read from
- * @param tag - Component tag for hydration
- * @param promise - Deferred data promise
- * @returns ReadableStream with deferred data appended
- */
+/** Creates stream that flushes HTML immediately, then appends deferred data. */
 function createDeferredStream(
   inputStream: ReadableStream<Uint8Array>,
   deferred: DeferredData,

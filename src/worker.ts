@@ -48,11 +48,7 @@ const responseCache = new ResponseCache(100);
 // Lazy-initialized static shell cache (keyed by lang)
 const staticShellCache = new Map<string, StreamingShell>();
 
-/**
- * Gets or creates a static shell for the given language.
- * @param lang - HTML lang attribute
- * @returns Cached or newly generated static shell
- */
+/** Gets or creates a static shell for the given language. */
 function getStaticShell(lang: string): StreamingShell {
   let shell = staticShellCache.get(lang);
   if (!shell) {
@@ -64,36 +60,22 @@ function getStaticShell(lang: string): StreamingShell {
 
 /** Worker optimization options. */
 export interface WorkerOptimizations {
-  /** Enable early flush for faster TTFB */
   earlyFlush?: boolean;
-  /** Enable critical CSS inlining */
   criticalCss?: boolean;
-  /** CSS file reader for critical CSS extraction */
   readCss?: (path: string) => Promise<string>;
 }
 
-/**
- * Gets the script path for a route from the chunk manifest.
- * @param tag - Custom element tag name
- * @returns Script path or undefined if not found
- */
+/** Gets the script path for a route from the chunk manifest. */
 function getScriptPath(tag: string): string | undefined {
   return manifest.tags[tag];
 }
 
-/**
- * Gets stylesheets for a route pattern from the chunk manifest.
- * @param pattern - Route pattern
- * @returns Array of stylesheet paths
- */
+/** Gets stylesheets for a route pattern from the chunk manifest. */
 function getStylesheets(pattern: string): string[] {
   return manifest.styles[pattern] ?? [];
 }
 
-/**
- * Gets dev mode scripts from the chunk manifest.
- * @returns Array of dev script paths or undefined
- */
+/** Gets dev mode scripts from the chunk manifest. */
 function getDevScripts(): string[] | undefined {
   return manifest.devScripts;
 }
@@ -106,11 +88,7 @@ type ServerLoader = (
 
 const router = createRouter(typedModules);
 
-/**
- * Finds paired module (server for client, or client for server).
- * @param path - Module path to find pair for
- * @returns Paired module path or null if not found
- */
+/** Finds paired module (server for client, or client for server). */
 function findPairedModule(path: string): string | null {
   if (path.includes(".client.")) {
     const serverPath = path.replace(".client.", ".server.");
@@ -125,19 +103,12 @@ function findPairedModule(path: string): string | null {
 
 /** Worker environment. */
 interface WorkerEnv {
-  /** Log level for console forwarding */
   WRANGLER_LOG?: LogLevel;
-  /** Performance optimizations */
   SF_OPTIMIZATIONS?: WorkerOptimizations;
   [key: string]: unknown;
 }
 
-/**
- * Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR.
- * @param request - Incoming HTTP request
- * @param env - Worker environment bindings
- * @returns HTTP Response with streamed HTML or error page
- */
+/** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
 async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   const url = new URL(request.url);
 

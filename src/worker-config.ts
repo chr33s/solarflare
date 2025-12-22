@@ -1,7 +1,4 @@
-/**
- * Worker configuration extracted from meta tags.
- * Allows per-route configuration via _layout.tsx and page components.
- */
+/** Worker configuration extracted from meta tags. */
 
 import { type RouteCacheConfig } from "./route-cache.ts";
 
@@ -37,9 +34,6 @@ const DEFAULTS: WorkerMetaConfig = {
  * - `<meta name="sf:cache-swr" content="3600">` - Stale-while-revalidate in seconds
  * - `<meta name="sf:early-flush" content="true">` - Enable early flush
  * - `<meta name="sf:critical-css" content="true">` - Enable critical CSS
- *
- * @param html - HTML string to parse (typically from rendered head)
- * @returns Parsed configuration with defaults
  */
 export function parseMetaConfig(html: string): WorkerMetaConfig {
   const config: WorkerMetaConfig = { ...DEFAULTS };
@@ -94,8 +88,7 @@ export function parseMetaConfig(html: string): WorkerMetaConfig {
 }
 
 /**
- * Generates meta tags for worker configuration.
- * Use with useHead() in _layout.tsx to set per-route config.
+ * Generates meta tags for worker configuration. Use with useHead() in _layout.tsx.
  *
  * @example
  * ```tsx
@@ -112,9 +105,6 @@ export function parseMetaConfig(html: string): WorkerMetaConfig {
  *   return <>{children}</>;
  * }
  * ```
- *
- * @param config - Configuration options
- * @returns Array of meta tag objects for useHead
  */
 export function workerConfigMeta(config: {
   preconnect?: string[];

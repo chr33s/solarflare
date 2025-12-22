@@ -4,21 +4,14 @@ import { signal, computed, effect, batch, type ReadonlySignal, type Signal } fro
 import { serializeToString, parseFromString } from "./serialize.ts";
 import { serializeHeadState, hydrateHeadState } from "./head.ts";
 
-/** Server-rendered data. */
 export interface ServerData<T = unknown> {
-  /** Data payload */
   data: T;
-  /** Loading state (for streaming) */
   loading: boolean;
-  /** Fetch error if any */
   error: Error | null;
 }
 
-/** Store configuration. */
 export interface StoreConfig {
-  /** Initial route params */
   params?: Record<string, string>;
-  /** Initial server data */
   serverData?: unknown;
 }
 
@@ -44,20 +37,13 @@ export const serverData: ReadonlySignal<ServerData<unknown>> = _serverData;
 /** Current pathname signal (readonly). */
 export const pathname: ReadonlySignal<string> = _pathname;
 
-/**
- * Sets route parameters.
- * @param newParams - New parameter values
- */
+/** Sets route parameters. */
 export function setParams(newParams: Record<string, string>): void {
   // Use Object.assign to prevent prototype pollution
   _params.value = Object.assign({}, newParams);
 }
 
-/**
- * Sets server data.
- * @template T - Data type
- * @param data - Server data value
- */
+/** Sets server data. */
 export function setServerData<T>(data: T): void {
   _serverData.value = {
     data,
@@ -66,18 +52,12 @@ export function setServerData<T>(data: T): void {
   };
 }
 
-/**
- * Sets current pathname.
- * @param path - Pathname value
- */
+/** Sets current pathname. */
 export function setPathname(path: string): void {
   _pathname.value = path;
 }
 
-/**
- * Initializes store with config.
- * @param config - Store configuration
- */
+/** Initializes store with config. */
 export function initStore(config: StoreConfig = {}): void {
   batch(() => {
     if (config.params) {
@@ -109,10 +89,7 @@ const STORE_ISLAND_ID = "sf-store";
 /** Data island ID for head hydration. */
 const HEAD_ISLAND_ID = "sf-head";
 
-/**
- * Serializes store state for client hydration using a data island.
- * @returns HTML script tag with serialized state
- */
+/** Serializes store state for client hydration. */
 export async function serializeStoreForHydration(): Promise<string> {
   const state = {
     params: _params.value,
@@ -123,18 +100,12 @@ export async function serializeStoreForHydration(): Promise<string> {
   return serializeDataIsland(STORE_ISLAND_ID, state);
 }
 
-/**
- * Serializes head state for client hydration using a data island.
- * @returns HTML script tag with serialized head state
- */
+/** Serializes head state for client hydration. */
 export async function serializeHeadForHydration(): Promise<string> {
   return /* html */ `<script type="application/json" data-island="${HEAD_ISLAND_ID}">${serializeHeadState()}</script>`;
 }
 
-/**
- * Hydrates store from serialized state (client-side).
- * @returns Promise that resolves when hydration completes
- */
+/** Hydrates store from serialized state (client-side). */
 export async function hydrateStore(): Promise<void> {
   if (typeof document === "undefined") return;
 
@@ -158,10 +129,7 @@ export async function hydrateStore(): Promise<void> {
   script?.remove();
 }
 
-/**
- * Hydrates head state from serialized data island (client-side).
- * @returns Promise that resolves when hydration completes
- */
+/** Hydrates head state from serialized data island (client-side). */
 export async function hydrateHead(): Promise<void> {
   if (typeof document === "undefined") return;
 
@@ -177,24 +145,14 @@ export async function hydrateHead(): Promise<void> {
 export { signal, computed, effect, batch };
 export type { ReadonlySignal, Signal };
 
-/**
- * Serializes data to a script tag for progressive hydration.
- * @param id - Unique data island identifier
- * @param data - Data to serialize
- * @returns HTML script tag with serialized data
- */
+/** Serializes data to a script tag for progressive hydration. */
 export async function serializeDataIsland(id: string, data: unknown): Promise<string> {
   const serialized = await serializeToString(data);
   // Include id attribute for diff-dom-streaming to properly match/replace during SPA navigation
   return /* html */ `<script type="application/json" id="${id}" data-island="${id}">${serialized}</script>`;
 }
 
-/**
- * Extracts and parses data from a data island script tag (client-side).
- * @template T - Expected data type
- * @param id - Data island identifier
- * @returns Parsed data or null if not found
- */
+/** Extracts and parses data from a data island script tag. */
 export async function extractDataIsland<T = unknown>(id: string): Promise<T | null> {
   if (typeof document === "undefined") return null;
 
@@ -209,12 +167,7 @@ export async function extractDataIsland<T = unknown>(id: string): Promise<T | nu
   }
 }
 
-/**
- * Hydrates a component when its data island arrives.
- * @param tag - Custom element tag name
- * @param dataIslandId - Optional data island identifier
- * @returns Promise that resolves when hydration completes
- */
+/** Hydrates a component when its data island arrives. */
 export async function hydrateComponent(tag: string, dataIslandId?: string): Promise<void> {
   if (typeof document === "undefined") return;
 
@@ -276,11 +229,7 @@ async function processHydrationQueue(): Promise<void> {
   processingQueue = false;
 }
 
-/**
- * Queues a hydration call.
- * @param tag - Custom element tag name
- * @param dataIslandId - Data island identifier
- */
+/** Queues a hydration call. */
 export function queueHydration(tag: string, dataIslandId: string): void {
   hydrationQueue.push([tag, dataIslandId]);
   if (hydrationReady) {
@@ -288,10 +237,7 @@ export function queueHydration(tag: string, dataIslandId: string): void {
   }
 }
 
-/**
- * Checks if hydration coordinator is initialized.
- * @returns Whether hydration is ready
- */
+/** Checks if hydration coordinator is initialized. */
 export function isHydrationReady(): boolean {
   return hydrationReady;
 }

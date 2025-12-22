@@ -17,17 +17,13 @@ export type TagPosition = "head" | "bodyOpen" | "bodyClose";
 
 /** Base head tag structure. */
 export interface HeadTag {
-  /** Tag name. */
   tag: HeadTagName;
-  /** Tag attributes/props. */
   props: Record<string, string | boolean | null | undefined>;
   /** Inner content (for title, script, style). */
   textContent?: string;
-  /** Deduplication key (auto-generated or manual). */
   key?: string;
   /** Priority for ordering (lower = earlier). */
   tagPriority?: TagPriority;
-  /** Position in document. */
   tagPosition?: TagPosition;
   /** Internal: calculated weight for sorting. */
   _w?: number;
@@ -39,13 +35,10 @@ export interface HeadTag {
 
 /** Head input schema (similar to unhead). */
 export interface HeadInput {
-  /** Document title. */
   title?: string;
   /** Title template (function or string with %s). */
   titleTemplate?: string | ((title?: string) => string);
-  /** Base element. */
   base?: { href?: string; target?: string };
-  /** Meta tags. */
   meta?: Array<{
     charset?: string;
     name?: string;
@@ -54,7 +47,6 @@ export interface HeadInput {
     content?: string;
     key?: string;
   }>;
-  /** Link tags. */
   link?: Array<{
     rel?: string;
     href?: string;
@@ -65,7 +57,6 @@ export interface HeadInput {
     as?: string;
     key?: string;
   }>;
-  /** Script tags. */
   script?: Array<{
     src?: string;
     type?: string;
@@ -74,32 +65,25 @@ export interface HeadInput {
     innerHTML?: string;
     key?: string;
   }>;
-  /** Style tags. */
   style?: Array<{
     type?: string;
     media?: string;
     innerHTML?: string;
     key?: string;
   }>;
-  /** HTML element attributes. */
   htmlAttrs?: Record<string, string>;
-  /** Body element attributes. */
   bodyAttrs?: Record<string, string>;
 }
 
 /** Active head entry with lifecycle methods. */
 export interface ActiveHeadEntry {
-  /** Update the head entry. */
   patch: (input: Partial<HeadInput>) => void;
-  /** Remove the head entry. */
   dispose: () => void;
 }
 
 /** Head entry options. */
 export interface HeadEntryOptions {
-  /** Priority of tags. */
   tagPriority?: TagPriority;
-  /** Position of tags. */
   tagPosition?: TagPosition;
 }
 
@@ -152,11 +136,7 @@ const PRIORITY_ALIASES: Record<string, number> = {
 // VNode Hoisting (Auto-hoist head tags)
 // ============================================================================
 
-/**
- * Extracts text content from VNode children.
- * @param children - VNode children to extract text from
- * @returns Concatenated text content
- */
+/** Extracts text content from VNode children. */
 function getTextContent(children: ComponentChildren): string {
   if (typeof children === "string") return children;
   if (typeof children === "number") return String(children);
@@ -233,11 +213,7 @@ function NullComponent(): null {
   return null;
 }
 
-/**
- * Converts a VNode to HeadInput.
- * @param vnode - VNode to convert
- * @returns HeadInput or null if not a head tag
- */
+/** Converts a VNode to HeadInput. */
 function vnodeToHeadInput(vnode: VNode): HeadInput | null {
   const type = vnode.type;
   const props = (vnode.props || {}) as Record<string, unknown>;
@@ -332,10 +308,7 @@ interface HeadEntry {
 
 let entryId = 0;
 
-/**
- * Creates a new head context.
- * @returns Fresh HeadContext instance
- */
+/** Creates a new head context. */
 export function createHeadContext(): HeadContext {
   const entries: HeadEntry[] = [];
   const htmlAttrs: Record<string, string> = {};
@@ -439,10 +412,7 @@ export function resetEntryIdCounter(): void {
   entryId = 0;
 }
 
-/**
- * Gets or creates the global head context.
- * @returns Global HeadContext instance
- */
+/** Gets or creates the global head context. */
 export function getHeadContext(): HeadContext {
   if (!headContext) {
     headContext = createHeadContext();
@@ -450,10 +420,7 @@ export function getHeadContext(): HeadContext {
   return headContext;
 }
 
-/**
- * Sets the global head context (for SSR).
- * @param ctx - HeadContext to set, or null to clear
- */
+/** Sets the global head context (for SSR). */
 export function setHeadContext(ctx: HeadContext | null): void {
   headContext = ctx;
 }
@@ -471,11 +438,7 @@ export function resetHeadContext(): void {
 // Deduplication
 // ============================================================================
 
-/**
- * Generates dedupe key for a tag.
- * @param tag - HeadTag to generate key for
- * @returns Dedupe key or undefined if not deduplicatable
- */
+/** Generates dedupe key for a tag. */
 export function dedupeKey(tag: HeadTag): string | undefined {
   const { props, tag: name } = tag;
 
@@ -528,11 +491,7 @@ export function dedupeKey(tag: HeadTag): string | undefined {
   return undefined;
 }
 
-/**
- * Simple string hash for content-based deduplication.
- * @param str - String to hash
- * @returns Hash string
- */
+/** Simple string hash for content-based deduplication. */
 function hashString(str: string): string {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -547,11 +506,7 @@ function hashString(str: string): string {
 // Tag Weight/Sorting
 // ============================================================================
 
-/**
- * Calculates tag weight for sorting.
- * @param tag - HeadTag to calculate weight for
- * @returns Numeric weight (lower = earlier in head)
- */
+/** Calculates tag weight for sorting (lower = earlier in head). */
 export function tagWeight(tag: HeadTag): number {
   // Priority overrides
   if (typeof tag.tagPriority === "number") {
@@ -587,12 +542,7 @@ export function tagWeight(tag: HeadTag): number {
 // Normalization
 // ============================================================================
 
-/**
- * Normalizes HeadInput to HeadTag array.
- * @param input - HeadInput to normalize
- * @param options - Optional entry options
- * @returns Array of HeadTag objects
- */
+/** Normalizes HeadInput to HeadTag array. */
 export function normalizeInputToTags(input: HeadInput, options?: HeadEntryOptions): HeadTag[] {
   const tags: HeadTag[] = [];
 
@@ -676,11 +626,7 @@ export function normalizeInputToTags(input: HeadInput, options?: HeadEntryOption
 // HTML Rendering
 // ============================================================================
 
-/**
- * Escapes HTML entities in attribute values.
- * @param str - String to escape
- * @returns Escaped string
- */
+/** Escapes HTML entities in attribute values. */
 function escapeAttr(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -689,20 +635,12 @@ function escapeAttr(str: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Escapes HTML content.
- * @param str - String to escape
- * @returns Escaped string
- */
+/** Escapes HTML content. */
 function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/**
- * Renders a HeadTag to HTML string.
- * @param tag - HeadTag to render
- * @returns HTML string
- */
+/** Renders a HeadTag to HTML string. */
 export function tagToHtml(tag: HeadTag): string {
   const attrs = Object.entries(tag.props)
     .filter(([_, v]) => v !== undefined && v !== null && v !== false)
@@ -728,12 +666,7 @@ export function tagToHtml(tag: HeadTag): string {
 // useHead Composable
 // ============================================================================
 
-/**
- * Registers head tags (works on both server and client).
- * @param input - Head input configuration
- * @param options - Optional entry options
- * @returns Active entry with patch/dispose methods
- */
+/** Registers head tags (works on both server and client). */
 export function useHead(input: HeadInput, options?: HeadEntryOptions): ActiveHeadEntry {
   const ctx = getHeadContext();
   const entry = ctx.push(input, options);
@@ -753,10 +686,7 @@ export function useHead(input: HeadInput, options?: HeadEntryOptions): ActiveHea
 /** Managed head tags signal for client-side reactivity. */
 const managedTags: Signal<Set<Element>> = signal(new Set());
 
-/**
- * Applies head tags to the DOM.
- * @param tags - Array of HeadTags to apply
- */
+/** Applies head tags to the DOM. */
 export function applyHeadToDOM(tags: HeadTag[]): void {
   if (typeof document === "undefined") return;
 
@@ -818,13 +748,7 @@ export function applyHeadToDOM(tags: HeadTag[]): void {
   managedTags.value = newManagedTags;
 }
 
-/**
- * Finds an SSR-rendered element that matches the given tag.
- * Used to adopt existing elements instead of creating duplicates.
- * @param head - The head element to search in
- * @param tag - The HeadTag to match
- * @returns Matching element or null
- */
+/** Finds an SSR-rendered element that matches the given tag for adoption. */
 function findMatchingSSRElement(head: HTMLHeadElement, tag: HeadTag): Element | null {
   // Don't try to match elements that are already managed
   const candidates = head.querySelectorAll(`${tag.tag}:not([data-sf-head])`);
@@ -862,11 +786,7 @@ function findMatchingSSRElement(head: HTMLHeadElement, tag: HeadTag): Element | 
   return null;
 }
 
-/**
- * Creates a DOM element from a HeadTag.
- * @param tag - HeadTag to create element from
- * @returns DOM Element
- */
+/** Creates a DOM element from a HeadTag. */
 function createElementFromTag(tag: HeadTag): Element {
   const el = document.createElement(tag.tag);
 
@@ -886,11 +806,7 @@ function createElementFromTag(tag: HeadTag): Element {
   return el;
 }
 
-/**
- * Updates an existing DOM element with new tag props.
- * @param el - Element to update
- * @param tag - HeadTag with new values
- */
+/** Updates an existing DOM element with new tag props. */
 function updateElement(el: Element, tag: HeadTag): void {
   // Update attributes
   for (const [key, value] of Object.entries(tag.props)) {
@@ -944,10 +860,7 @@ export const HeadOutlet = Head;
 // Serialization for Hydration
 // ============================================================================
 
-/**
- * Serializes head state for client hydration.
- * @returns JSON string of head state
- */
+/** Serializes head state for client hydration. */
 export function serializeHeadState(): string {
   const ctx = getHeadContext();
   const state = {
@@ -963,10 +876,7 @@ export function serializeHeadState(): string {
   return JSON.stringify(state);
 }
 
-/**
- * Hydrates head state on client.
- * @param serialized - Serialized head state JSON
- */
+/** Hydrates head state on client. */
 export function hydrateHeadState(serialized: string): void {
   try {
     const state = JSON.parse(serialized);

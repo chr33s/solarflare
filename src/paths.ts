@@ -5,33 +5,22 @@ export type ModuleKind = "server" | "client" | "layout" | "error" | "unknown";
 
 /** Parsed path information with validated metadata. */
 export interface ParsedPath {
-  /** Original file path */
   original: string;
-  /** Normalized path (without leading ./) */
+  /** Normalized path (without leading ./). */
   normalized: string;
-  /** Module kind based on file suffix */
   kind: ModuleKind;
-  /** Route segments */
   segments: string[];
-  /** Dynamic parameter names (from $param) */
+  /** Dynamic parameter names (from $param). */
   params: string[];
-  /** Whether this is an index/root route */
   isIndex: boolean;
-  /** Whether this is a private file (_prefixed) */
+  /** Whether this is a private file (_prefixed). */
   isPrivate: boolean;
-  /** URLPattern pathname */
   pattern: string;
-  /** Custom element tag name */
   tag: string;
-  /** Route specificity score */
   specificity: number;
 }
 
-/**
- * Determines module kind from file path.
- * @param filePath - File path to analyze
- * @returns Module kind based on file suffix
- */
+/** Determines module kind from file path. */
 function getModuleKind(filePath: string): ModuleKind {
   if (filePath.includes(".server.")) return "server";
   if (filePath.includes(".client.")) return "client";
@@ -40,11 +29,7 @@ function getModuleKind(filePath: string): ModuleKind {
   return "unknown";
 }
 
-/**
- * Parses a file path into structured metadata.
- * @param filePath - File path to parse (e.g., "./blog/$slug.client.tsx")
- * @returns Parsed path information including pattern, tag, params, etc.
- */
+/** Parses a file path into structured metadata. */
 export function parsePath(filePath: string): ParsedPath {
   const normalized = filePath.replace(/^\.\//, "").replace(/^.*\/app\//, "");
   const kind = getModuleKind(normalized);

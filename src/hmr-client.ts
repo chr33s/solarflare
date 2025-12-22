@@ -1,13 +1,4 @@
-/**
- * Framework HMR Client
- *
- * Provides a framework-native HMR API that replaces Vite's import.meta.hot.
- * In production builds, the dev implementation tree-shakes to nothing.
- *
- * Build-time replacement:
- * - Development: globalThis.__SF_DEV__ → true (full HMR with SSE/EventSource)
- * - Production: globalThis.__SF_DEV__ → false (no-op, tree-shakes away)
- */
+/** Framework HMR client with SSE-based hot module replacement. */
 
 /** Callback type for HMR events. */
 export type HmrCallback<T = unknown> = (data: T) => void;

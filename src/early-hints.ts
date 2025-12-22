@@ -3,23 +3,16 @@
  * Allows the browser to start loading resources before the full response.
  */
 
-/** Resource to hint.  */
+/** Resource to hint. */
 export interface EarlyHint {
-  /** Resource URL */
   href: string;
-  /** Resource type:  preload, preconnect, modulepreload */
   rel: "preload" | "preconnect" | "modulepreload" | "dns-prefetch";
-  /** Resource type for preload */
   as?: "script" | "style" | "font" | "image" | "fetch";
-  /** Crossorigin attribute */
   crossorigin?: "anonymous" | "use-credentials";
-  /** MIME type */
   type?: string;
 }
 
-/**
- * Generates Link header value for 103 Early Hints.
- */
+/** Generates Link header value for 103 Early Hints. */
 export function generateEarlyHintsHeader(hints: EarlyHint[]): string {
   return hints
     .map((hint) => {
@@ -34,9 +27,7 @@ export function generateEarlyHintsHeader(hints: EarlyHint[]): string {
     .join(", ");
 }
 
-/**
- * Collects early hints for a route.
- */
+/** Collects early hints for a route. */
 export function collectEarlyHints(options: {
   scriptPath?: string;
   stylesheets?: string[];
@@ -74,10 +65,7 @@ export function collectEarlyHints(options: {
   return hints;
 }
 
-/**
- * Enhanced worker handler with 103 Early Hints support.
- * Note:  Cloudflare Workers support 103 via the `waitUntil` pattern.
- */
+/** Enhanced worker handler with 103 Early Hints support. */
 export async function handleWithEarlyHints(
   request: Request,
   handler: (request: Request) => Promise<Response>,

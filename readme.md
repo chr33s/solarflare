@@ -32,23 +32,23 @@ solarflare [options]
 
 ## Conventions
 
-| Directory      | Purpose                                   |
-| -------------- | ----------------------------------------- |
-| `./src`        | Original (source) human readable code     |
-| `./dist`       | Compiled (distribution) output code       |
+| Directory | Purpose                               |
+| --------- | ------------------------------------- |
+| `./src`   | Original (source) human readable code |
+| `./dist`  | Compiled (distribution) output code   |
 
-| File           | Purpose                                   |
-| -------------- | ----------------------------------------- |
-| `*.client.tsx` | Client component (web component)          |
-| `*.server.tsx` | Server handler (Workers runtime)          |
-| `_layout.tsx`  | Layout wrapper                            |
-| `_*`           | Private (not routed)                      |
-| `$param`       | Dynamic segment → `:param`                |
-| `index.*`      | Directory root                            |
+| File           | Purpose                          |
+| -------------- | -------------------------------- |
+| `*.client.tsx` | Client component (web component) |
+| `*.server.tsx` | Server handler (Workers runtime) |
+| `_layout.tsx`  | Layout wrapper                   |
+| `_*`           | Private (not routed)             |
+| `$param`       | Dynamic segment → `:param`       |
+| `index.*`      | Directory root                   |
 
-| Path           | Purpose                                   |
-| -------------- | ----------------------------------------- |
-| `/_*`          | reserved internal use (e.g. `/_console`)  |
+| Path  | Purpose                                  |
+| ----- | ---------------------------------------- |
+| `/_*` | reserved internal use (e.g. `/_console`) |
 
 ## API
 

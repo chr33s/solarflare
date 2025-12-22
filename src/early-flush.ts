@@ -1,17 +1,10 @@
-/**
- * Early flush streaming - sends static shell HTML before rendering begins.
- * This dramatically improves TTFB by sending bytes immediately.
- */
+/** Early flush streaming - sends static shell HTML before rendering. */
 
-/** Static shell that can be sent before any rendering.  */
+/** Static shell that can be sent before rendering. */
 export interface StreamingShell {
-  /** HTML before the <head> content */
   preHead: string;
-  /** HTML after head, before body content */
   preBody: string;
-  /** Placeholder marker for dynamic head content */
   headMarker: string;
-  /** Placeholder marker for body content */
   bodyMarker: string;
 }
 

@@ -12,7 +12,6 @@ import {
   tagToHtml,
   Head,
   HEAD_MARKER,
-  HeadOutlet,
   serializeHeadState,
   hydrateHeadState,
   type HeadTag,
@@ -466,18 +465,6 @@ describe("Head (SSR marker)", () => {
     const vnode = Head();
     assert.strictEqual(vnode.type, "solarflare-head");
     assert.strictEqual(vnode.props.dangerouslySetInnerHTML.__html, HEAD_MARKER);
-  });
-});
-
-describe("HeadOutlet (deprecated alias)", () => {
-  it("should render head marker", () => {
-    const vnode = HeadOutlet();
-    assert.strictEqual(vnode.type, "solarflare-head");
-    assert.strictEqual(vnode.props.dangerouslySetInnerHTML.__html, HEAD_MARKER);
-  });
-
-  it("should be the same as Head", () => {
-    assert.strictEqual(HeadOutlet, Head);
   });
 });
 

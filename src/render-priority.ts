@@ -1,7 +1,4 @@
-/**
- * Render prioritization for faster FMP.
- * Renders critical content first, defers below-the-fold.
- */
+/** Render prioritization for faster FMP. */
 
 import { type VNode, h, Fragment } from "preact";
 

@@ -1,17 +1,6 @@
-/**
- * Constructable Stylesheets manager for solarflare.
- * Provides efficient CSS management using modern CSSOM APIs.
- *
- * Benefits:
- * - Single parse per stylesheet (shared across components)
- * - Instant updates via insertRule()/deleteRule()
- * - No DOM pollution from <style> elements
- * - Efficient HMR without full page reloads
- *
- * @see https://web.dev/articles/constructable-stylesheets
- */
+/** Constructable Stylesheets manager using modern CSSOM APIs. */
 
-/** Feature detection for Constructable Stylesheets.  */
+/** Feature detection for Constructable Stylesheets. */
 export const supportsConstructableStylesheets = (): boolean => {
   if (typeof window === "undefined") return false;
   try {
@@ -22,7 +11,7 @@ export const supportsConstructableStylesheets = (): boolean => {
   }
 };
 
-/** Stylesheet entry with metadata.  */
+/** Stylesheet entry with metadata. */
 interface StylesheetEntry {
   /** The CSSStyleSheet instance */
   sheet: CSSStyleSheet;
@@ -42,19 +31,14 @@ class StylesheetManager {
   #documentSheets: CSSStyleSheet[] = [];
   #supported = supportsConstructableStylesheets();
 
-  /**
-   * Registers a stylesheet with the manager.
-   * @param id - Unique identifier (typically file path)
-   * @param css - CSS source code
-   * @param options - Registration options
-   */
+  /** Registers a stylesheet with the manager. */
   register(
     id: string,
     css: string,
     options: { isGlobal?: boolean; consumer?: string } = {},
   ): CSSStyleSheet | null {
     if (!this.#supported) {
-      // Fallback:  inject <style> element
+      // Fallback: inject <style> element
       this.#injectStyleElement(id, css);
       return null;
     }
@@ -97,16 +81,12 @@ class StylesheetManager {
     return sheet;
   }
 
-  /**
-   * Gets a registered stylesheet.
-   */
+  /** Gets a registered stylesheet. */
   get(id: string): CSSStyleSheet | null {
     return this.#sheets.get(id)?.sheet ?? null;
   }
 
-  /**
-   * Gets all stylesheets for a route/consumer.
-   */
+  /** Gets all stylesheets for a route/consumer. */
   getForConsumer(consumer: string): CSSStyleSheet[] {
     const sheets: CSSStyleSheet[] = [];
 
@@ -119,10 +99,7 @@ class StylesheetManager {
     return sheets;
   }
 
-  /**
-   * Updates a stylesheet with new CSS (for HMR).
-   * Uses insertRule/deleteRule for granular updates when possible.
-   */
+  /** Updates a stylesheet with new CSS (for HMR). */
   update(id: string, css: string): boolean {
     const entry = this.#sheets.get(id);
     if (!entry) return false;
@@ -144,10 +121,7 @@ class StylesheetManager {
     return true;
   }
 
-  /**
-   * Inserts a single rule into a stylesheet.
-   * More efficient than replaceSync for small additions.
-   */
+  /** Inserts a single rule into a stylesheet. */
   insertRule(id: string, rule: string, index?: number): number {
     const entry = this.#sheets.get(id);
     if (!entry) return -1;
@@ -156,14 +130,12 @@ class StylesheetManager {
       const insertIndex = index ?? entry.sheet.cssRules.length;
       return entry.sheet.insertRule(rule, insertIndex);
     } catch (e) {
-      console.warn(`[stylesheets] Failed to insert rule:  ${rule}`, e);
+      console.warn(`[stylesheets] Failed to insert rule: ${rule}`, e);
       return -1;
     }
   }
 
-  /**
-   * Deletes a rule from a stylesheet.
-   */
+  /** Deletes a rule from a stylesheet. */
   deleteRule(id: string, index: number): boolean {
     const entry = this.#sheets.get(id);
     if (!entry) return false;
@@ -176,10 +148,7 @@ class StylesheetManager {
     }
   }
 
-  /**
-   * Adopts stylesheets to a Shadow Root.
-   * This is the key performance optimization for web components.
-   */
+  /** Adopts stylesheets to a Shadow Root. */
   adoptToShadowRoot(shadowRoot: ShadowRoot, stylesheetIds: string[]): void {
     if (!this.#supported) return;
 
@@ -193,10 +162,7 @@ class StylesheetManager {
     shadowRoot.adoptedStyleSheets = [...globalSheets, ...sheets];
   }
 
-  /**
-   * Removes a consumer from all its stylesheets.
-   * Cleans up unused stylesheets.
-   */
+  /** Removes a consumer from all its stylesheets. */
   removeConsumer(consumer: string): void {
     for (const [id, entry] of this.#sheets.entries()) {
       entry.consumers.delete(consumer);
@@ -208,9 +174,7 @@ class StylesheetManager {
     }
   }
 
-  /**
-   * Clears all stylesheets (for testing/cleanup).
-   */
+  /** Clears all stylesheets. */
   clear(): void {
     this.#sheets.clear();
     if (this.#supported) {

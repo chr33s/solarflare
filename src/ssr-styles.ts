@@ -1,8 +1,4 @@
-/**
- * SSR stylesheet preloading for instant hydration.
- * Embeds CSS in the HTML so Constructable Stylesheets can be
- * initialized synchronously during hydration.
- */
+/** SSR stylesheet preloading for instant hydration. */
 
 /** Generates inline script to preload stylesheets. */
 export function generateStylePreloadScript(
@@ -22,30 +18,26 @@ ${JSON.stringify(data)}
 </script>
 <script>
 (function() {
-  if (! ('adoptedStyleSheets' in Document.prototype)) return;
+  if (!('adoptedStyleSheets' in Document.prototype)) return;
   var data = JSON.parse(document.getElementById('sf-preloaded-styles').textContent);
   window.__sfPreloadedStyles = new Map();
   data.forEach(function(s) {
     var sheet = new CSSStyleSheet();
-    sheet.replaceSync(s. css);
+    sheet.replaceSync(s.css);
     window.__sfPreloadedStyles.set(s.id, sheet);
   });
 })();
 </script>`;
 }
 
-/**
- * Client-side:  retrieves preloaded stylesheets.
- */
+/** Retrieves preloaded stylesheets. */
 export function getPreloadedStylesheet(id: string): CSSStyleSheet | null {
   if (typeof window === "undefined") return null;
   const preloaded = (window as any).__sfPreloadedStyles as Map<string, CSSStyleSheet> | undefined;
   return preloaded?.get(id) ?? null;
 }
 
-/**
- * Hydrates preloaded stylesheets into the manager.
- */
+/** Hydrates preloaded stylesheets into the manager. */
 export function hydratePreloadedStyles(_manager: {
   register: (id: string, css: string, opts?: any) => CSSStyleSheet | null;
 }): void {

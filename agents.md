@@ -6,8 +6,8 @@
 - Run `npm run check && npm run test` before committing
 - Prefer npm over other package managers
 - Ask for confirmation before adding new dependencies
-- Use concise JSDoc syntax for inline documentation
-- Write scripts to disk, never paste to terminal
+- Use concise JSDoc syntax for inline documentation when providing examples or where the interface is exported in package#exports
+- Write scripts to disk, never paste to terminal. Avoid redundant comments that can easily be inferred.
 - Use `node --test` for running tests
 
 ## Partial Test Suite

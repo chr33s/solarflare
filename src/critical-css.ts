@@ -1,11 +1,8 @@
-/**
- * Critical CSS extraction and inlining.
- * Eliminates render-blocking CSS requests for above-the-fold content.
- */
+/** Critical CSS extraction and inlining. */
 
 import { createHash } from "node:crypto";
 
-/** Critical CSS cache entry.  */
+/** Critical CSS cache entry. */
 interface CriticalCssEntry {
   css: string;
   hash: string;
