@@ -9,34 +9,29 @@ import {
 
 describe("hmr-server", () => {
   describe("isHmrRequest", () => {
-    it("should return true for /_hmr WebSocket upgrade request", () => {
+    it("should return true for GET /_hmr request", () => {
       const request = new Request("http://localhost:8080/_hmr", {
-        headers: { Upgrade: "websocket" },
+        method: "GET",
       });
       assert.strictEqual(isHmrRequest(request), true);
     });
 
-    it("should return false for /_hmr without upgrade header", () => {
-      const request = new Request("http://localhost:8080/_hmr");
+    it("should return false for POST /_hmr request", () => {
+      const request = new Request("http://localhost:8080/_hmr", {
+        method: "POST",
+      });
       assert.strictEqual(isHmrRequest(request), false);
     });
 
-    it("should return false for other paths with websocket upgrade", () => {
+    it("should return false for other paths", () => {
       const request = new Request("http://localhost:8080/other", {
-        headers: { Upgrade: "websocket" },
+        method: "GET",
       });
       assert.strictEqual(isHmrRequest(request), false);
     });
 
     it("should return false for regular page requests", () => {
       const request = new Request("http://localhost:8080/");
-      assert.strictEqual(isHmrRequest(request), false);
-    });
-
-    it("should return false for /_hmr with wrong upgrade type", () => {
-      const request = new Request("http://localhost:8080/_hmr", {
-        headers: { Upgrade: "h2c" },
-      });
       assert.strictEqual(isHmrRequest(request), false);
     });
   });
@@ -49,20 +44,27 @@ describe("hmr-server", () => {
   });
 
   describe("handleHmrRequest", () => {
-    // Note: handleHmrRequest uses Cloudflare Workers WebSocketPair and 101 status
-    // which are not available in Node.js. These tests verify the function structure
-    // but actual WebSocket functionality is tested in e2e tests.
-
     it("should be a function", () => {
       assert.strictEqual(typeof handleHmrRequest, "function");
     });
 
-    it("should throw in Node.js environment (requires Cloudflare Workers)", () => {
-      // In Node.js, Response doesn't support status 101 and WebSocketPair doesn't exist
-      // This verifies the function expects Cloudflare Workers runtime
-      assert.throws(() => {
-        handleHmrRequest();
-      });
+    it("should return SSE response with correct headers", async () => {
+      const response = handleHmrRequest();
+
+      assert.strictEqual(response.headers.get("Content-Type"), "text/event-stream");
+      assert.strictEqual(response.headers.get("Cache-Control"), "no-cache");
+      assert.strictEqual(response.headers.get("Connection"), "keep-alive");
+
+      // Cancel stream to stop the heartbeat interval
+      await response.body?.cancel();
+    });
+
+    it("should return a readable stream body", async () => {
+      const response = handleHmrRequest();
+      assert.ok(response.body instanceof ReadableStream);
+
+      // Cancel stream to stop the heartbeat interval
+      await response.body?.cancel();
     });
   });
 

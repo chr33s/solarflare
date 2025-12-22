@@ -1,63 +1,69 @@
-/** HMR WebSocket server for hot module replacement. */
+/** HMR SSE server for hot module replacement. */
 
 /** HMR update event types */
 export type HmrEventType = "update" | "full-reload" | "css-update" | "connected";
 
+/** SSE controller for a connected client */
+interface SseClient {
+  controller: ReadableStreamDefaultController<Uint8Array>;
+  encoder: TextEncoder;
+}
+
 // Track connected HMR clients for broadcasting updates
-const hmrClients = new Set<WebSocket>();
+const hmrClients = new Set<SseClient>();
 
 /**
- * Checks if request is an HMR WebSocket upgrade request.
+ * Checks if request is an HMR SSE request.
  * @param request - Incoming request
  * @returns Whether this is an HMR request
  */
 export function isHmrRequest(request: Request): boolean {
   const url = new URL(request.url);
-  return url.pathname === "/_hmr" && request.headers.get("Upgrade") === "websocket";
+  return url.pathname === "/_hmr" && request.method === "GET";
 }
 
 /**
- * Handles HMR WebSocket upgrade request.
- * Uses Cloudflare Workers WebSocketPair for WebSocket upgrade.
- * @returns WebSocket upgrade response
+ * Handles HMR SSE request.
+ * Returns a streaming response for Server-Sent Events.
+ * @returns SSE streaming response
  */
 export function handleHmrRequest(): Response {
-  // WebSocketPair is a Cloudflare Workers global
-  const pair = new (
-    globalThis as unknown as { WebSocketPair: new () => { 0: WebSocket; 1: WebSocket } }
-  ).WebSocketPair();
-  const client = pair[0];
-  const server = pair[1] as WebSocket & { accept(): void };
+  const encoder = new TextEncoder();
+  let client: SseClient;
+  let heartbeatInterval: ReturnType<typeof setInterval>;
 
-  server.accept();
-  hmrClients.add(server);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      client = { controller, encoder };
+      hmrClients.add(client);
 
-  // Send connected event
-  server.send(JSON.stringify({ type: "connected" }));
+      // Send connected event
+      const data = JSON.stringify({ type: "connected" });
+      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 
-  server.addEventListener("message", (event: MessageEvent) => {
-    try {
-      const message = JSON.parse(event.data as string);
-      if (message.type === "ping") {
-        server.send(JSON.stringify({ type: "pong" }));
-      }
-    } catch {
-      // Ignore malformed messages
-    }
+      // Send heartbeat every 30s to keep connection alive, cloudflare returns Error 524 after 100s on no activity
+      heartbeatInterval = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
+        } catch {
+          clearInterval(heartbeatInterval);
+          hmrClients.delete(client);
+        }
+      }, 3_000);
+    },
+    cancel() {
+      clearInterval(heartbeatInterval);
+      hmrClients.delete(client);
+    },
   });
 
-  server.addEventListener("close", () => {
-    hmrClients.delete(server);
-  });
-
-  server.addEventListener("error", () => {
-    hmrClients.delete(server);
-  });
-
-  return new Response(null, {
-    status: 101,
-    // @ts-expect-error - Cloudflare Workers Response extension
-    webSocket: client,
+  return new Response(stream, {
+    headers: {
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Content-Encoding": "identity",
+      "Content-Type": "text/event-stream",
+    },
   });
 }
 
@@ -70,7 +76,7 @@ export function broadcastHmrUpdate(type: HmrEventType, path?: string): void {
   const message = JSON.stringify({ type, path, timestamp: Date.now() });
   for (const client of hmrClients) {
     try {
-      client.send(message);
+      client.controller.enqueue(client.encoder.encode(`data: ${message}\n\n`));
     } catch {
       hmrClients.delete(client);
     }

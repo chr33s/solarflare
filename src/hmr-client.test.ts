@@ -6,9 +6,7 @@ describe("hmr-client", () => {
     interface HmrApi {
       on<T = unknown>(event: string, cb: (data: T) => void): void;
       off<T = unknown>(event: string, cb: (data: T) => void): void;
-      accept(dep?: string | ((mod: unknown) => void), cb?: (mod: unknown) => void): void;
       dispose(cb: () => void): void;
-      send(event: string, data?: unknown): void;
       data: Record<string, unknown>;
     }
 
@@ -16,17 +14,13 @@ describe("hmr-client", () => {
       const api: HmrApi = {
         on() {},
         off() {},
-        accept() {},
         dispose() {},
-        send() {},
         data: {},
       };
 
       assert.strictEqual(typeof api.on, "function");
       assert.strictEqual(typeof api.off, "function");
-      assert.strictEqual(typeof api.accept, "function");
       assert.strictEqual(typeof api.dispose, "function");
-      assert.strictEqual(typeof api.send, "function");
       assert.strictEqual(typeof api.data, "object");
     });
   });
@@ -36,9 +30,7 @@ describe("hmr-client", () => {
     const noopHmr = {
       on(_event: string, _cb: () => void) {},
       off(_event: string, _cb: () => void) {},
-      accept() {},
       dispose(_cb: () => void) {},
-      send(_event: string, _data?: unknown) {},
       data: {} as Record<string, unknown>,
     };
 
@@ -46,9 +38,7 @@ describe("hmr-client", () => {
       // Should not throw when called
       noopHmr.on("test", () => {});
       noopHmr.off("test", () => {});
-      noopHmr.accept();
       noopHmr.dispose(() => {});
-      noopHmr.send("test");
     });
 
     it("should have an empty data object", () => {
@@ -95,56 +85,6 @@ describe("hmr-client", () => {
       on("update", () => {});
 
       assert.strictEqual(listeners.get("update")?.size, 3);
-    });
-
-    it("should queue messages when not connected", () => {
-      const messageQueue: Array<{ type: string; data?: unknown }> = [];
-      let connected = false;
-
-      const send = (event: string, data?: unknown) => {
-        const msg = { type: event, data };
-        if (connected) {
-          // Would send via WebSocket
-        } else {
-          messageQueue.push(msg);
-        }
-      };
-
-      send("test", { value: 1 });
-      send("test2", { value: 2 });
-
-      assert.strictEqual(messageQueue.length, 2);
-      assert.deepStrictEqual(messageQueue[0], { type: "test", data: { value: 1 } });
-    });
-
-    it("should flush message queue on connection", () => {
-      const messageQueue: Array<{ type: string; data?: unknown }> = [];
-      const sentMessages: Array<{ type: string; data?: unknown }> = [];
-      let connected = false;
-
-      const send = (event: string, data?: unknown) => {
-        const msg = { type: event, data };
-        if (connected) {
-          sentMessages.push(msg);
-        } else {
-          messageQueue.push(msg);
-        }
-      };
-
-      // Queue messages while disconnected
-      send("msg1", {});
-      send("msg2", {});
-      assert.strictEqual(messageQueue.length, 2);
-
-      // Simulate connection
-      connected = true;
-      for (const msg of messageQueue) {
-        sentMessages.push(msg);
-      }
-      messageQueue.length = 0;
-
-      assert.strictEqual(messageQueue.length, 0);
-      assert.strictEqual(sentMessages.length, 2);
     });
 
     it("should collect dispose callbacks", () => {
@@ -286,25 +226,19 @@ describe("hmr-client", () => {
     });
   });
 
-  describe("WebSocket URL generation", () => {
-    it("should use wss: for https: protocol", () => {
-      const locationProtocol = "https:";
-      const host = "example.com";
+  describe("SSE URL generation", () => {
+    it("should use origin for SSE endpoint", () => {
+      const origin = "https://example.com";
+      const url = `${origin}/_hmr`;
 
-      const wsProtocol = locationProtocol === "https:" ? "wss:" : "ws:";
-      const url = `${wsProtocol}//${host}/_sf/hmr`;
-
-      assert.strictEqual(url, "wss://example.com/_sf/hmr");
+      assert.strictEqual(url, "https://example.com/_hmr");
     });
 
-    it("should use ws: for http: protocol", () => {
-      const locationProtocol: string = "http:";
-      const host = "localhost:8080";
+    it("should work with localhost", () => {
+      const origin = "http://localhost:8080";
+      const url = `${origin}/_hmr`;
 
-      const wsProtocol = locationProtocol === "https:" ? "wss:" : "ws:";
-      const url = `${wsProtocol}//${host}/_sf/hmr`;
-
-      assert.strictEqual(url, "ws://localhost:8080/_sf/hmr");
+      assert.strictEqual(url, "http://localhost:8080/_hmr");
     });
   });
 

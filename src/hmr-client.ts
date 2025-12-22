@@ -5,25 +5,21 @@
  * In production builds, the dev implementation tree-shakes to nothing.
  *
  * Build-time replacement:
- * - Development: globalThis.__SF_DEV__ → true (full HMR with WebSocket)
+ * - Development: globalThis.__SF_DEV__ → true (full HMR with SSE/EventSource)
  * - Production: globalThis.__SF_DEV__ → false (no-op, tree-shakes away)
  */
 
 /** Callback type for HMR events. */
 export type HmrCallback<T = unknown> = (data: T) => void;
 
-/** HMR API interface matching Vite's import.meta.hot. */
+/** HMR API interface for SSE-based hot module replacement. */
 export interface HmrApi {
   /** Listen to an HMR event. */
   on<T = unknown>(event: string, cb: HmrCallback<T>): void;
   /** Remove an HMR event listener. */
   off<T = unknown>(event: string, cb: HmrCallback<T>): void;
-  /** Accept module updates (compatibility stub). */
-  accept(dep?: string | ((mod: unknown) => void), cb?: (mod: unknown) => void): void;
   /** Register cleanup callback before module disposal. */
   dispose(cb: () => void): void;
-  /** Send an event to the HMR server. */
-  send(event: string, data?: unknown): void;
   /** Persistent data across HMR updates. */
   data: Record<string, unknown>;
 }
@@ -32,41 +28,32 @@ export interface HmrApi {
 const noopHmr: HmrApi = {
   on() {},
   off() {},
-  accept() {},
   dispose() {},
-  send() {},
   data: {},
 };
 
-/** Creates the development HMR client with WebSocket connection. */
+/** Creates the development HMR client with SSE connection. */
 function createDevHmr(): HmrApi {
   const listeners = new Map<string, Set<HmrCallback>>();
   const disposeCallbacks: Array<() => void> = [];
   const data: Record<string, unknown> = {};
-  let ws: WebSocket | null = null;
-  let messageQueue: Array<{ type: string; data?: unknown }> = [];
 
-  // Connect to dev server WebSocket
-  if (typeof WebSocket !== "undefined" && typeof location !== "undefined") {
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    ws = new WebSocket(`${protocol}//${location.host}/_hmr`);
+  // Connect to dev server via SSE
+  if (typeof EventSource !== "undefined" && typeof location !== "undefined") {
+    const es = new EventSource(`${location.origin}/_hmr`);
 
-    ws.onopen = () => {
+    es.onopen = () => {
       console.log("[HMR] Connected to dev server");
-      for (const msg of messageQueue) {
-        ws?.send(JSON.stringify(msg));
-      }
-      messageQueue = [];
     };
 
-    ws.onmessage = (e) => {
+    es.onmessage = (e) => {
       try {
-        const { type, data } = JSON.parse(e.data);
+        const { type, ...payload } = JSON.parse(e.data);
         const cbs = listeners.get(type);
         if (cbs) {
           for (const cb of cbs) {
             try {
-              cb(data);
+              cb(payload);
             } catch (err) {
               console.error(`[HMR] Error in handler for ${type}:`, err);
             }
@@ -77,15 +64,8 @@ function createDevHmr(): HmrApi {
       }
     };
 
-    ws.onclose = () => {
-      console.log("[HMR] Disconnected from dev server");
-      setTimeout(() => {
-        if (typeof location !== "undefined") location.reload();
-      }, 1000);
-    };
-
-    ws.onerror = (err) => {
-      console.error("[HMR] WebSocket error:", err);
+    es.onerror = () => {
+      console.log("[HMR] Connection lost, reconnecting...");
     };
   }
 
@@ -97,17 +77,8 @@ function createDevHmr(): HmrApi {
     off<T = unknown>(event: string, cb: HmrCallback<T>) {
       listeners.get(event)?.delete(cb as HmrCallback);
     },
-    accept() {},
     dispose(cb) {
       disposeCallbacks.push(cb);
-    },
-    send(event: string, payload?: unknown) {
-      const msg = { type: event, data: payload };
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(msg));
-      } else {
-        messageQueue.push(msg);
-      }
     },
     data,
   };
