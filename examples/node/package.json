@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "build": "solarflare",
-    "start": "node ./dist/server/index.js"
+    "start": "srvx --port=8080 --static=./dist/client ./dist/server/index.js"
   },
   "dependencies": {
-    "@chr33s/solarflare": "file:../../"
+    "@chr33s/solarflare": "file:../../",
+    "srvx": "^0.9.8"
   },
   "engines": {
     "node": ">=24.12.0"
