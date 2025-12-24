@@ -1,5 +1,3 @@
-/** Worker configuration extracted from meta tags. */
-
 import { type RouteCacheConfig } from "./route-cache.ts";
 
 /** Configuration extracted from meta tags. */
@@ -24,27 +22,15 @@ const DEFAULTS: WorkerMetaConfig = {
   criticalCss: false,
 };
 
-/**
- * Parses worker configuration from HTML meta tags.
- *
- * Supported meta tags:
- * - `<html lang="...">` - HTML language
- * - `<meta name="sf:preconnect" content="origin1,origin2">` - Preconnect origins
- * - `<meta name="sf:cache-max-age" content="300">` - Cache max age in seconds
- * - `<meta name="sf:cache-swr" content="3600">` - Stale-while-revalidate in seconds
- * - `<meta name="sf:early-flush" content="true">` - Enable early flush
- * - `<meta name="sf:critical-css" content="true">` - Enable critical CSS
- */
+/** Parses worker configuration from HTML meta tags. */
 export function parseMetaConfig(html: string): WorkerMetaConfig {
   const config: WorkerMetaConfig = { ...DEFAULTS };
 
-  // Extract lang from <html lang="...">
   const langMatch = html.match(/<html[^>]*\slang=["']([^"']+)["']/i);
   if (langMatch) {
     config.lang = langMatch[1];
   }
 
-  // Helper to match meta tags (handles both attribute orderings)
   const matchMeta = (name: string): string | null => {
     const pattern1 = new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`, "i");
     const pattern2 = new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${name}["']`, "i");
@@ -52,7 +38,6 @@ export function parseMetaConfig(html: string): WorkerMetaConfig {
     return match ? match[1] : null;
   };
 
-  // Extract preconnect origins
   const preconnect = matchMeta("sf:preconnect");
   if (preconnect) {
     config.preconnectOrigins = preconnect
@@ -61,7 +46,6 @@ export function parseMetaConfig(html: string): WorkerMetaConfig {
       .filter(Boolean);
   }
 
-  // Extract cache max-age
   const maxAge = matchMeta("sf:cache-max-age");
   const swr = matchMeta("sf:cache-swr");
 
@@ -72,13 +56,11 @@ export function parseMetaConfig(html: string): WorkerMetaConfig {
     };
   }
 
-  // Extract early flush setting
   const earlyFlush = matchMeta("sf:early-flush");
   if (earlyFlush) {
     config.earlyFlush = earlyFlush === "true";
   }
 
-  // Extract critical CSS setting
   const criticalCss = matchMeta("sf:critical-css");
   if (criticalCss) {
     config.criticalCss = criticalCss === "true";
@@ -120,7 +102,10 @@ export function workerConfigMeta(config: {
   }
 
   if (config.cacheMaxAge !== undefined) {
-    meta.push({ name: "sf:cache-max-age", content: String(config.cacheMaxAge) });
+    meta.push({
+      name: "sf:cache-max-age",
+      content: String(config.cacheMaxAge),
+    });
     if (config.cacheSwr !== undefined) {
       meta.push({ name: "sf:cache-swr", content: String(config.cacheSwr) });
     }

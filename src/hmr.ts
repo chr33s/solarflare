@@ -1,10 +1,5 @@
-/** Hot Module Replacement utilities for Preact components. */
 import { type FunctionComponent, type VNode, h, Component as PreactComponent } from "preact";
 import { signal, type Signal } from "@preact/signals";
-
-// ============================================================================
-// Hook State Preservation
-// ============================================================================
 
 /** Global storage for component hook state across HMR updates. */
 const hookStateMap = new Map<string, unknown[]>();
@@ -12,12 +7,12 @@ const hookStateMap = new Map<string, unknown[]>();
 /** Global storage for component refs across HMR updates. */
 const refStateMap = new Map<string, Map<number, unknown>>();
 
-/** Saves hook state for a component before HMR update. */
+/** Saves hook state for a component. */
 export function saveHookState(componentId: string, hookState: unknown[]): void {
   hookStateMap.set(componentId, [...hookState]);
 }
 
-/** Restores hook state for a component after HMR update. */
+/** Restores hook state for a component. */
 export function restoreHookState(componentId: string): unknown[] | undefined {
   return hookStateMap.get(componentId);
 }
@@ -38,14 +33,10 @@ export function getRefStorage(componentId: string): Map<number, unknown> {
   return storage;
 }
 
-// ============================================================================
-// Scroll Position Preservation
-// ============================================================================
-
 /** Stored scroll positions keyed by component tag. */
 const scrollPositions = new Map<string, { x: number; y: number }>();
 
-/** Saves current scroll position before HMR update. */
+/** Saves current scroll position. */
 export function saveScrollPosition(tag?: string): void {
   const key = tag ?? "__global__";
   scrollPositions.set(key, {
@@ -54,12 +45,11 @@ export function saveScrollPosition(tag?: string): void {
   });
 }
 
-/** Restores scroll position after HMR update. */
+/** Restores scroll position. */
 export function restoreScrollPosition(tag?: string): void {
   const key = tag ?? "__global__";
   const pos = scrollPositions.get(key);
   if (pos) {
-    // Use requestAnimationFrame to ensure DOM is updated
     requestAnimationFrame(() => {
       globalThis.scrollTo(pos.x, pos.y);
     });
@@ -92,10 +82,6 @@ export function getHMRStateSize(): {
   };
 }
 
-// ============================================================================
-// Error Boundary for HMR
-// ============================================================================
-
 /** Props for HMR error boundary. */
 interface HMRErrorBoundaryProps {
   /** Child components to render. */
@@ -125,11 +111,9 @@ export class HMRErrorBoundary extends PreactComponent<
   private unsubscribe?: () => void;
 
   componentDidMount(): void {
-    // Subscribe to HMR version changes to auto-recover
     this.lastHmrVersion = this.props.hmrVersion.value;
     this.unsubscribe = this.props.hmrVersion.subscribe((version) => {
       if (version !== this.lastHmrVersion && this.state.error) {
-        // New HMR update, try to recover
         console.log(`[HMR] Attempting recovery for <${this.props.tag}>`);
         this.setState({ error: null, errorInfo: null });
       }
@@ -167,7 +151,6 @@ export class HMRErrorBoundary extends PreactComponent<
         return fallback(error, this.retry);
       }
 
-      // Default error UI
       return h(
         "div",
         {
@@ -249,27 +232,20 @@ export class HMRErrorBoundary extends PreactComponent<
   }
 }
 
-// ============================================================================
-// CSS Hot Module Replacement
-// ============================================================================
-
 /** Tracks loaded CSS files for HMR. */
 const loadedStylesheets = new Map<string, HTMLLinkElement>();
 
 /** Reloads a CSS file by updating its href with a cache-busting query. */
 export function reloadStylesheet(href: string): void {
-  // Find existing link element
   const existing =
     loadedStylesheets.get(href) ?? document.querySelector<HTMLLinkElement>(`link[href^="${href}"]`);
 
   if (existing) {
-    // Update href with cache-busting query param
     const url = new URL(existing.href, window.location.origin);
     url.searchParams.set("t", Date.now().toString());
     existing.href = url.toString();
     console.log(`[HMR] Reloaded stylesheet: ${href}`);
   } else {
-    // Stylesheet not found, inject it
     const link = document.createElement("link");
     link.rel = "stylesheet";
     link.href = `${href}?t=${Date.now()}`;
@@ -293,22 +269,16 @@ export function removeStylesheet(href: string): void {
 
 /** Accepts CSS HMR updates. */
 export function acceptCssHMR(cssFiles: string[]): () => void {
-  // Initial load
   for (const file of cssFiles) {
     reloadStylesheet(file);
   }
 
-  // Return cleanup function
   return () => {
     for (const file of cssFiles) {
       removeStylesheet(file);
     }
   };
 }
-
-// ============================================================================
-// HMR Wrapper Component Factory
-// ============================================================================
 
 /** Options for creating an HMR wrapper. */
 export interface HMRWrapperOptions {
@@ -331,10 +301,8 @@ export function createHMRWrapper<P extends Record<string, unknown>>(
   const { tag, preserveScroll = true, errorFallback } = options;
 
   return function HMRWrapper(props: P) {
-    // Subscribe to HMR version changes (force re-render)
     void hmrVersion.value;
 
-    // Save scroll position before potential re-render
     if (preserveScroll && typeof window !== "undefined") {
       saveScrollPosition(tag);
     }
@@ -353,10 +321,6 @@ export function createHMRWrapper<P extends Record<string, unknown>>(
     );
   };
 }
-
-// ============================================================================
-// HMR Event Helpers
-// ============================================================================
 
 /** Dispatches an HMR event for external listeners. */
 export function dispatchHMREvent(
@@ -387,9 +351,5 @@ export function onHMREvent(
   document.addEventListener(`sf:hmr:${type}`, listener);
   return () => document.removeEventListener(`sf:hmr:${type}`, listener);
 }
-
-// ============================================================================
-// Exports
-// ============================================================================
 
 export { signal };

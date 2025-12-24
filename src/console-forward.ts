@@ -1,5 +1,3 @@
-/** Forwards browser console logs to the wrangler dev server. */
-
 /** Log levels matching wrangler's --log-level options. */
 export type LogLevel = "debug" | "info" | "log" | "warn" | "error" | "none";
 
@@ -37,7 +35,6 @@ interface ClientLogRequest {
 /** Console forwarding configuration. */
 export interface ConsoleForwardOptions {
   enabled?: boolean;
-  /** API endpoint path. @default '/_console' */
   endpoint?: string;
   levels?: ("log" | "warn" | "error" | "info" | "debug")[];
   includeStacks?: boolean;
@@ -83,7 +80,6 @@ function formatLogMessage(log: LogEntry): string {
   const prefix = `${color}[browser:${log.level}]${colors.reset}`;
   let message = `${prefix} ${log.message}`;
 
-  // Add stack traces if available
   if (log.stacks && log.stacks.length > 0) {
     message +=
       "\n" +
@@ -97,7 +93,6 @@ function formatLogMessage(log: LogEntry): string {
         .join("\n");
   }
 
-  // Add extra data if available
   if (log.extra && log.extra.length > 0) {
     const extraStr = JSON.stringify(log.extra, null, 2);
     message +=
@@ -148,111 +143,115 @@ export function isConsoleRequest(request: Request, options: ConsoleForwardOption
 
 /** Generates client-side script that patches console methods. */
 export function generateClientScript(options: ConsoleForwardOptions = {}): string {
-  const { endpoint, levels, includeStacks } = { ...DEFAULT_OPTIONS, ...options };
-
-  return /* js */ `
-(function() {
-  const originalMethods = {
-    log: console.log.bind(console),
-    warn: console.warn.bind(console),
-    error: console.error.bind(console),
-    info: console.info.bind(console),
-    debug: console.debug.bind(console),
+  const { endpoint, levels, includeStacks } = {
+    ...DEFAULT_OPTIONS,
+    ...options,
   };
 
-  const logBuffer = [];
-  let flushTimeout = null;
-  const FLUSH_DELAY = 100;
-  const MAX_BUFFER_SIZE = 50;
+  return /* ts */ `
+    (function() {
+      const originalMethods = {
+        log: console.log.bind(console),
+        warn: console.warn.bind(console),
+        error: console.error.bind(console),
+        info: console.info.bind(console),
+        debug: console.debug.bind(console),
+      };
 
-  function createLogEntry(level, args) {
-    const stacks = [];
-    const extra = [];
+      const logBuffer = [];
+      let flushTimeout = null;
+      const FLUSH_DELAY = 100;
+      const MAX_BUFFER_SIZE = 50;
 
-    const message = Array.from(args).map((arg) => {
-      if (arg === undefined) return "undefined";
-      if (arg === null) return "null";
-      if (typeof arg === "string") return arg;
-      if (typeof arg === "number" || typeof arg === "boolean") return String(arg);
+      function createLogEntry(level, args) {
+        const stacks = [];
+        const extra = [];
 
-      if (arg instanceof Error || (arg && typeof arg.stack === "string")) {
-        let stringifiedError = arg.toString();
-        if (${includeStacks} && arg.stack) {
-          let stack = arg.stack.toString();
-          if (stack.startsWith(stringifiedError)) {
-            stack = stack.slice(stringifiedError.length).trimStart();
+        const message = Array.from(args).map((arg) => {
+          if (arg === undefined) return "undefined";
+          if (arg === null) return "null";
+          if (typeof arg === "string") return arg;
+          if (typeof arg === "number" || typeof arg === "boolean") return String(arg);
+
+          if (arg instanceof Error || (arg && typeof arg.stack === "string")) {
+            let stringifiedError = arg.toString();
+            if (${includeStacks} && arg.stack) {
+              let stack = arg.stack.toString();
+              if (stack.startsWith(stringifiedError)) {
+                stack = stack.slice(stringifiedError.length).trimStart();
+              }
+              if (stack) {
+                stacks.push(stack);
+              }
+            }
+            return stringifiedError;
           }
-          if (stack) {
-            stacks.push(stack);
-          }
-        }
-        return stringifiedError;
-      }
 
-      if (typeof arg === "object") {
-        try {
-          const serialized = JSON.parse(JSON.stringify(arg));
-          extra.push(serialized);
-          return "[object]";
-        } catch {
+          if (typeof arg === "object") {
+            try {
+              const serialized = JSON.parse(JSON.stringify(arg));
+              extra.push(serialized);
+              return "[object]";
+            } catch {
+              return String(arg);
+            }
+          }
           return String(arg);
+        }).join(" ");
+
+        return {
+          level,
+          message,
+          timestamp: new Date().toISOString(),
+          url: window.location.href,
+          stacks,
+          extra: extra.length > 0 ? extra : undefined,
+        };
+      }
+
+      async function sendLogs(logs) {
+        const payload = JSON.stringify({ logs });
+        const blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon("${endpoint}", blob);
+      }
+
+      function flushLogs() {
+        if (logBuffer.length === 0) return;
+        const logsToSend = [...logBuffer];
+        logBuffer.length = 0;
+        sendLogs(logsToSend);
+        if (flushTimeout) {
+          clearTimeout(flushTimeout);
+          flushTimeout = null;
         }
       }
-      return String(arg);
-    }).join(" ");
 
-    return {
-      level,
-      message,
-      timestamp: new Date().toISOString(),
-      url: window.location.href,
-      stacks,
-      extra: extra.length > 0 ? extra : undefined,
-    };
-  }
+      function addToBuffer(entry) {
+        logBuffer.push(entry);
+        if (logBuffer.length >= MAX_BUFFER_SIZE) {
+          flushLogs();
+          return;
+        }
+        if (!flushTimeout) {
+          flushTimeout = setTimeout(flushLogs, FLUSH_DELAY);
+        }
+      }
 
-  async function sendLogs(logs) {
-    const payload = JSON.stringify({ logs });
-    const blob = new Blob([payload], { type: "application/json" });
-    navigator.sendBeacon("${endpoint}", blob);
-  }
+      // Patch console methods
+      ${levels
+        .map(
+          (level) => /* ts */ `
+            console.${level} = function(...args) {
+              originalMethods.${level}(...args);
+              const entry = createLogEntry("${level}", args);
+              addToBuffer(entry);
+            };
+          `,
+        )
+        .join("\n")}
 
-  function flushLogs() {
-    if (logBuffer.length === 0) return;
-    const logsToSend = [...logBuffer];
-    logBuffer.length = 0;
-    sendLogs(logsToSend);
-    if (flushTimeout) {
-      clearTimeout(flushTimeout);
-      flushTimeout = null;
-    }
-  }
-
-  function addToBuffer(entry) {
-    logBuffer.push(entry);
-    if (logBuffer.length >= MAX_BUFFER_SIZE) {
-      flushLogs();
-      return;
-    }
-    if (!flushTimeout) {
-      flushTimeout = setTimeout(flushLogs, FLUSH_DELAY);
-    }
-  }
-
-  // Patch console methods
-  ${levels
-    .map(
-      (level) => `
-  console.${level} = function(...args) {
-    originalMethods.${level}(...args);
-    const entry = createLogEntry("${level}", args);
-    addToBuffer(entry);
-  };`,
-    )
-    .join("\n")}
-
-  window.addEventListener("beforeunload", flushLogs);
-  setInterval(flushLogs, 10000);
-})();
-`;
+      window.addEventListener("beforeunload", flushLogs);
+      setInterval(flushLogs, 10000);
+    })();
+  `;
 }

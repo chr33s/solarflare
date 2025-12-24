@@ -1,10 +1,5 @@
-/** Document head management for SSR and client-side updates. */
 import { type VNode, h, type ComponentChildren, options } from "preact";
 import { signal, type Signal } from "@preact/signals";
-
-// ============================================================================
-// Types
-// ============================================================================
 
 /** Supported head tag names. */
 export type HeadTagName = "title" | "meta" | "link" | "script" | "base" | "style" | "noscript";
@@ -87,10 +82,6 @@ export interface HeadEntryOptions {
   tagPosition?: TagPosition;
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
-
 /** Tags that can only appear once. */
 const UNIQUE_TAGS = new Set(["base", "title", "titleTemplate", "htmlAttrs", "bodyAttrs"]);
 
@@ -131,10 +122,6 @@ const PRIORITY_ALIASES: Record<string, number> = {
   high: -10,
   low: 50,
 };
-
-// ============================================================================
-// VNode Hoisting (Auto-hoist head tags)
-// ============================================================================
 
 /** Extracts text content from VNode children. */
 function getTextContent(children: ComponentChildren): string {
@@ -188,7 +175,9 @@ export function installHeadHoisting(): void {
         // Replace the vnode with null to prevent it from rendering in place
         // All head tags will be rendered (deduplicated) at the <Head /> marker
         vnode.type = NullComponent;
-        (vnode as VNode<{ children?: ComponentChildren }>).props = { children: null };
+        (vnode as VNode<{ children?: ComponentChildren }>).props = {
+          children: null,
+        };
       }
     }
   };
@@ -270,10 +259,6 @@ export function resetHeadElementTracking(): void {
   // No-op: hoisting is now stateless (all head tags go through context)
   // Kept for API compatibility
 }
-
-// ============================================================================
-// Head Context (Server-side collection)
-// ============================================================================
 
 /** Global head context for SSR. */
 let headContext: HeadContext | null = null;
@@ -434,10 +419,6 @@ export function resetHeadContext(): void {
   resetEntryIdCounter();
 }
 
-// ============================================================================
-// Deduplication
-// ============================================================================
-
 /** Generates dedupe key for a tag. */
 export function dedupeKey(tag: HeadTag): string | undefined {
   const { props, tag: name } = tag;
@@ -502,10 +483,6 @@ function hashString(str: string): string {
   return hash.toString(36);
 }
 
-// ============================================================================
-// Tag Weight/Sorting
-// ============================================================================
-
 /** Calculates tag weight for sorting (lower = earlier in head). */
 export function tagWeight(tag: HeadTag): number {
   // Priority overrides
@@ -537,10 +514,6 @@ export function tagWeight(tag: HeadTag): number {
 
   return weight;
 }
-
-// ============================================================================
-// Normalization
-// ============================================================================
 
 /** Normalizes HeadInput to HeadTag array. */
 export function normalizeInputToTags(input: HeadInput, options?: HeadEntryOptions): HeadTag[] {
@@ -622,10 +595,6 @@ export function normalizeInputToTags(input: HeadInput, options?: HeadEntryOption
   return tags;
 }
 
-// ============================================================================
-// HTML Rendering
-// ============================================================================
-
 /** Escapes HTML entities in attribute values. */
 function escapeAttr(str: string): string {
   return str
@@ -662,10 +631,6 @@ export function tagToHtml(tag: HeadTag): string {
   return `<${tag.tag}${attrStr}>${content}</${tag.tag}>`;
 }
 
-// ============================================================================
-// useHead Composable
-// ============================================================================
-
 /** Registers head tags (works on both server and client). */
 export function useHead(input: HeadInput, options?: HeadEntryOptions): ActiveHeadEntry {
   const ctx = getHeadContext();
@@ -678,10 +643,6 @@ export function useHead(input: HeadInput, options?: HeadEntryOptions): ActiveHea
 
   return entry;
 }
-
-// ============================================================================
-// Client-Side DOM Updates
-// ============================================================================
 
 /** Managed head tags signal for client-side reactivity. */
 const managedTags: Signal<Set<Element>> = signal(new Set());
@@ -833,10 +794,6 @@ function updateElement(el: Element, tag: HeadTag): void {
   }
 }
 
-// ============================================================================
-// SSR Marker for Head Injection
-// ============================================================================
-
 /** Marker for head tag injection during streaming. */
 export const HEAD_MARKER = "<!--SOLARFLARE_HEAD-->";
 
@@ -850,15 +807,10 @@ export const HEAD_MARKER = "<!--SOLARFLARE_HEAD-->";
  * </head>
  */
 export function Head(): VNode<any> {
-  return h("solarflare-head", { dangerouslySetInnerHTML: { __html: HEAD_MARKER } });
+  return h("solarflare-head", {
+    dangerouslySetInnerHTML: { __html: HEAD_MARKER },
+  });
 }
-
-/** @deprecated Use Head instead */
-export const HeadOutlet = Head;
-
-// ============================================================================
-// Serialization for Hydration
-// ============================================================================
 
 /** Serializes head state for client hydration. */
 export function serializeHeadState(): string {

@@ -1,19 +1,14 @@
-/** Web component registration, hydration, and signal-based state. */
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./store.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 
-// Re-export Deffered
 export { Deferred } from "./render-priority.ts";
-
-// Re-export head utilities for client-side head tag management
 export { installHeadHoisting, createHeadContext, setHeadContext };
 
 /** Initializes client-side store from SSR hydration data. */
 export async function initClient(): Promise<void> {
-  // Set up head context and hoisting for client-side rendering
   const headCtx = createHeadContext();
   setHeadContext(headCtx);
   installHeadHoisting();
@@ -44,7 +39,6 @@ export interface TagValidation {
 export function parseTagMeta(path: string): TagMeta {
   const parsed = parsePath(path);
 
-  // Map ModuleKind to TagMeta type
   const type: TagMeta["type"] =
     parsed.kind === "client" || parsed.kind === "server" ? parsed.kind : "unknown";
 
@@ -63,17 +57,14 @@ export function validateTag(meta: TagMeta): TagValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  // Custom element names must contain a hyphen
   if (!meta.tag.includes("-")) {
     errors.push(`Tag "${meta.tag}" must contain a hyphen for custom elements`);
   }
 
-  // Must start with a lowercase letter
   if (!/^[a-z]/.test(meta.tag)) {
     errors.push(`Tag "${meta.tag}" must start with a lowercase letter`);
   }
 
-  // Must not start with reserved prefixes
   const reservedPrefixes = ["xml", "xlink", "xmlns"];
   for (const prefix of reservedPrefixes) {
     if (meta.tag.toLowerCase().startsWith(prefix)) {
@@ -81,28 +72,24 @@ export function validateTag(meta: TagMeta): TagValidation {
     }
   }
 
-  // Must only contain valid characters
   if (!/^[a-z][a-z0-9-]*$/.test(meta.tag)) {
     errors.push(
       `Tag "${meta.tag}" contains invalid characters (only lowercase letters, numbers, and hyphens allowed)`,
     );
   }
 
-  // Warn about very long tag names
   if (meta.tag.length > 50) {
     warnings.push(
       `Tag "${meta.tag}" is very long (${meta.tag.length} chars), consider shorter path`,
     );
   }
 
-  // Warn about server components being registered as custom elements
   if (meta.type === "server") {
     warnings.push(
       `Server component "${meta.filePath}" should not be registered as a custom element`,
     );
   }
 
-  // Warn about unknown component types
   if (meta.type === "unknown") {
     warnings.push(
       `Component "${meta.filePath}" has unknown type (missing .client. or .server. suffix)`,
@@ -141,22 +128,18 @@ export function define<P extends Record<string, any>>(
     const shadow = options?.shadow ?? false;
     const shouldValidate = options?.validate ?? import.meta.env?.DEV ?? false;
 
-    // Check if already registered
     if (customElements.get(tag)) {
       console.warn(`[solarflare] Custom element "${tag}" is already registered, skipping`);
       return Component;
     }
 
-    // Validate tag if enabled
     if (shouldValidate) {
       const validation = validateTag({ ...meta, tag });
 
-      // Log validation warnings in development
       for (const warning of validation.warnings) {
         console.warn(`[solarflare] ${warning}`);
       }
 
-      // Log validation errors (but don't throw to allow recovery)
       for (const error of validation.errors) {
         console.error(`[solarflare] ${error}`);
       }

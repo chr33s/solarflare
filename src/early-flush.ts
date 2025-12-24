@@ -1,5 +1,3 @@
-/** Early flush streaming - sends static shell HTML before rendering. */
-
 /** Static shell that can be sent before rendering. */
 export interface StreamingShell {
   preHead: string;
@@ -8,10 +6,7 @@ export interface StreamingShell {
   bodyMarker: string;
 }
 
-/**
- * Generates a static shell from layout analysis.
- * This shell can be cached and reused across requests.
- */
+/** Generates a static shell from layout analysis. */
 export function generateStaticShell(options: {
   lang?: string;
   charset?: string;
@@ -24,35 +19,30 @@ export function generateStaticShell(options: {
   } = options;
 
   return {
-    preHead: /* html */ `<!DOCTYPE html>
-<html lang="${lang}">
-<head>
-<meta charset="${charset}">
-<meta name="viewport" content="${viewport}">`,
+    preHead: /* html */ `
+    <!DOCTYPE html>
+      <html lang="${lang}">
+      <head>
+        <meta charset="${charset}">
+        <meta name="viewport" content="${viewport}">
+    `,
     headMarker: "<!--SF: HEAD-->",
-    preBody: `
-</head>
-<body>`,
+    preBody: /* html */ `
+      </head>
+      <body>
+    `,
     bodyMarker: "<!--SF: BODY-->",
   };
 }
 
-/**
- * Creates a streaming response that flushes the shell immediately.
- * Content is injected at markers as it becomes available.
- */
+/** Creates a streaming response with early flush. */
 export function createEarlyFlushStream(
   shell: StreamingShell,
   options: {
-    /** Critical CSS to inline in head */
     criticalCss?: string;
-    /** Preload hints to add immediately */
     preloadHints?: string;
-    /** Content stream from SSR */
     contentStream: ReadableStream<Uint8Array>;
-    /** Head tags to inject */
     headTags: string;
-    /** Script/style tags to inject at body end */
     bodyTags: string;
   },
 ): ReadableStream<Uint8Array> {
@@ -62,20 +52,17 @@ export function createEarlyFlushStream(
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      // Phase 1: Flush shell immediately (< 1ms)
       const shellStart = [
         shell.preHead,
         options.preloadHints || "",
-        options.criticalCss ? `<style>${options.criticalCss}</style>` : "",
+        options.criticalCss ? /* html */ `<style>${options.criticalCss}</style>` : "",
       ].join("");
 
       controller.enqueue(encoder.encode(shellStart));
 
-      // Flush head tags
       controller.enqueue(encoder.encode(options.headTags));
       controller.enqueue(encoder.encode(shell.preBody));
 
-      // Phase 2: Stream body content
       phase = "content";
       contentReader = options.contentStream.getReader();
     },
@@ -90,7 +77,6 @@ export function createEarlyFlushStream(
         const { done, value } = await contentReader.read();
 
         if (done) {
-          // Append body tags and close
           controller.enqueue(encoder.encode(options.bodyTags));
           controller.enqueue(encoder.encode("</body></html>"));
           phase = "done";
@@ -110,10 +96,7 @@ export function createEarlyFlushStream(
   });
 }
 
-/**
- * Generates resource hints for critical assets.
- * These should be sent as early as possible.
- */
+/** Generates resource hints for critical assets. */
 export function generateResourceHints(options: {
   scripts?: string[];
   stylesheets?: string[];
@@ -122,22 +105,18 @@ export function generateResourceHints(options: {
 }): string {
   const hints: string[] = [];
 
-  // Preconnect to critical origins (fonts, APIs, etc.)
   for (const origin of options.preconnect ?? []) {
     hints.push(/* html */ `<link rel="preconnect" href="${origin}" crossorigin>`);
   }
 
-  // DNS prefetch for less critical origins
   for (const origin of options.dnsPrefetch ?? []) {
     hints.push(/* html */ `<link rel="dns-prefetch" href="${origin}">`);
   }
 
-  // Preload critical stylesheets
   for (const href of options.stylesheets ?? []) {
     hints.push(/* html */ `<link rel="preload" href="${href}" as="style">`);
   }
 
-  // Modulepreload for critical JS
   for (const href of options.scripts ?? []) {
     hints.push(/* html */ `<link rel="modulepreload" href="${href}">`);
   }

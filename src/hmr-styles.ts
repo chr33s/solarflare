@@ -1,5 +1,3 @@
-/** HMR support for Constructable Stylesheets. */
-
 import { stylesheets } from "./stylesheets.ts";
 
 /** CSS HMR update payload. */

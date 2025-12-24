@@ -1,5 +1,3 @@
-/** Framework HMR client with SSE-based hot module replacement. */
-
 /** Callback type for HMR events. */
 export type HmrCallback<T = unknown> = (data: T) => void;
 
@@ -29,7 +27,6 @@ function createDevHmr(): HmrApi {
   const disposeCallbacks: Array<() => void> = [];
   const data: Record<string, unknown> = {};
 
-  // Connect to dev server via SSE
   if (typeof EventSource !== "undefined" && typeof location !== "undefined") {
     const es = new EventSource(`${location.origin}/_hmr`);
 
@@ -75,10 +72,7 @@ function createDevHmr(): HmrApi {
   };
 }
 
-/**
- * HMR instance - dev in dev mode, no-op in production (tree-shakes away).
- * The globalThis.__SF_DEV__ check is replaced at build time.
- */
+/** HMR instance - dev in dev mode, no-op in production. */
 export const hmr: HmrApi = (globalThis as unknown as { __SF_DEV__?: boolean }).__SF_DEV__
   ? createDevHmr()
   : noopHmr;

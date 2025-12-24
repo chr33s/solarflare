@@ -1,5 +1,3 @@
-/** Client-side SPA router using URLPattern, Navigation API, and View Transitions. */
-
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "diff-dom-streaming";
 import { resetHeadContext } from "./head.ts";
@@ -43,7 +41,6 @@ export interface NavigateOptions {
 /** Router configuration. */
 export interface RouterConfig {
   base?: string;
-  /** Enable view transitions (default: true if supported). */
   viewTransitions?: boolean;
   scrollBehavior?: "auto" | "smooth" | "instant" | false;
   onNotFound?: (url: URL) => void;
@@ -167,7 +164,14 @@ export class Router {
       const escapeHtml = (str: string) =>
         str.replace(
           /[&<>"']/g,
-          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] || c,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c] || c,
         );
 
       app.innerHTML = `
@@ -268,7 +272,9 @@ export class Router {
     //
     // To keep semantics simple and reliable, remount the route's root island by swapping
     // the host element node (this triggers disconnected/connected lifecycle and a fresh mount).
-    const host = document.querySelector(entry.tag) as HTMLElement & { _vdom?: unknown };
+    const host = document.querySelector(entry.tag) as HTMLElement & {
+      _vdom?: unknown;
+    };
     if (host) {
       const replacement = host.cloneNode(true) as HTMLElement;
       host.replaceWith(replacement);

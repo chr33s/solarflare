@@ -1,4 +1,3 @@
-/** Server utilities for routing and streaming SSR. */
 import { type FunctionComponent, type VNode, h } from "preact";
 import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
 import { parsePath } from "./paths.ts";
@@ -29,7 +28,9 @@ export const BODY_MARKER = "<!--SOLARFLARE_BODY-->";
 
 /** Body placeholder component for layout injection. */
 export function Body(): VNode<any> {
-  return h("solarflare-body", { dangerouslySetInnerHTML: { __html: BODY_MARKER } });
+  return h("solarflare-body", {
+    dangerouslySetInnerHTML: { __html: BODY_MARKER },
+  });
 }
 
 // Re-export head components
@@ -92,7 +93,6 @@ export interface ModuleMap {
 
 /** Creates router from module map, returning sorted routes array. */
 export function createRouter(modules: ModuleMap): Route[] {
-  // Combine server and client modules for routing (layouts are handled separately)
   const routeModules = { ...modules.server, ...modules.client };
 
   const routes = Object.entries(routeModules)
@@ -109,11 +109,9 @@ export function createRouter(modules: ModuleMap): Route[] {
       };
     })
     .sort((a, b) => {
-      // Static routes before dynamic routes
       if (a.parsedPattern.isStatic !== b.parsedPattern.isStatic) {
         return a.parsedPattern.isStatic ? -1 : 1;
       }
-      // Higher specificity first (more specific routes win)
       return b.parsedPattern.specificity - a.parsedPattern.specificity;
     });
 
@@ -122,23 +120,16 @@ export function createRouter(modules: ModuleMap): Route[] {
 
 /** Layout definition. */
 export interface Layout {
-  /** File path. */
   path: string;
-  /** Module loader. */
   loader: () => Promise<{ default: unknown }>;
-  /** Nesting depth (0 = root). */
   depth: number;
-  /** Directory scope. */
   directory: string;
 }
 
 /** Layout hierarchy result. */
 export interface LayoutHierarchy {
-  /** Layouts from root to leaf. */
   layouts: Layout[];
-  /** Route path segments. */
   segments: string[];
-  /** Checked directory paths. */
   checkedPaths: string[];
 }
 
@@ -150,10 +141,7 @@ export function findLayoutHierarchy(
   const layouts: Layout[] = [];
   const checkedPaths: string[] = [];
 
-  // Remove leading ./ and get segments (minus the file itself)
   const segments = routePath.replace(/^\.\//, "").split("/").slice(0, -1);
-
-  // Check root layout first
   const rootLayout = "./_layout.tsx";
   checkedPaths.push(rootLayout);
   if (rootLayout in modules) {
@@ -164,8 +152,6 @@ export function findLayoutHierarchy(
       directory: ".",
     });
   }
-
-  // Walk up the path checking for layouts
   let current = ".";
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i];
@@ -193,13 +179,9 @@ export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
 
 /** Route match result. */
 export interface RouteMatch {
-  /** Matched route. */
   route: Route;
-  /** Extracted URL parameters. */
   params: Record<string, string>;
-  /** Parameter definitions. */
   paramDefs: RouteParamDef[];
-  /** All required params matched. */
   complete: boolean;
 }
 
@@ -211,7 +193,6 @@ export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
       const params = (result.pathname.groups as Record<string, string>) ?? {};
       const paramDefs = route.parsedPattern.params;
 
-      // Validate that all required params are present
       const complete = paramDefs
         .filter((p) => !p.optional)
         .every((p) => p.name in params && params[p.name] !== undefined);
@@ -257,20 +238,20 @@ export function generateAssetTags(
   // Add stylesheet links
   if (styles && styles.length > 0) {
     for (const href of styles) {
-      html += `<link rel="stylesheet" href="${href}">`;
+      html += /* html */ `<link rel="stylesheet" href="${href}">`;
     }
   }
 
   // Add dev mode scripts (like console forwarding)
   if (devScripts && devScripts.length > 0) {
     for (const src of devScripts) {
-      html += `<script src="${src}" async></script>`;
+      html += /* html */ `<script src="${src}" async></script>`;
     }
   }
 
   // Add script tag
   if (script) {
-    html += `<script type="module" src="${script}" async></script>`;
+    html += /* html */ `<script type="module" src="${script}" async></script>`;
   }
 
   return html;
@@ -400,8 +381,8 @@ function createAssetInjectionTransformer(
   let buffer = "";
   let doctypeInjected = false;
   let headInjected = false;
-  const bodyMarker = `<solarflare-body>${BODY_MARKER}</solarflare-body>`;
-  const headMarker = `<solarflare-head>${HEAD_MARKER}</solarflare-head>`;
+  const bodyMarker = /* html */ `<solarflare-body>${BODY_MARKER}</solarflare-body>`;
+  const headMarker = /* html */ `<solarflare-head>${HEAD_MARKER}</solarflare-head>`;
 
   return new TransformStream({
     transform(chunk, controller) {
@@ -575,7 +556,7 @@ function createDeferredStream(
   async function buildDeferredHtml(dataIslandId: string, data: unknown, hydrateScriptId: string) {
     const dataIsland = await serializeDataIsland(dataIslandId, data);
     const hydrationDetail = JSON.stringify({ tag, id: dataIslandId });
-    const hydrationScript = `<script id="${hydrateScriptId}">setTimeout(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})),0)</script>`;
+    const hydrationScript = /* html */ `<script id="${hydrateScriptId}">setTimeout(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})),0)</script>`;
     return dataIsland + hydrationScript;
   }
 
@@ -618,7 +599,7 @@ function createDeferredStream(
             enqueueDeferredChunk(html);
           })
           .catch((err) => {
-            const errorScript = `<script>console.error("[solarflare] Deferred error (${JSON.stringify(key)}):", ${JSON.stringify((err as Error).message)})</script>`;
+            const errorScript = /* html */ `<script>console.error("[solarflare] Deferred error (${JSON.stringify(key)}):", ${JSON.stringify((err as Error).message)})</script>`;
             enqueueDeferredChunk(errorScript);
           })
           .finally(() => {

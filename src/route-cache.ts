@@ -1,5 +1,3 @@
-/** Route-level response caching for static/semi-static content. */
-
 /** Cache configuration per route. */
 export interface RouteCacheConfig {
   maxAge: number;
@@ -11,17 +9,14 @@ export interface RouteCacheConfig {
 
 /** Default cache configs by route type. */
 export const DEFAULT_CACHE_CONFIGS: Record<string, RouteCacheConfig> = {
-  // Static pages - long cache
   static: {
-    maxAge: 3600, // 1 hour
-    staleWhileRevalidate: 86400, // 24 hours
+    maxAge: 3600,
+    staleWhileRevalidate: 86400,
   },
-  // Dynamic but public pages
   dynamic: {
-    maxAge: 60, // 1 minute
-    staleWhileRevalidate: 300, // 5 minutes
+    maxAge: 60,
+    staleWhileRevalidate: 300,
   },
-  // User-specific pages - no shared cache
   private: {
     maxAge: 0,
     cacheAuthenticated: false,
@@ -51,9 +46,7 @@ export function generateCacheControl(config: RouteCacheConfig, isPrivate: boolea
   return directives.join(", ");
 }
 
-/** Response cache with Cloudflare Cache API.
- * Falls back to in-memory LRU cache when Cache API is unavailable.
- */
+/** Response cache with Cloudflare Cache API (or in-memory fallback). */
 export class ResponseCache {
   #cache?: Cache;
   #memory = new Map<string, { response: Response; expires: number }>();
@@ -98,7 +91,10 @@ export class ResponseCache {
       const firstKey = this.#memory.keys().next().value;
       if (firstKey) this.#memory.delete(firstKey);
     }
-    this.#memory.set(key, { response: response.clone(), expires: Date.now() + maxAge * 1000 });
+    this.#memory.set(key, {
+      response: response.clone(),
+      expires: Date.now() + maxAge * 1000,
+    });
   }
 
   #toRequest(key: string): Request {
@@ -123,21 +119,17 @@ export async function withCache(
   handler: () => Promise<Response>,
   cache: ResponseCache,
 ): Promise<Response> {
-  // Skip cache for authenticated requests if configured
   const hasAuth = request.headers.has("Authorization") || request.headers.has("Cookie");
   if (hasAuth && !config.cacheAuthenticated) {
     return handler();
   }
 
-  // Generate cache key
   const key = config.keyGenerator
     ? config.keyGenerator(request, params)
     : ResponseCache.generateKey(request, params);
 
-  // Try cache first
   const cached = await cache.get(key);
   if (cached) {
-    // Add cache hit header for debugging
     const headers = new Headers(cached.headers);
     headers.set("X-Cache", "HIT");
     return new Response(cached.body, {
@@ -147,7 +139,6 @@ export async function withCache(
     });
   }
 
-  // Generate fresh response
   const response = await handler();
 
   // Only cache successful responses

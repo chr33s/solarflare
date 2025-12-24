@@ -1,4 +1,3 @@
-/** Cloudflare Worker fetch handler with streaming SSR. */
 import { type FunctionComponent } from "preact";
 import {
   createRouter,
@@ -42,13 +41,11 @@ interface ChunkManifest {
 
 const manifest = chunkManifest as ChunkManifest;
 
-// Initialize response cache for route-level caching
 const responseCache = new ResponseCache(100);
 
-// Lazy-initialized static shell cache (keyed by lang)
 const staticShellCache = new Map<string, StreamingShell>();
 
-/** Gets or creates a static shell for the given language. */
+/** Gets or creates a static shell. */
 function getStaticShell(lang: string): StreamingShell {
   let shell = staticShellCache.get(lang);
   if (!shell) {

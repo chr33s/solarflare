@@ -1,8 +1,3 @@
-/**
- * HTTP 103 Early Hints support for Cloudflare Workers.
- * Allows the browser to start loading resources before the full response.
- */
-
 /** Resource to hint. */
 export interface EarlyHint {
   href: string;
@@ -36,12 +31,10 @@ export function collectEarlyHints(options: {
 }): EarlyHint[] {
   const hints: EarlyHint[] = [];
 
-  // Preconnect to external origins first (highest priority)
   for (const origin of options.preconnectOrigins ?? []) {
     hints.push({ href: origin, rel: "preconnect", crossorigin: "anonymous" });
   }
 
-  // Preload fonts (high priority, render-blocking)
   for (const font of options.fonts ?? []) {
     hints.push({
       href: font,
@@ -52,12 +45,10 @@ export function collectEarlyHints(options: {
     });
   }
 
-  // Preload stylesheets
   for (const stylesheet of options.stylesheets ?? []) {
     hints.push({ href: stylesheet, rel: "preload", as: "style" });
   }
 
-  // Modulepreload main script
   if (options.scriptPath) {
     hints.push({ href: options.scriptPath, rel: "modulepreload" });
   }
@@ -74,10 +65,8 @@ export async function handleWithEarlyHints(
   const url = new URL(request.url);
   const hints = getHints(url);
 
-  // Get the actual response
   const response = await handler(request);
 
-  // Add Link header for browsers that support it
   if (hints.length > 0) {
     const linkHeader = generateEarlyHintsHeader(hints);
     const newHeaders = new Headers(response.headers);

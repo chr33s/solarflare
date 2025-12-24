@@ -1,19 +1,14 @@
-/** Pure path parsing utilities, safe for client-side use. */
-
 /** Module kind based on file naming convention. */
 export type ModuleKind = "server" | "client" | "layout" | "error" | "unknown";
 
 /** Parsed path information with validated metadata. */
 export interface ParsedPath {
   original: string;
-  /** Normalized path (without leading ./). */
   normalized: string;
   kind: ModuleKind;
   segments: string[];
-  /** Dynamic parameter names (from $param). */
   params: string[];
   isIndex: boolean;
-  /** Whether this is a private file (_prefixed). */
   isPrivate: boolean;
   pattern: string;
   tag: string;

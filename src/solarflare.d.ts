@@ -1,6 +1,3 @@
-/**
- * Extend ImportMeta with glob support and runtime properties
- */
 interface ImportMeta {
   glob<T = { default: unknown }>(
     pattern: string,

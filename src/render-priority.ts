@@ -1,5 +1,3 @@
-/** Render prioritization for faster FMP. */
-
 import { type VNode, h, Fragment } from "preact";
 
 /** Priority levels for content rendering. */
@@ -12,10 +10,7 @@ export interface DeferredBoundary {
   children: VNode;
 }
 
-/**
- * Creates a deferred rendering boundary.
- * Content is streamed based on priority.
- */
+/** Creates a deferred rendering boundary. */
 export function Deferred(props: {
   priority?: RenderPriority;
   fallback?: VNode;
@@ -28,7 +23,6 @@ export function Deferred(props: {
     const id = `sf-deferred-${Math.random().toString(36).slice(2, 9)}`;
 
     return h(Fragment, null, [
-      // Placeholder with loading state
       h(
         "sf-deferred",
         {
@@ -38,7 +32,6 @@ export function Deferred(props: {
         },
         fallback ?? h("div", { class: "sf-loading" }),
       ),
-      // Marker for streaming injection
       h("template", {
         "data-sf-deferred": id,
         dangerouslySetInnerHTML: { __html: `<!--SF: DEFERRED:${id}-->` },
@@ -46,13 +39,10 @@ export function Deferred(props: {
     ]);
   }
 
-  // On client, render immediately
   return children;
 }
 
-/**
- * Skeleton loader component for deferred content.
- */
+/** Skeleton loader component. */
 export function Skeleton(props: {
   width?: string;
   height?: string;
@@ -76,9 +66,7 @@ export function Skeleton(props: {
   return h(Fragment, null, items);
 }
 
-/**
- * Injects skeleton animation CSS.
- */
+/** Injects skeleton animation CSS. */
 export const SKELETON_CSS = /* css */ `
 @keyframes sf-skeleton-pulse {
   0%, 100% { opacity: 1; }

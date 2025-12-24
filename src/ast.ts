@@ -1,4 +1,3 @@
-/** TypeScript Compiler API utilities for validation and code generation. */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";

@@ -1,5 +1,3 @@
-/** HMR SSE server for hot module replacement. */
-
 /** HMR update event types */
 export type HmrEventType = "update" | "full-reload" | "css-update" | "connected";
 
@@ -9,7 +7,6 @@ interface SseClient {
   encoder: TextEncoder;
 }
 
-// Track connected HMR clients for broadcasting updates
 const hmrClients = new Set<SseClient>();
 
 /** Checks if request is an HMR SSE request. */
@@ -18,7 +15,7 @@ export function isHmrRequest(request: Request): boolean {
   return url.pathname === "/_hmr" && request.method === "GET";
 }
 
-/** Handles HMR SSE request. Returns a streaming response for Server-Sent Events. */
+/** Handles HMR SSE request. */
 export function handleHmrRequest(): Response {
   const encoder = new TextEncoder();
   let client: SseClient;
@@ -29,11 +26,9 @@ export function handleHmrRequest(): Response {
       client = { controller, encoder };
       hmrClients.add(client);
 
-      // Send connected event
       const data = JSON.stringify({ type: "connected" });
       controller.enqueue(encoder.encode(`data: ${data}\n\n`));
 
-      // Send heartbeat every 30s to keep connection alive, cloudflare returns Error 524 after 100s on no activity
       heartbeatInterval = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(`: heartbeat\n\n`));

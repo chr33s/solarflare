@@ -1,5 +1,3 @@
-/** Signal-based reactive state management using `@preact/signals`. */
-
 import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
 import { serializeToString, parseFromString } from "./serialize.ts";
 import { serializeHeadState, hydrateHeadState } from "./head.ts";
@@ -15,31 +13,30 @@ export interface StoreConfig {
   serverData?: unknown;
 }
 
-/** Internal route params signal. */
+/** Route params signal. */
 const _params = signal<Record<string, string>>({});
 
-/** Internal server data signal. */
+/** Server data signal. */
 const _serverData = signal<ServerData<unknown>>({
   data: null,
   loading: false,
   error: null,
 });
 
-/** Internal pathname signal. */
+/** Pathname signal. */
 const _pathname = signal<string>("");
 
-/** Route parameters signal (readonly). */
+/** Route parameters. */
 export const params: ReadonlySignal<Record<string, string>> = _params;
 
-/** Server data signal (readonly). */
+/** Server data. */
 export const serverData: ReadonlySignal<ServerData<unknown>> = _serverData;
 
-/** Current pathname signal (readonly). */
+/** Current pathname. */
 export const pathname: ReadonlySignal<string> = _pathname;
 
 /** Sets route parameters. */
 export function setParams(newParams: Record<string, string>): void {
-  // Use Object.assign to prevent prototype pollution
   _params.value = Object.assign({}, newParams);
 }
 
@@ -61,7 +58,6 @@ export function setPathname(path: string): void {
 export function initStore(config: StoreConfig = {}): void {
   batch(() => {
     if (config.params) {
-      // Use Object.assign to prevent prototype pollution
       _params.value = Object.assign({}, config.params);
     }
     if (config.serverData !== undefined) {
@@ -83,10 +79,10 @@ export function resetStore(): void {
   });
 }
 
-/** Data island ID for store hydration. */
+/** Store island ID. */
 const STORE_ISLAND_ID = "sf-store";
 
-/** Data island ID for head hydration. */
+/** Head island ID. */
 const HEAD_ISLAND_ID = "sf-head";
 
 /** Serializes store state for client hydration. */

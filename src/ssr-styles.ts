@@ -1,5 +1,3 @@
-/** SSR stylesheet preloading for instant hydration. */
-
 /** Generates inline script to preload stylesheets. */
 export function generateStylePreloadScript(
   stylesheets: Array<{ id: string; css: string }>,
@@ -9,25 +7,26 @@ export function generateStylePreloadScript(
   // Serialize stylesheets for client
   const data = stylesheets.map(({ id, css }) => ({
     id,
-    // Escape for safe embedding in script
     css: css.replace(/</g, "\\u003c").replace(/>/g, "\\u003e"),
   }));
 
-  return /* js */ `<script type="application/json" id="sf-preloaded-styles">
-${JSON.stringify(data)}
-</script>
-<script>
-(function() {
-  if (!('adoptedStyleSheets' in Document.prototype)) return;
-  var data = JSON.parse(document.getElementById('sf-preloaded-styles').textContent);
-  window.__sfPreloadedStyles = new Map();
-  data.forEach(function(s) {
-    var sheet = new CSSStyleSheet();
-    sheet.replaceSync(s.css);
-    window.__sfPreloadedStyles.set(s.id, sheet);
-  });
-})();
-</script>`;
+  return /* tsx */ `
+    <script type="application/json" id="sf-preloaded-styles">
+      ${JSON.stringify(data)}
+    </script>
+    <script>
+      (function() {
+        if (!('adoptedStyleSheets' in Document.prototype)) return;
+        var data = JSON.parse(document.getElementById('sf-preloaded-styles').textContent);
+        window.__sfPreloadedStyles = new Map();
+        data.forEach(function(s) {
+          var sheet = new CSSStyleSheet();
+          sheet.replaceSync(s.css);
+          window.__sfPreloadedStyles.set(s.id, sheet);
+        });
+      })();
+    </script>
+  `;
 }
 
 /** Retrieves preloaded stylesheets. */
@@ -46,7 +45,5 @@ export function hydratePreloadedStyles(_manager: {
   const preloaded = (window as any).__sfPreloadedStyles as Map<string, CSSStyleSheet> | undefined;
   if (!preloaded) return;
 
-  // The stylesheets are already created, just need to track them
-  // This avoids re-parsing CSS during hydration
   console.log(`[styles] Hydrated ${preloaded.size} preloaded stylesheets`);
 }

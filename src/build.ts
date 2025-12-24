@@ -62,7 +62,6 @@ async function scanFiles(pattern: string, cwd: string): Promise<string[]> {
 }
 
 // Resolve paths relative to current working directory (where solarflare is invoked)
-// e.g. running from ./examples/basic will use ./examples/basic/src and ./examples/basic/dist
 const ROOT_DIR = process.cwd();
 const APP_DIR = join(ROOT_DIR, "src");
 const DIST_DIR = join(ROOT_DIR, "dist");
@@ -75,7 +74,7 @@ const MODULES_PATH = join(DIST_DIR, ".modules.generated.ts");
 const CHUNKS_PATH = join(DIST_DIR, ".chunks.generated.json");
 const ROUTES_TYPE_PATH = join(DIST_DIR, "routes.d.ts");
 
-/** Cached package imports map from package.json. */
+/** Cached package imports. */
 let packageImportsCache: Record<string, string> | null = null;
 
 /** Reads package.json imports field and converts to resolve.alias format. */
@@ -128,14 +127,14 @@ const { values: args } = parseArgs({
 /** Auto-scaffolds missing template files. */
 async function scaffoldTemplates(): Promise<void> {
   const templates: Record<string, string> = {
-    "index.ts": `import worker from "@chr33s/solarflare/worker";
+    "index.ts": /* tsx */ `import worker from "@chr33s/solarflare/worker";
 export default { fetch: worker };
 `,
-    "_error.tsx": `export default function ErrorPage({ error }: { error: Error }) {
+    "_error.tsx": /* tsx */ `export default function ErrorPage({ error }: { error: Error }) {
   return <div><h1>Error</h1><p>{error.message}</p></div>;
 }
 `,
-    "_layout.tsx": `import type { VNode } from "preact";
+    "_layout.tsx": /* tsx */ `import type { VNode } from "preact";
 import { Head, Body } from "@chr33s/solarflare/server";
 
 export default function Layout({ children }: { children: VNode }) {
@@ -145,21 +144,23 @@ export default function Layout({ children }: { children: VNode }) {
   };
 
   const rootTemplates: Record<string, string> = {
-    "wrangler.json": `{
-  "assets": { "directory": "./dist/client" },
-  "compatibility_date": "2025-12-10",
-  "compatibility_flags": ["nodejs_compat"],
-  "dev": { "port": 8080 },
-  "main": "./dist/server/index.js",
-  "name": "solarflare"
-}
-`,
-    "tsconfig.json": `{
-  "compilerOptions": { "types": ["@chr33s/solarflare" ] },
-  "extends": "@chr33s/solarflare/tsconfig.json",
-  "include": ["./src", "./worker-configuration.d.ts"]
-}
-`,
+    "wrangler.json": /* json */ `
+      {
+        "assets": { "directory": "./dist/client" },
+        "compatibility_date": "2025-12-10",
+        "compatibility_flags": ["nodejs_compat"],
+        "dev": { "port": 8080 },
+        "main": "./dist/server/index.js",
+        "name": "solarflare"
+      }
+    `,
+    "tsconfig.json": /* json */ `
+      {
+        "compilerOptions": { "types": ["@chr33s/solarflare" ] },
+        "extends": "@chr33s/solarflare/tsconfig.json",
+        "include": ["./src", "./worker-configuration.d.ts"]
+      }
+    `,
   };
 
   await mkdir(APP_DIR, { recursive: true });
@@ -240,25 +241,26 @@ function generateRoutesTypeFile(routeFiles: string[]): string {
       const parsed = parsePath(file);
       const paramsType =
         parsed.params.length > 0
-          ? /* js */ `{ ${parsed.params.map((p) => `${p}: string`).join("; ")} }`
+          ? `{ ${parsed.params.map((p) => `${p}: string`).join("; ")} }`
           : "Record<string, never>";
-      return /* js */ `  '${parsed.pattern}': { params: ${paramsType} }`;
+      return `  '${parsed.pattern}': { params: ${paramsType} }`;
     })
     .join("\n");
 
-  return /* ts */ `/**
- * Auto-generated Route Types
- * Provides type-safe route definitions
- */
+  return /* ts */ `
+    /**
+     * Auto-generated Route Types
+     * Provides type-safe route definitions
+     */
 
-export interface Routes {
-${routeTypes}
-}
+    export interface Routes {
+      ${routeTypes}
+    }
 
-export type RoutePath = keyof Routes;
+    export type RoutePath = keyof Routes;
 
-export type RouteParams<T extends RoutePath> = Routes[T]['params'];
-`;
+    export type RouteParams<T extends RoutePath> = Routes[T]['params'];
+  `;
 }
 
 /** Component metadata. */
@@ -267,9 +269,7 @@ interface ComponentMeta {
   tag: string;
   props: string[];
   parsed: ReturnType<typeof parsePath>;
-  /** Chunk filename */
   chunk: string;
-  /** Content hash */
   hash?: string;
 }
 
@@ -465,9 +465,10 @@ function generateChunkedClientEntry(
   cssFiles: string[] = [],
 ): string {
   const debugImports = args.debug
-    ? `import 'preact/debug'
-import '@preact/signals-debug'
-`
+    ? /* tsx */ `
+      import 'preact/debug'
+      import '@preact/signals-debug'
+    `
     : "";
 
   // Inline the routes manifest to avoid fetch
@@ -478,378 +479,364 @@ import '@preact/signals-debug'
 
   const cssRegistrations = cssFiles
     .map(
-      (file, i) => `
-    const preloaded${i} = getPreloadedStylesheet('${file}');
-    if (!preloaded${i}) {
-      stylesheets.register('${file}', css${i}, { consumer: '${meta.tag}' });
-    }`,
+      (file, i) => /* tsx */ `
+        const preloaded${i} = getPreloadedStylesheet('${file}');
+        if (!preloaded${i}) {
+          stylesheets.register('${file}', css${i}, { consumer: '${meta.tag}' });
+        }
+      `,
     )
     .join("");
 
   const cssHmr = cssFiles
     .map(
-      (file, _i) => `
-  hmr.on('sf:css:${file}', (newCss) => {
-    if (newCss) {
-      stylesheets.update('${file}', newCss);
-      console.log('[HMR] Updated stylesheet: ${file}');
-    }
-  });`,
+      (file, _i) => /* tsx */ `
+        hmr.on('sf:css:${file}', (newCss) => {
+          if (newCss) {
+            stylesheets.update('${file}', newCss);
+            console.log('[HMR] Updated stylesheet: ${file}');
+          }
+        });
+      `,
     )
     .join("");
 
   const stylesheetImports =
     cssFiles.length > 0
-      ? `
-import { stylesheets, supportsConstructableStylesheets, getPreloadedStylesheet } from '@chr33s/solarflare/client';
-${cssImports}`
+      ? /* tsx */ `
+          import { stylesheets, supportsConstructableStylesheets, getPreloadedStylesheet } from '@chr33s/solarflare/client';
+          ${cssImports}
+        `
       : "";
 
   const stylesheetSetup =
     cssFiles.length > 0
-      ? `
-// ============================================================================
-// Constructable Stylesheets Setup
-// ============================================================================
-if (typeof document !== 'undefined') {
-  if (supportsConstructableStylesheets()) {
-    // Check for SSR-preloaded stylesheets first, register if not preloaded
-    ${cssRegistrations}
-    
-    // Adopt stylesheets to document for light DOM components
-    const sheets = stylesheets.getForConsumer('${meta.tag}');
-    document.adoptedStyleSheets = [
-      ...document.adoptedStyleSheets.filter(s => !sheets.includes(s)),
-      ...sheets
-    ];
-  }
-}
-`
+      ? /* tsx */ `
+        if (typeof document !== 'undefined') {
+          if (supportsConstructableStylesheets()) {
+            // Check for SSR-preloaded stylesheets first, register if not preloaded
+            ${cssRegistrations}
+            
+            // Adopt stylesheets to document for light DOM components
+            const sheets = stylesheets.getForConsumer('${meta.tag}');
+            document.adoptedStyleSheets = [
+              ...document.adoptedStyleSheets.filter(s => !sheets.includes(s)),
+              ...sheets
+            ];
+          }
+        }
+      `
       : "";
 
   const stylesheetHmr =
     cssFiles.length > 0
-      ? `
-  // CSS Hot Module Replacement via Constructable Stylesheets
-  ${cssHmr}
-`
+      ? /* tsx */ `
+        // CSS Hot Module Replacement via Constructable Stylesheets
+        ${cssHmr}
+      `
       : "";
 
-  return /* js */ `/** Auto-generated: ${meta.chunk} */
-${debugImports}import { h, Component as PreactComponent } from 'preact';
-import { useMemo } from 'preact/hooks';
-import { signal, useSignal, useSignalEffect } from '@preact/signals';
-import register from 'preact-custom-element';
-import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland, installHeadHoisting, createHeadContext, setHeadContext, hmr } from '@chr33s/solarflare/client';${stylesheetImports}
-import BaseComponent from '../src/${meta.file}';
+  return /* tsx */ `
+    /** Auto-generated: ${meta.chunk} */
+    ${debugImports}import { h, Component as PreactComponent } from 'preact';
+    import { useMemo } from 'preact/hooks';
+    import { signal, useSignal, useSignalEffect } from '@preact/signals';
+    import register from 'preact-custom-element';
+    import { initRouter, getRouter, initHydrationCoordinator, extractDataIsland, installHeadHoisting, createHeadContext, setHeadContext, hmr } from '@chr33s/solarflare/client';${stylesheetImports}
+    import BaseComponent from '../src/${meta.file}';
 
-// Initialize head hoisting for client-side rendering (prevents duplicate head tags)
-// Note: client bundles may include their own Preact instance. We must install hoisting per-bundle,
-// but still share a single head context across the page.
-if (typeof document !== 'undefined') {
-  const g = window;
-  g.__sfHeadContext ??= createHeadContext();
-  setHeadContext(g.__sfHeadContext);
-  installHeadHoisting();
-}
+    // Initialize head hoisting for client-side rendering (prevents duplicate head tags)
+    // Note: client bundles may include their own Preact instance. We must install hoisting per-bundle,
+    // but still share a single head context across the page.
+    if (typeof document !== 'undefined') {
+      const g = window;
+      g.__sfHeadContext ??= createHeadContext();
+      setHeadContext(g.__sfHeadContext);
+      installHeadHoisting();
+    }
 
-// Initialize hydration coordinator for streaming SSR
-initHydrationCoordinator();
-${stylesheetSetup}
-let CurrentComponent = BaseComponent;
-const hmrVersion = signal(0);
+    // Initialize hydration coordinator for streaming SSR
+    initHydrationCoordinator();
+    ${stylesheetSetup}
+    let CurrentComponent = BaseComponent;
+    const hmrVersion = signal(0);
 
-// ============================================================================
-// HMR Scroll Position Preservation
-// ============================================================================
-const scrollPositions = new Map();
+    const scrollPositions = new Map();
 
-function saveScrollPosition() {
-  scrollPositions.set('${meta.tag}', { x: window.scrollX, y: window.scrollY });
-}
+    function saveScrollPosition() {
+      scrollPositions.set('${meta.tag}', { x: window.scrollX, y: window.scrollY });
+    }
 
-function restoreScrollPosition() {
-  const pos = scrollPositions.get('${meta.tag}');
-  if (pos) {
-    requestAnimationFrame(() => window.scrollTo(pos.x, pos.y));
-  }
-}
-
-// ============================================================================
-// HMR Hook State Preservation
-// ============================================================================
-const hookStateStorage = new Map();
-
-function saveHookState(instance) {
-  if (instance?.__hooks?.list) {
-    hookStateStorage.set('${meta.tag}', 
-      instance.__hooks.list.map(hook => hook?._value !== undefined ? hook._value : hook?.current)
-    );
-  }
-}
-
-function restoreHookState(instance) {
-  const saved = hookStateStorage.get('${meta.tag}');
-  if (saved && instance?.__hooks?.list) {
-    instance.__hooks.list.forEach((hook, i) => {
-      if (saved[i] !== undefined) {
-        if (hook?._value !== undefined) hook._value = saved[i];
-        else if (hook?.current !== undefined) hook.current = saved[i];
+    function restoreScrollPosition() {
+      const pos = scrollPositions.get('${meta.tag}');
+      if (pos) {
+        requestAnimationFrame(() => window.scrollTo(pos.x, pos.y));
       }
-    });
-  }
-}
-
-// ============================================================================
-// CSS Hot Module Replacement
-// ============================================================================
-function reloadStylesheets() {
-  // Find all stylesheets and bust their cache
-  const links = document.querySelectorAll('link[rel="stylesheet"]');
-  links.forEach(link => {
-    const href = link.getAttribute('href');
-    if (href && !href.includes('?')) {
-      link.setAttribute('href', href + '?t=' + Date.now());
-    } else if (href) {
-      link.setAttribute('href', href.replace(/\\?t=\\d+/, '?t=' + Date.now()));
     }
-  });
-  console.log('[HMR] Reloaded stylesheets');
-}
 
-// Listen for CSS-only updates via framework HMR
-${stylesheetHmr}
-hmr.on('sf:css-update', () => {
-  reloadStylesheets();
-});
+    const hookStateStorage = new Map();
 
-// ============================================================================
-// HMR Error Boundary
-// ============================================================================
-class HMRErrorBoundary extends PreactComponent {
-  constructor(props) {
-    super(props);
-    this.state = { error: null, errorInfo: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    this.setState({ errorInfo });
-    console.error('[HMR] Error in <${meta.tag}>:', error);
-    document.dispatchEvent(new CustomEvent('sf:hmr:error', { 
-      detail: { tag: '${meta.tag}', error } 
-    }));
-  }
-
-  componentDidUpdate(prevProps) {
-    // Auto-recover when HMR version changes
-    if (prevProps.hmrVersion !== this.props.hmrVersion && this.state.error) {
-      console.log('[HMR] Attempting recovery for <${meta.tag}>');
-      this.setState({ error: null, errorInfo: null });
-      document.dispatchEvent(new CustomEvent('sf:hmr:recover', { 
-        detail: { tag: '${meta.tag}' } 
-      }));
+    function saveHookState(instance) {
+      if (instance?.__hooks?.list) {
+        hookStateStorage.set('${meta.tag}', 
+          instance.__hooks.list.map(hook => hook?._value !== undefined ? hook._value : hook?.current)
+        );
+      }
     }
-  }
 
-  retry = () => {
-    this.setState({ error: null, errorInfo: null });
-  };
-
-  render() {
-    if (this.state.error) {
-      return h('div', { 
-        style: { 
-          padding: '16px', 
-          margin: '8px', 
-          backgroundColor: '#fee2e2', 
-          border: '1px solid #ef4444', 
-          borderRadius: '8px',
-          fontFamily: 'system-ui, sans-serif'
-        } 
-      },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' } },
-          h('span', { style: { fontSize: '20px' } }, '⚠️'),
-          h('strong', { style: { color: '#991b1b' } }, 'Error in <${meta.tag}>')
-        ),
-        h('pre', { 
-          style: { 
-            margin: '8px 0', 
-            padding: '8px', 
-            backgroundColor: '#fef2f2', 
-            borderRadius: '4px', 
-            overflow: 'auto',
-            fontSize: '12px',
-            color: '#7f1d1d'
-          } 
-        }, this.state.error.message),
-        this.state.errorInfo?.componentStack && h('details', { style: { marginTop: '8px' } },
-          h('summary', { style: { cursor: 'pointer', color: '#991b1b' } }, 'Component Stack'),
-          h('pre', { style: { fontSize: '10px', color: '#7f1d1d', whiteSpace: 'pre-wrap' } }, 
-            this.state.errorInfo.componentStack)
-        ),
-        h('button', {
-          onClick: this.retry,
-          style: {
-            marginTop: '12px',
-            padding: '8px 16px',
-            backgroundColor: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
+    function restoreHookState(instance) {
+      const saved = hookStateStorage.get('${meta.tag}');
+      if (saved && instance?.__hooks?.list) {
+        instance.__hooks.list.forEach((hook, i) => {
+          if (saved[i] !== undefined) {
+            if (hook?._value !== undefined) hook._value = saved[i];
+            else if (hook?.current !== undefined) hook.current = saved[i];
           }
-        }, 'Retry')
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// ============================================================================
-// HMR Support
-// ============================================================================
-hmr.on('sf:module:${meta.tag}', (newModule) => {
-  if (newModule?.default) {
-    // Save scroll position before update
-    saveScrollPosition();
-    
-    // Save hook state from existing instances
-    const el = document.querySelector('${meta.tag}');
-    if (el?._vdom) saveHookState(el._vdom);
-    
-    CurrentComponent = newModule.default;
-    console.log('[HMR] Updated <${meta.tag}>');
-    hmrVersion.value++;
-    
-    // Restore scroll position after render
-    requestAnimationFrame(() => {
-      restoreScrollPosition();
-      // Attempt to restore hook state
-      const el = document.querySelector('${meta.tag}');
-      if (el?._vdom) restoreHookState(el._vdom);
-    });
-    
-    document.dispatchEvent(new CustomEvent('sf:hmr:update', { 
-      detail: { tag: '${meta.tag}' } 
-    }));
-  }
-});
-
-hmr.dispose(() => {
-  console.log('[HMR] Disposing <${meta.tag}>');
-  // Save state before disposal
-  saveScrollPosition();
-  const el = document.querySelector('${meta.tag}');
-  if (el?._vdom) saveHookState(el._vdom);
-});
-
-const routesManifest = ${inlinedRoutes};
-
-let routerInitialized = false;
-function ensureRouter() {
-  if (typeof document === 'undefined') return null;
-  if (routerInitialized) {
-    try { return getRouter(); } catch { return null; }
-  }
-  routerInitialized = true;
-  return initRouter(routesManifest).start();
-}
-
-/** HMR wrapper with deferred data hydration and error boundary. */
-function Component(props) {
-  const deferredSignals = useMemo(() => new Map(), []);
-  const deferredVersion = useSignal(0);
-  const hmrVer = hmrVersion.value;
-
-  const getOrCreateSignal = (key, value) => {
-    if (!deferredSignals.has(key)) {
-      deferredSignals.set(key, signal(value));
-      deferredVersion.value++;
-    } else {
-      deferredSignals.get(key).value = value;
-    }
-  };
-
-  useSignalEffect(() => {
-    const el = document.querySelector('${meta.tag}');
-    if (!el) return;
-    
-    const extractDeferred = () => {
-      if (el._sfDeferred) {
-        for (const [key, value] of Object.entries(el._sfDeferred)) {
-          getOrCreateSignal(key, value);
-        }
-        delete el._sfDeferred;
-        return;
+        });
       }
-      
-      const scripts = document.querySelectorAll('script[type="application/json"][data-island^="${meta.tag}-deferred"]');
-      if (!scripts.length) return;
+    }
 
-      (async () => {
-        for (const script of scripts) {
-          const id = script.getAttribute('data-island');
-          if (!id) continue;
-          const data = await extractDataIsland(id);
-          if (data && typeof data === 'object') {
-            for (const [key, value] of Object.entries(data)) {
+    function reloadStylesheets() {
+      // Find all stylesheets and bust their cache
+      const links = document.querySelectorAll('link[rel="stylesheet"]');
+      links.forEach(link => {
+        const href = link.getAttribute('href');
+        if (href && !href.includes('?')) {
+          link.setAttribute('href', href + '?t=' + Date.now());
+        } else if (href) {
+          link.setAttribute('href', href.replace(/\\?t=\\d+/, '?t=' + Date.now()));
+        }
+      });
+      console.log('[HMR] Reloaded stylesheets');
+    }
+
+    // Listen for CSS-only updates via framework HMR
+    ${stylesheetHmr}
+    hmr.on('sf:css-update', () => {
+      reloadStylesheets();
+    });
+
+    class HMRErrorBoundary extends PreactComponent {
+      constructor(props) {
+        super(props);
+        this.state = { error: null, errorInfo: null };
+      }
+
+      static getDerivedStateFromError(error) {
+        return { error };
+      }
+
+      componentDidCatch(error, errorInfo) {
+        this.setState({ errorInfo });
+        console.error('[HMR] Error in <${meta.tag}>:', error);
+        document.dispatchEvent(new CustomEvent('sf:hmr:error', { 
+          detail: { tag: '${meta.tag}', error } 
+        }));
+      }
+
+      componentDidUpdate(prevProps) {
+        // Auto-recover when HMR version changes
+        if (prevProps.hmrVersion !== this.props.hmrVersion && this.state.error) {
+          console.log('[HMR] Attempting recovery for <${meta.tag}>');
+          this.setState({ error: null, errorInfo: null });
+          document.dispatchEvent(new CustomEvent('sf:hmr:recover', { 
+            detail: { tag: '${meta.tag}' } 
+          }));
+        }
+      }
+
+      retry = () => {
+        this.setState({ error: null, errorInfo: null });
+      };
+
+      render() {
+        if (this.state.error) {
+          return h('div', { 
+            style: { 
+              padding: '16px', 
+              margin: '8px', 
+              backgroundColor: '#fee2e2', 
+              border: '1px solid #ef4444', 
+              borderRadius: '8px',
+              fontFamily: 'system-ui, sans-serif'
+            } 
+          },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' } },
+              h('span', { style: { fontSize: '20px' } }, '⚠️'),
+              h('strong', { style: { color: '#991b1b' } }, 'Error in <${meta.tag}>')
+            ),
+            h('pre', { 
+              style: { 
+                margin: '8px 0', 
+                padding: '8px', 
+                backgroundColor: '#fef2f2', 
+                borderRadius: '4px', 
+                overflow: 'auto',
+                fontSize: '12px',
+                color: '#7f1d1d'
+              } 
+            }, this.state.error.message),
+            this.state.errorInfo?.componentStack && h('details', { style: { marginTop: '8px' } },
+              h('summary', { style: { cursor: 'pointer', color: '#991b1b' } }, 'Component Stack'),
+              h('pre', { style: { fontSize: '10px', color: '#7f1d1d', whiteSpace: 'pre-wrap' } }, 
+                this.state.errorInfo.componentStack)
+            ),
+            h('button', {
+              onClick: this.retry,
+              style: {
+                marginTop: '12px',
+                padding: '8px 16px',
+                backgroundColor: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }
+            }, 'Retry')
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    hmr.on('sf:module:${meta.tag}', (newModule) => {
+      if (newModule?.default) {
+        // Save scroll position before update
+        saveScrollPosition();
+        
+        // Save hook state from existing instances
+        const el = document.querySelector('${meta.tag}');
+        if (el?._vdom) saveHookState(el._vdom);
+        
+        CurrentComponent = newModule.default;
+        console.log('[HMR] Updated <${meta.tag}>');
+        hmrVersion.value++;
+        
+        // Restore scroll position after render
+        requestAnimationFrame(() => {
+          restoreScrollPosition();
+          // Attempt to restore hook state
+          const el = document.querySelector('${meta.tag}');
+          if (el?._vdom) restoreHookState(el._vdom);
+        });
+        
+        document.dispatchEvent(new CustomEvent('sf:hmr:update', { 
+          detail: { tag: '${meta.tag}' } 
+        }));
+      }
+    });
+
+    hmr.dispose(() => {
+      console.log('[HMR] Disposing <${meta.tag}>');
+      // Save state before disposal
+      saveScrollPosition();
+      const el = document.querySelector('${meta.tag}');
+      if (el?._vdom) saveHookState(el._vdom);
+    });
+
+    const routesManifest = ${inlinedRoutes};
+
+    let routerInitialized = false;
+    function ensureRouter() {
+      if (typeof document === 'undefined') return null;
+      if (routerInitialized) {
+        try { return getRouter(); } catch { return null; }
+      }
+      routerInitialized = true;
+      return initRouter(routesManifest).start();
+    }
+
+    /** HMR wrapper with deferred data hydration and error boundary. */
+    function Component(props) {
+      const deferredSignals = useMemo(() => new Map(), []);
+      const deferredVersion = useSignal(0);
+      const hmrVer = hmrVersion.value;
+
+      const getOrCreateSignal = (key, value) => {
+        if (!deferredSignals.has(key)) {
+          deferredSignals.set(key, signal(value));
+          deferredVersion.value++;
+        } else {
+          deferredSignals.get(key).value = value;
+        }
+      };
+
+      useSignalEffect(() => {
+        const el = document.querySelector('${meta.tag}');
+        if (!el) return;
+        
+        const extractDeferred = () => {
+          if (el._sfDeferred) {
+            for (const [key, value] of Object.entries(el._sfDeferred)) {
               getOrCreateSignal(key, value);
             }
+            delete el._sfDeferred;
+            return;
           }
-          await new Promise(r => setTimeout(r, 0));
+          
+          const scripts = document.querySelectorAll('script[type="application/json"][data-island^="${meta.tag}-deferred"]');
+          if (!scripts.length) return;
+
+          (async () => {
+            for (const script of scripts) {
+              const id = script.getAttribute('data-island');
+              if (!id) continue;
+              const data = await extractDataIsland(id);
+              if (data && typeof data === 'object') {
+                for (const [key, value] of Object.entries(data)) {
+                  getOrCreateSignal(key, value);
+                }
+              }
+              await new Promise(r => setTimeout(r, 0));
+            }
+          })();
+        };
+        
+        extractDeferred();
+        
+        const hydrateHandler = (e) => {
+          for (const [key, value] of Object.entries(e.detail)) {
+            getOrCreateSignal(key, value);
+          }
+          delete el._sfDeferred;
+        };
+        el.addEventListener('sf:hydrate', hydrateHandler);
+        
+        const navHandler = () => setTimeout(extractDeferred, 0);
+        window.addEventListener('sf:navigate', navHandler);
+        
+        ensureRouter();
+        
+        return () => {
+          el.removeEventListener('sf:hydrate', hydrateHandler);
+          window.removeEventListener('sf:navigate', navHandler);
+        };
+      });
+
+      const cleanProps = {}
+      for (const key in props) {
+        if (props[key] !== 'undefined' && props[key] !== undefined) {
+          cleanProps[key] = props[key];
         }
-      })();
-    };
-    
-    extractDeferred();
-    
-    const hydrateHandler = (e) => {
-      for (const [key, value] of Object.entries(e.detail)) {
-        getOrCreateSignal(key, value);
       }
-      delete el._sfDeferred;
-    };
-    el.addEventListener('sf:hydrate', hydrateHandler);
-    
-    const navHandler = () => setTimeout(extractDeferred, 0);
-    window.addEventListener('sf:navigate', navHandler);
-    
-    ensureRouter();
-    
-    return () => {
-      el.removeEventListener('sf:hydrate', hydrateHandler);
-      window.removeEventListener('sf:navigate', navHandler);
-    };
-  });
 
-  const cleanProps = {}
-  for (const key in props) {
-    if (props[key] !== 'undefined' && props[key] !== undefined) {
-      cleanProps[key] = props[key];
+      const _ver = deferredVersion.value;
+      
+      const deferredProps = {};
+      for (const [key, sig] of deferredSignals) {
+        deferredProps[key] = sig.value;
+      }
+
+      const finalProps = { ...cleanProps, ...deferredProps };
+
+      return h(HMRErrorBoundary, { hmrVersion: hmrVer },
+        h(CurrentComponent, finalProps)
+      );
     }
-  }
 
-  const _ver = deferredVersion.value;
-  
-  const deferredProps = {};
-  for (const [key, sig] of deferredSignals) {
-    deferredProps[key] = sig.value;
-  }
-
-  const finalProps = { ...cleanProps, ...deferredProps };
-
-  return h(HMRErrorBoundary, { hmrVersion: hmrVer },
-    h(CurrentComponent, finalProps)
-  );
-}
-
-register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });
-`;
+    register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });
+  `;
 }
 
 /** Generates modules file using AST-based analysis. */
@@ -1053,7 +1040,9 @@ async function buildClient() {
     },
     plugins: [
       // Replace globalThis.__SF_DEV__ with build mode for HMR tree-shaking
-      replacePlugin({ "globalThis.__SF_DEV__": JSON.stringify(!args.production) }),
+      replacePlugin({
+        "globalThis.__SF_DEV__": JSON.stringify(!args.production),
+      }),
       {
         name: "raw-css-loader",
         resolveId(source: string, importer: string | undefined) {
@@ -1062,7 +1051,10 @@ async function buildClient() {
             const realPath = source.replace(/\?raw$/, "");
             if (importer) {
               const importerDir = importer.split("/").slice(0, -1).join("/");
-              return { id: join(importerDir, realPath) + "?raw", external: false };
+              return {
+                id: join(importerDir, realPath) + "?raw",
+                external: false,
+              };
             }
             return { id: realPath + "?raw", external: false };
           }
@@ -1076,7 +1068,7 @@ async function buildClient() {
               const content = await readFile(realPath, "utf-8");
               // Return as a module that exports the CSS string
               return {
-                code: `export default ${JSON.stringify(content)};`,
+                code: /* tsx */ `export default ${JSON.stringify(content)};`,
                 moduleType: "js",
               };
             } catch {
@@ -1285,7 +1277,10 @@ async function buildServer() {
   // Post-process all CSS files for minification
   if (args.production) {
     const cssFiles: string[] = [];
-    for await (const file of glob("?(.)*.css", { cwd: DIST_SERVER, withFileTypes: false })) {
+    for await (const file of glob("?(.)*.css", {
+      cwd: DIST_SERVER,
+      withFileTypes: false,
+    })) {
       cssFiles.push(file as string);
     }
     for (const cssFile of cssFiles) {

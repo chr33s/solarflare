@@ -1,7 +1,6 @@
-/** Abstraction layer over turbo-stream for encoding/decoding complex types. */
 import { encode, decode } from "turbo-stream";
 
-/** Serializes data to a string (non-streaming). */
+/** Serialize data to a string. */
 export async function serializeToString(data: unknown): Promise<string> {
   const stream = encode(data);
   const reader = stream.getReader();
@@ -16,7 +15,7 @@ export async function serializeToString(data: unknown): Promise<string> {
   return chunks.join("");
 }
 
-/** Parses serialized data from a string. */
+/** Parse serialized data from a string. */
 export async function parseFromString<T>(serialized: string): Promise<T> {
   const stream = new ReadableStream<string>({
     start(controller) {

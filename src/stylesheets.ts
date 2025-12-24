@@ -1,5 +1,3 @@
-/** Constructable Stylesheets manager using modern CSSOM APIs. */
-
 /** Feature detection for Constructable Stylesheets. */
 export const supportsConstructableStylesheets = (): boolean => {
   if (typeof window === "undefined") return false;
@@ -13,15 +11,10 @@ export const supportsConstructableStylesheets = (): boolean => {
 
 /** Stylesheet entry with metadata. */
 interface StylesheetEntry {
-  /** The CSSStyleSheet instance */
   sheet: CSSStyleSheet;
-  /** Original CSS source (for HMR diffing) */
   source: string;
-  /** Content hash for cache validation */
   hash: string;
-  /** Routes using this stylesheet */
   consumers: Set<string>;
-  /** Whether this is a global/layout stylesheet */
   isGlobal: boolean;
 }
 
@@ -38,7 +31,6 @@ class StylesheetManager {
     options: { isGlobal?: boolean; consumer?: string } = {},
   ): CSSStyleSheet | null {
     if (!this.#supported) {
-      // Fallback: inject <style> element
       this.#injectStyleElement(id, css);
       return null;
     }
@@ -47,7 +39,6 @@ class StylesheetManager {
     const hash = this.#hash(css);
 
     if (existing) {
-      // Update existing stylesheet if CSS changed
       if (existing.hash !== hash) {
         existing.sheet.replaceSync(css);
         existing.source = css;
@@ -59,7 +50,6 @@ class StylesheetManager {
       return existing.sheet;
     }
 
-    // Create new constructable stylesheet
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(css);
 
@@ -73,7 +63,6 @@ class StylesheetManager {
 
     this.#sheets.set(id, entry);
 
-    // Auto-adopt global stylesheets to document
     if (entry.isGlobal) {
       this.#adoptToDocument(sheet);
     }
