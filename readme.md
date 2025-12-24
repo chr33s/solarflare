@@ -3,15 +3,18 @@
 
 # Solarflare
 
-Streaming SSR for Preact + Cloudflare Workers with file-based routing and web component hydration.
+Cloudflare-optimized streaming SSR/CSR meta-framework built on web platform APIs, whilst retaining the DX of JSX / React|Preact.
 
 ## Features
 
-- File-based routing with SSR streaming
-- Web component hydration via `preact-custom-element`
-- SPA navigation (Navigation API + View Transitions)
-- Constructable Stylesheets
-- TypeScript
+- **Streaming SSR** — File-based routing with deferred promise streaming
+- **Web Components** — Hydration via `preact-custom-element`
+- **SPA Navigation** — Navigation API + View Transitions
+- **HMR** — Hot module replacement with scroll restoration
+- **Styles** — Constructable Stylesheets, critical CSS extraction
+- **Performance** — Early hints, route caching, preconnect hints
+- **Cloudflare** — Workers-optimized with edge caching
+- **TypeScript** — Full type safety
 
 ## Requirements
 
@@ -35,10 +38,11 @@ solarflare [options]
 
 ## Conventions
 
-| Directory | Purpose                               |
-| --------- | ------------------------------------- |
-| `./src`   | Original (source) human readable code |
-| `./dist`  | Compiled (distribution) output code   |
+| Directory  | Purpose                                                 |
+| ---------- | ------------------------------------------------------- |
+| `./src`    | Original (source) human readable code                   |
+| `./dist`   | Compiled (distribution) [client, server] output code    |
+| `./public` | Static assets, copied verbatim to dist/client directory |
 
 | File           | Purpose                          |
 | -------------- | -------------------------------- |
@@ -102,6 +106,19 @@ export default function Layout({ children }: { children: ComponentChildren }) {
 }
 ```
 
+### Deferred (Suspense like deferred renderer)
+
+```tsx
+import { Deferred } from "@chr33s/solarflare/client";
+
+<Deferred
+  priority="high"
+  fallback={<div>Loading additional content...</div>}
+>
+  ...
+</Deferred>
+```
+
 ### Performance Meta Tags
 
 ```tsx
@@ -125,6 +142,13 @@ export default define(MyComponent, { shadow: true })
 import { onHMREvent } from "@chr33s/solarflare/client"
 onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`))
 ```
+
+## Environment
+
+| File                    | Purpose                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| `WRANGLER_LOG`          | Set logging verbosity for both wrangler & console forwarding |
+| `WRANGLER_SEND_METRICS` | Disable sending anonymous usage data to Cloudflare           |
 
 ## Examples
 

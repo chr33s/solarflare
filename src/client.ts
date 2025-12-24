@@ -5,6 +5,9 @@ import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./store.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 
+// Re-export Deffered
+export { Deferred } from "./render-priority.ts";
+
 // Re-export head utilities for client-side head tag management
 export { installHeadHoisting, createHeadContext, setHeadContext };
 
