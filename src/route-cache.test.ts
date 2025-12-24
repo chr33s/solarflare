@@ -75,26 +75,26 @@ describe("ResponseCache", () => {
     cache = new ResponseCache(10);
   });
 
-  it("should store and retrieve responses", () => {
+  it("should store and retrieve responses", async () => {
     const response = new Response("Hello", { status: 200 });
-    cache.set("test-key", response, 60);
+    await cache.set("test-key", response, 60);
 
-    const cached = cache.get("test-key");
+    const cached = await cache.get("test-key");
     assert.ok(cached);
     assert.strictEqual(cached.status, 200);
   });
 
-  it("should return null for missing keys", () => {
-    const cached = cache.get("nonexistent");
+  it("should return null for missing keys", async () => {
+    const cached = await cache.get("nonexistent");
     assert.strictEqual(cached, null);
   });
 
   it("should clone responses on get", async () => {
     const response = new Response("Original body", { status: 200 });
-    cache.set("clone-test", response, 60);
+    await cache.set("clone-test", response, 60);
 
-    const cached1 = cache.get("clone-test");
-    const cached2 = cache.get("clone-test");
+    const cached1 = await cache.get("clone-test");
+    const cached2 = await cache.get("clone-test");
 
     assert.ok(cached1);
     assert.ok(cached2);
@@ -110,44 +110,44 @@ describe("ResponseCache", () => {
   it("should expire entries after maxAge", async () => {
     const response = new Response("Expired", { status: 200 });
     // Set with 0 second max age (immediately expired)
-    cache.set("expired-key", response, 0);
+    await cache.set("expired-key", response, 0);
 
     // Wait a tiny bit for time to pass
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const cached = cache.get("expired-key");
+    const cached = await cache.get("expired-key");
     assert.strictEqual(cached, null);
   });
 
-  it("should evict oldest entries when at capacity", () => {
+  it("should evict oldest entries when at capacity", async () => {
     const smallCache = new ResponseCache(3);
 
-    smallCache.set("key1", new Response("1"), 60);
-    smallCache.set("key2", new Response("2"), 60);
-    smallCache.set("key3", new Response("3"), 60);
-    smallCache.set("key4", new Response("4"), 60); // Should evict key1
+    await smallCache.set("key1", new Response("1"), 60);
+    await smallCache.set("key2", new Response("2"), 60);
+    await smallCache.set("key3", new Response("3"), 60);
+    await smallCache.set("key4", new Response("4"), 60); // Should evict key1
 
-    assert.strictEqual(smallCache.get("key1"), null);
-    assert.ok(smallCache.get("key4"));
+    assert.strictEqual(await smallCache.get("key1"), null);
+    assert.ok(await smallCache.get("key4"));
   });
 
-  it("should preserve response headers", () => {
+  it("should preserve response headers", async () => {
     const response = new Response("Test", {
       headers: { "X-Custom": "value", "Content-Type": "text/plain" },
     });
-    cache.set("headers-test", response, 60);
+    await cache.set("headers-test", response, 60);
 
-    const cached = cache.get("headers-test");
+    const cached = await cache.get("headers-test");
     assert.ok(cached);
     assert.strictEqual(cached.headers.get("X-Custom"), "value");
     assert.strictEqual(cached.headers.get("Content-Type"), "text/plain");
   });
 
-  it("should preserve response status", () => {
+  it("should preserve response status", async () => {
     const response = new Response("Created", { status: 201, statusText: "Created" });
-    cache.set("status-test", response, 60);
+    await cache.set("status-test", response, 60);
 
-    const cached = cache.get("status-test");
+    const cached = await cache.get("status-test");
     assert.ok(cached);
     assert.strictEqual(cached.status, 201);
     assert.strictEqual(cached.statusText, "Created");

@@ -28,9 +28,7 @@ export const DEFAULT_CACHE_CONFIGS: Record<string, RouteCacheConfig> = {
   },
 };
 
-/**
- * Generates cache control header value.
- */
+/** Generates cache control header value. */
 export function generateCacheControl(config: RouteCacheConfig, isPrivate: boolean): string {
   const directives: string[] = [];
 
@@ -53,68 +51,71 @@ export function generateCacheControl(config: RouteCacheConfig, isPrivate: boolea
   return directives.join(", ");
 }
 
-/**
- * In-memory LRU cache for edge responses.
- * In production, use Cloudflare Cache API or KV.
+/** Response cache with Cloudflare Cache API.
+ * Falls back to in-memory LRU cache when Cache API is unavailable.
  */
 export class ResponseCache {
-  #cache = new Map<string, { response: Response; expires: number }>();
+  #cache?: Cache;
+  #memory = new Map<string, { response: Response; expires: number }>();
   #maxSize: number;
 
   constructor(maxSize = 100) {
     this.#maxSize = maxSize;
+    if (typeof caches !== "undefined") {
+      this.#cache = (caches as any).default;
+    }
   }
 
-  /**
-   * Gets a cached response if valid.
-   */
-  get(key: string): Response | null {
-    const entry = this.#cache.get(key);
+  async get(key: string): Promise<Response | null> {
+    if (this.#cache) {
+      const res = await this.#cache.match(this.#toRequest(key));
+      return res ?? null;
+    }
+    const entry = this.#memory.get(key);
     if (!entry) return null;
-
     if (Date.now() > entry.expires) {
-      this.#cache.delete(key);
+      this.#memory.delete(key);
       return null;
     }
-
-    // Clone the response (body can only be read once)
     return entry.response.clone();
   }
 
-  /**
-   * Caches a response.
-   */
-  set(key: string, response: Response, maxAge: number): void {
-    // Evict oldest entries if at capacity
-    while (this.#cache.size >= this.#maxSize) {
-      const firstKey = this.#cache.keys().next().value;
-      if (firstKey) this.#cache.delete(firstKey);
+  async set(key: string, response: Response, maxAge: number): Promise<void> {
+    if (this.#cache) {
+      const headers = new Headers(response.headers);
+      headers.set("Cache-Control", `public, max-age=${maxAge}`);
+      await this.#cache.put(
+        this.#toRequest(key),
+        new Response(response.clone().body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        }),
+      );
+      return;
     }
-
-    this.#cache.set(key, {
-      response: response.clone(),
-      expires: Date.now() + maxAge * 1000,
-    });
+    while (this.#memory.size >= this.#maxSize) {
+      const firstKey = this.#memory.keys().next().value;
+      if (firstKey) this.#memory.delete(firstKey);
+    }
+    this.#memory.set(key, { response: response.clone(), expires: Date.now() + maxAge * 1000 });
   }
 
-  /**
-   * Generates a cache key for a request.
-   */
+  #toRequest(key: string): Request {
+    return new Request(`https://cache.local/${encodeURIComponent(key)}`);
+  }
+
   static generateKey(request: Request, params: Record<string, string>): string {
     const url = new URL(request.url);
-    // Include pathname and sorted params
     const sortedParams = Object.entries(params)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${k}=${v}`)
       .join("&");
-
-    return `${url.pathname}? ${sortedParams}`;
+    return `${url.pathname}?${sortedParams}`;
   }
 }
 
-/**
- * Cache-aware request handler wrapper.
- */
+/** Cache-aware request handler wrapper */
 export async function withCache(
   request: Request,
   params: Record<string, string>,
@@ -134,7 +135,7 @@ export async function withCache(
     : ResponseCache.generateKey(request, params);
 
   // Try cache first
-  const cached = cache.get(key);
+  const cached = await cache.get(key);
   if (cached) {
     // Add cache hit header for debugging
     const headers = new Headers(cached.headers);
@@ -151,7 +152,7 @@ export async function withCache(
 
   // Only cache successful responses
   if (response.ok && config.maxAge > 0) {
-    cache.set(key, response, config.maxAge);
+    await cache.set(key, response, config.maxAge);
   }
 
   // Add cache headers

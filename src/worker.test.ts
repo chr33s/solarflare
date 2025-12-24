@@ -1164,8 +1164,8 @@ describe("Route cache integration", () => {
 
     // Test response cache
     const cache = new ResponseCache(10);
-    cache.set("test", new Response("cached"), 60);
-    const cached = cache.get("test");
+    await cache.set("test", new Response("cached"), 60);
+    const cached = await cache.get("test");
     assert.ok(cached);
     assert.strictEqual(await cached.text(), "cached");
 
