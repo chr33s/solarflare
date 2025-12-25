@@ -1,3 +1,5 @@
+import { peekRuntime } from "./runtime.ts";
+
 /** Generates inline script to preload stylesheets. */
 export function generateStylePreloadScript(
   stylesheets: Array<{ id: string; css: string }>,
@@ -18,11 +20,12 @@ export function generateStylePreloadScript(
       (function() {
         if (!('adoptedStyleSheets' in Document.prototype)) return;
         var data = JSON.parse(document.getElementById('sf-preloaded-styles').textContent);
-        window.__sfPreloadedStyles = new Map();
+        var g = globalThis.__solarflare__ = globalThis.__solarflare__ || {};
+        g.preloadedStyles = new Map();
         data.forEach(function(s) {
           var sheet = new CSSStyleSheet();
           sheet.replaceSync(s.css);
-          window.__sfPreloadedStyles.set(s.id, sheet);
+          g.preloadedStyles.set(s.id, sheet);
         });
       })();
     </script>
@@ -31,18 +34,15 @@ export function generateStylePreloadScript(
 
 /** Retrieves preloaded stylesheets. */
 export function getPreloadedStylesheet(id: string): CSSStyleSheet | null {
-  if (typeof window === "undefined") return null;
-  const preloaded = (window as any).__sfPreloadedStyles as Map<string, CSSStyleSheet> | undefined;
-  return preloaded?.get(id) ?? null;
+  const runtime = peekRuntime();
+  return runtime?.preloadedStyles?.get(id) ?? null;
 }
 
 /** Hydrates preloaded stylesheets into the manager. */
 export function hydratePreloadedStyles(_manager: {
   register: (id: string, css: string, opts?: any) => CSSStyleSheet | null;
 }): void {
-  if (typeof window === "undefined") return;
-
-  const preloaded = (window as any).__sfPreloadedStyles as Map<string, CSSStyleSheet> | undefined;
+  const preloaded = peekRuntime()?.preloadedStyles;
   if (!preloaded) return;
 
   console.log(`[styles] Hydrated ${preloaded.size} preloaded stylesheets`);

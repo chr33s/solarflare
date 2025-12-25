@@ -18,11 +18,12 @@ describe("generateStylePreloadScript", () => {
         (function() {
           if (!('adoptedStyleSheets' in Document.prototype)) return;
           var data = JSON.parse(document.getElementById('sf-preloaded-styles').textContent);
-          window.__sfPreloadedStyles = new Map();
+          var g = globalThis.__solarflare__ = globalThis.__solarflare__ || {};
+          g.preloadedStyles = new Map();
           data.forEach(function(s) {
             var sheet = new CSSStyleSheet();
             sheet.replaceSync(s.css);
-            window.__sfPreloadedStyles.set(s.id, sheet);
+            g.preloadedStyles.set(s.id, sheet);
           });
         })();
       </script>
@@ -71,10 +72,11 @@ describe("generateStylePreloadScript", () => {
     assert.ok(result.includes("Document.prototype"));
   });
 
-  it("should use __sfPreloadedStyles global", () => {
+  it("should use globalThis.__solarflare__ namespace", () => {
     const result = generateStylePreloadScript([{ id: "test.css", css: ".test {}" }]);
 
-    assert.ok(result.includes("window.__sfPreloadedStyles"));
+    assert.ok(result.includes("globalThis.__solarflare__"));
+    assert.ok(result.includes("g.preloadedStyles"));
     assert.ok(result.includes("new Map()"));
   });
 

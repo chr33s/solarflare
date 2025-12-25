@@ -3,14 +3,17 @@ import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./store.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
+import { getRuntime, peekRuntime, clearRuntime } from "./runtime.ts";
 
 export { Deferred } from "./render-priority.ts";
 export { installHeadHoisting, createHeadContext, setHeadContext };
+export { getRuntime, peekRuntime, clearRuntime };
 
 /** Initializes client-side store from SSR hydration data. */
 export async function initClient(): Promise<void> {
-  const headCtx = createHeadContext();
-  setHeadContext(headCtx);
+  const runtime = getRuntime();
+  runtime.headContext ??= createHeadContext();
+  setHeadContext(runtime.headContext);
   installHeadHoisting();
 
   await hydrateStore();
