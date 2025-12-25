@@ -174,15 +174,7 @@ export class Router {
             })[c] || c,
         );
 
-      app.innerHTML = `
-        <div class="error-page">
-          <h1>Something went wrong</h1>
-          <p>${escapeHtml(error.message)}</p>
-          <p class="error-url">Failed to load: ${escapeHtml(url.pathname)}</p>
-          <button type="button" onclick="location.reload()">Try again</button>
-          <a href="/">Go home</a>
-        </div>
-      `;
+      app.innerHTML = /* html */ `<div><h1>Error</h1><p>${escapeHtml(error.message)}</p></div>`;
     }
   }
 

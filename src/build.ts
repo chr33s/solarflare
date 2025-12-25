@@ -474,23 +474,30 @@ function generateChunkedClientEntry(
   // Inline the routes manifest to avoid fetch
   const inlinedRoutes = JSON.stringify(routesManifest);
 
-  // Generate CSS imports as raw strings for Constructable Stylesheets
-  const cssImports = cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
+  // Generate CSS imports as raw strings for Constructable Stylesheets (dev only)
+  // In production, CSS is loaded via <link> tags from SSR - no need to inline
+  const cssImports = args.production
+    ? ""
+    : cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
 
-  const cssRegistrations = cssFiles
-    .map(
-      (file, i) => /* tsx */ `
+  const cssRegistrations = args.production
+    ? ""
+    : cssFiles
+        .map(
+          (file, i) => /* tsx */ `
         const preloaded${i} = getPreloadedStylesheet('${file}');
         if (!preloaded${i}) {
           stylesheets.register('${file}', css${i}, { consumer: '${meta.tag}' });
         }
       `,
-    )
-    .join("");
+        )
+        .join("");
 
-  const cssHmr = cssFiles
-    .map(
-      (file, _i) => /* tsx */ `
+  const cssHmr = args.production
+    ? ""
+    : cssFiles
+        .map(
+          (file, _i) => /* tsx */ `
         hmr.on('sf:css:${file}', (newCss) => {
           if (newCss) {
             stylesheets.update('${file}', newCss);
@@ -498,11 +505,11 @@ function generateChunkedClientEntry(
           }
         });
       `,
-    )
-    .join("");
+        )
+        .join("");
 
   const stylesheetImports =
-    cssFiles.length > 0
+    cssFiles.length > 0 && !args.production
       ? /* tsx */ `
           import { stylesheets, supportsConstructableStylesheets, getPreloadedStylesheet } from '@chr33s/solarflare/client';
           ${cssImports}
@@ -510,7 +517,7 @@ function generateChunkedClientEntry(
       : "";
 
   const stylesheetSetup =
-    cssFiles.length > 0
+    cssFiles.length > 0 && !args.production
       ? /* tsx */ `
         if (typeof document !== 'undefined') {
           if (supportsConstructableStylesheets()) {
@@ -529,7 +536,7 @@ function generateChunkedClientEntry(
       : "";
 
   const stylesheetHmr =
-    cssFiles.length > 0
+    cssFiles.length > 0 && !args.production
       ? /* tsx */ `
         // CSS Hot Module Replacement via Constructable Stylesheets
         ${cssHmr}
@@ -907,17 +914,11 @@ async function buildClient() {
         }
 
         const cssRelativePath = cssSourcePath.replace(APP_DIR + "/", "");
-        let cssContent = await readText(cssSourcePath);
-
-        // Minify CSS in production
-        if (args.production) {
-          const result = transform({
-            code: Buffer.from(cssContent),
-            filename: cssSourcePath,
-            minify: true,
-          });
-          cssContent = result.code.toString();
-        }
+        const cssContent = transform({
+          code: Buffer.from(await readText(cssSourcePath)),
+          filename: cssSourcePath,
+          minify: args.production,
+        }).code.toString();
 
         const cssHash = hash(cssContent);
         const cssBase = normalizeAssetPath(cssRelativePath.replace(/\.css$/, ""));
