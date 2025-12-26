@@ -30,21 +30,21 @@
     "@preact/signals": "^2.5.1",
     "diff-dom-streaming": "^0.6.6",
     "lightningcss": "^1.28.0",
-    "preact": "^10.28.0",
+    "preact": "^10.28.1",
     "preact-custom-element": "^4.6.0",
     "preact-render-to-string": "^6.6.4",
-    "rolldown": "^1.0.0-beta.55",
+    "rolldown": "^1.0.0-beta.57",
     "turbo-stream": "^3.1.0"
   },
   "devDependencies": {
     "@preact/signals-debug": "^1.0.3",
     "@types/node": "^25.0.3",
-    "oxfmt": "^0.18.0",
-    "oxlint": "^1.33.0",
-    "oxlint-tsgolint": "^0.9.1",
+    "oxfmt": "^0.20.0",
+    "oxlint": "^1.35.0",
+    "oxlint-tsgolint": "^0.10.0",
     "playwright": "^1.57.0",
-    "typescript": "^6.0.0-dev.20251217",
-    "wrangler": "^4.55.0"
+    "typescript": "^5.9.3",
+    "wrangler": "^4.56.0"
   },
   "engines": {
     "node": ">=24.12.0"
