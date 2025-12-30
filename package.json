@@ -3,6 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
+  "bin": "./src/build.ts",
+  "files": [
+    "src",
+    "tsconfig.json",
+    "!src/*.test.ts"
+  ],
   "type": "module",
   "exports": {
     ".": {
@@ -13,14 +19,6 @@
     "./tsconfig.json": "./tsconfig.json",
     "./worker": "./src/worker.ts"
   },
-  "bin": {
-    "solarflare": "./src/build.ts"
-  },
-  "files": [
-    "!src/*.test.ts",
-    "src",
-    "tsconfig.json"
-  ],
   "scripts": {
     "check": "oxfmt --check && oxlint --type-aware --type-check",
     "fix": "oxfmt && oxlint --type-aware --fix",
@@ -45,6 +43,9 @@
     "playwright": "^1.57.0",
     "typescript": "^5.9.3",
     "wrangler": "^4.56.0"
+  },
+  "optionalDependencies": {
+    "ts-morph": "27.0.2"
   },
   "engines": {
     "node": ">=24.12.0"

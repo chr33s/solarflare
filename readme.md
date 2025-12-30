@@ -162,6 +162,13 @@ onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`))
 npm install && npm run dev
 ```
 
+## Codemod
+
+```sh
+npm install --save-optional
+npx solarflare --codemod ./app
+```
+
 ## License
 
 MIT

@@ -108,7 +108,8 @@ async function getPackageImports(): Promise<Record<string, string>> {
 }
 
 // CLI entry point - parse args early so they're available
-const { values: args } = parseArgs({
+const { values: args, positionals } = parseArgs({
+  allowPositionals: true,
   args: argv.slice(2),
   options: {
     production: {
@@ -121,6 +122,8 @@ const { values: args } = parseArgs({
     clean: { type: "boolean", short: "c", default: false },
     debug: { type: "boolean", short: "d", default: false },
     sourcemap: { type: "boolean", default: false },
+    codemod: { type: "boolean", default: false },
+    dry: { type: "boolean", default: false },
   },
 });
 
@@ -1333,7 +1336,7 @@ async function build() {
 }
 
 /** Watch mode - rebuilds on file changes and optionally starts dev server. */
-async function watchMode() {
+async function watchBuild() {
   console.log("\n⚡ Solarflare Dev Mode\n");
 
   try {
@@ -1413,8 +1416,13 @@ async function watchMode() {
   await new Promise(() => {});
 }
 
-if (args.watch) {
-  void watchMode();
-} else {
-  void build();
+if (import.meta.main) {
+  if (args.codemod) {
+    const { codemod } = await import("./codemod.ts");
+    codemod(positionals, args);
+  } else if (args.watch) {
+    void watchBuild();
+  } else {
+    void build();
+  }
 }
