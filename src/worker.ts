@@ -10,6 +10,7 @@ import {
   type ModuleMap,
 } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
+import { isDevToolsRequest, handleDevToolsRequest } from "./devtools-json.ts";
 import { isHmrRequest, handleHmrRequest } from "./hmr-server.ts";
 export { broadcastHmrUpdate, type HmrEventType } from "./hmr-server.ts";
 import {
@@ -118,6 +119,11 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   if (isConsoleRequest(request)) {
     const logLevel = env?.WRANGLER_LOG ?? "log";
     return processConsoleLogs(request, logLevel);
+  }
+
+  // Handle Chrome DevTools project settings in dev mode
+  if (isDevToolsRequest(request)) {
+    return handleDevToolsRequest();
   }
 
   const headers = {
