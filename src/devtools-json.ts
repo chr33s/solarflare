@@ -32,9 +32,7 @@ export function isDevToolsRequest(request: Request): boolean {
 
 /** Handles devtools.json request. Returns the project settings JSON. */
 export function handleDevToolsRequest(options: DevToolsOptions = {}): Response {
-  const root =
-    options.projectRoot ??
-    (typeof process !== "undefined" ? process.cwd() : "/");
+  const root = options.projectRoot ?? (typeof process !== "undefined" ? process.cwd() : "/");
   const uuid = getOrCreateUuid(options.uuid);
 
   const devtoolsJson: DevToolsJSON = {
