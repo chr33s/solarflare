@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "dom"],
+    "types": ["@chr33s/solarflare"]
+  },
+  "imports": {
+    "@chr33s/solarflare": "file:../../",
+    "@preact/signals": "npm:@preact/signals@^2.5.1",
+    "@std/http": "jsr:@std/http@^0.224.0",
+    "preact": "npm:preact@^10.28.1",
+    "preact/jsx-runtime": "npm:preact@^10.28.1/jsx-runtime",
+    "preact-custom-element": "npm:preact-custom-element@^4.6.0",
+    "preact-render-to-string": "npm:preact-render-to-string@^6.6.5",
+    "preact-render-to-string/stream": "npm:preact-render-to-string@^6.6.5/stream"
+  },
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "build": "deno run -A ../../src/build.ts",
+    "start": "deno run -A ./dist/server/index.js"
+  }
+}
