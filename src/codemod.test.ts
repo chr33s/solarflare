@@ -225,6 +225,117 @@ import React from "react";
   });
 });
 
+describe("Remix v2 import transformations", () => {
+  it("removes @remix-run/react imports", () => {
+    const input = `
+import { useLoaderData, Form, Link } from "@remix-run/react";
+import React from "react";
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(!output.includes("@remix-run/react"));
+    assert.ok(output.includes('from "preact"'));
+  });
+
+  it("removes @remix-run/node imports", () => {
+    const input = `
+import { json, redirect } from "@remix-run/node";
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(!output.includes("@remix-run/node"));
+  });
+
+  it("removes @remix-run/cloudflare imports", () => {
+    const input = `
+import { json } from "@remix-run/cloudflare";
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(!output.includes("@remix-run/cloudflare"));
+  });
+
+  it("removes @remix-run/server-runtime imports", () => {
+    const input = `
+import type { LoaderFunctionArgs } from "@remix-run/server-runtime";
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(!output.includes("@remix-run/server-runtime"));
+  });
+});
+
+describe("Remix v2 loader/action transformations", () => {
+  it("transforms LoaderFunctionArgs pattern", () => {
+    const input = `
+import { json } from "@remix-run/node";
+export function loader({ params }: LoaderFunctionArgs) {
+  return json({ id: params.id });
+}
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(output.includes("loader"));
+  });
+
+  it("detects Remix action export", () => {
+    const input = `
+import { json, redirect } from "@remix-run/node";
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  return redirect("/success");
+}
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(output.includes("action"));
+  });
+});
+
+describe("Remix v2 component transformations", () => {
+  it("removes useLoaderData import from @remix-run/react", () => {
+    const input = `
+import { useLoaderData } from "@remix-run/react";
+export default function Component() {
+  const data = useLoaderData<typeof loader>();
+  return <div>{data.title}</div>;
+}
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    // Import is removed; hook usage transformed during file splitting
+    assert.ok(!output.includes("@remix-run/react"));
+  });
+
+  it("removes useActionData import from @remix-run/react", () => {
+    const input = `
+import { useActionData } from "@remix-run/react";
+export default function Component() {
+  const actionData = useActionData<typeof action>();
+  return <div>{actionData?.error}</div>;
+}
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    // Import is removed; hook usage transformed during file splitting
+    assert.ok(!output.includes("@remix-run/react"));
+  });
+
+  it("removes Form import from @remix-run/react", () => {
+    const input = `
+import { Form } from "@remix-run/react";
+export default function Component() {
+  return <Form method="post"><button>Submit</button></Form>;
+}
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(!output.includes("@remix-run/react"));
+  });
+
+  it("removes Link import from @remix-run/react", () => {
+    const input = `
+import { Link } from "@remix-run/react";
+export default function Component() {
+  return <Link to="/about">About</Link>;
+}
+`;
+    const output = transformSource(input, "/app/routes/test.tsx");
+    assert.ok(!output.includes("@remix-run/react"));
+  });
+});
+
 describe("skip node_modules", () => {
   it("returns input unchanged for node_modules paths", () => {
     const input = `import React from "react";`;

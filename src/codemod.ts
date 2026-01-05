@@ -2,6 +2,7 @@
  * Codemod to transform:
  * react -> preact
  * react-router (framework mode) -> solarflare
+ * remix v2 (@remix-run/*) -> solarflare
  */
 
 import * as fs from "fs";
@@ -23,6 +24,16 @@ const REACT_TO_PREACT_IMPORTS: Record<string, string> = {
   "react/jsx-runtime": "preact/jsx-runtime",
   "react/jsx-dev-runtime": "preact/jsx-dev-runtime",
 };
+
+/** Remix v2 modules to filter/transform */
+const REMIX_MODULES = [
+  "@remix-run/react",
+  "@remix-run/node",
+  "@remix-run/cloudflare",
+  "@remix-run/deno",
+  "@remix-run/server-runtime",
+  "@remix-run/router",
+] as const;
 
 /** React hooks → Preact hooks mapping */
 const REACT_HOOKS_TO_PREACT: Record<string, { source: string; name: string }> = {
@@ -112,6 +123,11 @@ export function transformer(filePath: string, options: TransformOptions = {}): s
   return sourceFile.getFullText();
 }
 
+/** Check if module is a Remix package */
+function isRemixModule(module: string): boolean {
+  return REMIX_MODULES.some((m) => module === m || module.startsWith(`${m}/`));
+}
+
 /** Transform React imports to Preact equivalents */
 function transformReactToPreact(sourceFile: SourceFile): void {
   const hooksToAdd: string[] = [];
@@ -185,6 +201,11 @@ function transformReactToPreact(sourceFile: SourceFile): void {
       importDecl.setModuleSpecifier("preact");
       importDecl.removeNamedImports();
       importDecl.addNamedImports(transformedImports);
+    }
+
+    // Handle Remix v2 imports (@remix-run/*)
+    if (isRemixModule(moduleSpecifier)) {
+      importsToRemove.push(i);
     }
   }
 
@@ -295,7 +316,7 @@ function generateServerFile(sourceFile: SourceFile, routeModule: RouteModule): s
     const source = importDecl.getModuleSpecifierValue();
     if (
       !source.includes("react-router") &&
-      !source.includes("@remix-run") &&
+      !isRemixModule(source) &&
       !source.includes("react") &&
       !source.includes("react-dom")
     ) {
@@ -337,7 +358,7 @@ function generateServerFile(sourceFile: SourceFile, routeModule: RouteModule): s
   return serverCode.join("\n");
 }
 
-/** Transform React Router loader to Solarflare server handler */
+/** Transform React Router/Remix loader to Solarflare server handler */
 function transformLoaderToServerHandler(loaderCode: string): string {
   let body = loaderCode
     .replace(/export (async )?function loader\s*\([^)]*\)\s*{/, "")
@@ -348,6 +369,7 @@ function transformLoaderToServerHandler(loaderCode: string): string {
     .replace(/import\s+{\s*json\s*}/g, "// json() not needed in Solarflare")
     .replace(/return\s+json\(/g, "return ")
     .replace(/\);\s*$/gm, ";")
+    // React Router v7 patterns
     .replace(
       /{\s*params\s*}:\s*Route\.LoaderArgs/g,
       "request: Request, params: Record<string, string>",
@@ -355,12 +377,27 @@ function transformLoaderToServerHandler(loaderCode: string): string {
     .replace(
       /{\s*request,?\s*params\s*}:\s*Route\.LoaderArgs/g,
       "request: Request, params: Record<string, string>",
-    );
+    )
+    // Remix v2 patterns
+    .replace(
+      /{\s*params\s*}:\s*LoaderFunctionArgs/g,
+      "request: Request, params: Record<string, string>",
+    )
+    .replace(
+      /{\s*request,?\s*params\s*}:\s*LoaderFunctionArgs/g,
+      "request: Request, params: Record<string, string>",
+    )
+    .replace(
+      /{\s*params,?\s*request\s*}:\s*LoaderFunctionArgs/g,
+      "request: Request, params: Record<string, string>",
+    )
+    // Handle defer() -> streaming props
+    .replace(/return\s+defer\(/g, "return ");
 
   return body;
 }
 
-/** Transform React Router action to Solarflare server handler */
+/** Transform React Router/Remix action to Solarflare server handler */
 function transformActionToServerHandler(actionCode: string): string {
   let body = actionCode
     .replace(/export (async )?function action\s*\([^)]*\)\s*{/, "")
@@ -375,6 +412,10 @@ function transformActionToServerHandler(actionCode: string): string {
     .replace(/return\s+json\(/g, "return ")
     .replace(
       /return\s+redirect\(/g,
+      "return new Response(null, { status: 302, headers: { Location: ",
+    )
+    .replace(
+      /return\s+redirectDocument\(/g,
       "return new Response(null, { status: 302, headers: { Location: ",
     )
     .replace(/\);\s*$/gm, " } });");
@@ -402,11 +443,20 @@ function generateClientFile(sourceFile: SourceFile, routeModule: RouteModule): s
       importCode = transformReactRouterImports(importCode);
     }
 
+    // Handle Remix imports
+    if (isRemixModule(source)) {
+      importCode = transformReactRouterImports(importCode);
+    }
+
     if (
       importCode &&
       !importCode.includes("LoaderArgs") &&
       !importCode.includes("ActionArgs") &&
-      !importCode.includes("ComponentProps")
+      !importCode.includes("ComponentProps") &&
+      !importCode.includes("LoaderFunctionArgs") &&
+      !importCode.includes("ActionFunctionArgs") &&
+      !importCode.includes("MetaFunction") &&
+      !importCode.includes("LinksFunction")
     ) {
       imports.push(importCode);
     }
@@ -433,15 +483,34 @@ function generateClientFile(sourceFile: SourceFile, routeModule: RouteModule): s
       .replace(/React\.FC</g, "FunctionComponent<")
       .replace(/: React\.FC/g, ": FunctionComponent")
       .replace(/: FC</g, ": FunctionComponent<")
+      // React Router v7 patterns
       .replace(
         /export default function (\w+)\s*\(\s*{\s*loaderData\s*}:\s*Route\.ComponentProps\s*\)/g,
         "export default function $1(props: any)",
       )
+      // Remix v2 patterns - useLoaderData hook
+      .replace(/const\s+(\w+)\s*=\s*useLoaderData<[^>]*>\(\)/g, "const $1 = props")
+      .replace(/const\s+(\w+)\s*=\s*useLoaderData\(\)/g, "const $1 = props")
+      .replace(/useLoaderData<[^>]*>\(\)/g, "props")
       .replace(/useLoaderData\(\)/g, "props")
+      // Remix v2 patterns - useActionData hook
+      .replace(/const\s+(\w+)\s*=\s*useActionData<[^>]*>\(\)/g, "const $1 = props.actionData")
+      .replace(/const\s+(\w+)\s*=\s*useActionData\(\)/g, "const $1 = props.actionData")
+      .replace(/useActionData<[^>]*>\(\)/g, "props.actionData")
       .replace(/useActionData\(\)/g, "props.actionData")
+      // Remix v2 patterns - useFetcher
+      .replace(/const\s+(\w+)\s*=\s*useFetcher<[^>]*>\(\)/g, "/* TODO: migrate $1 fetcher */")
+      .replace(/const\s+(\w+)\s*=\s*useFetcher\(\)/g, "/* TODO: migrate $1 fetcher */")
+      // Form component transformations
       .replace(/<Form /g, "<form ")
       .replace(/<\/Form>/g, "</form>")
-      .replace(/import\s*{\s*Form\s*}\s*from\s*["']react-router["'];?\s*/g, "");
+      .replace(/import\s*{\s*Form\s*}\s*from\s*["']react-router["'];?\s*/g, "")
+      .replace(/import\s*{\s*Form\s*}\s*from\s*["']@remix-run\/react["'];?\s*/g, "")
+      // Link/NavLink transformations
+      .replace(/<Link\s+to=/g, "<a href=")
+      .replace(/<\/Link>/g, "</a>")
+      .replace(/<NavLink\s+to=/g, "<a href=")
+      .replace(/<\/NavLink>/g, "</a>");
 
     componentCode = componentCode
       .replace(
@@ -469,7 +538,7 @@ function transformReactImportToPreact(importStatement: string, source: string): 
   return importStatement;
 }
 
-/** Transform React Router imports to Solarflare equivalents */
+/** Transform React Router/Remix imports to Solarflare equivalents */
 function transformReactRouterImports(importStatement: string): string {
   if (importStatement.includes("useNavigate") || importStatement.includes("Link")) {
     return `import { navigate } from '@chr33s/solarflare/client';`;
@@ -477,6 +546,24 @@ function transformReactRouterImports(importStatement: string): string {
 
   if (importStatement.includes("Outlet")) {
     return `/* Outlet not needed - use { children } prop in layouts */`;
+  }
+
+  // Remix-specific components that need transformation
+  if (importStatement.includes("Form")) {
+    return `/* Form -> use native <form> with action props */`;
+  }
+
+  if (importStatement.includes("NavLink")) {
+    return `import { navigate } from '@chr33s/solarflare/client';`;
+  }
+
+  // Meta/Links/Scripts are handled by Solarflare's head management
+  if (
+    importStatement.includes("Meta") ||
+    importStatement.includes("Links") ||
+    importStatement.includes("Scripts")
+  ) {
+    return `/* Meta/Links/Scripts -> use Solarflare head management */`;
   }
 
   return "";
