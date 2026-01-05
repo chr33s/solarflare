@@ -1,0 +1,16 @@
+{
+  "name": "@chr33s/solarflare-examples-bun",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "solarflare",
+    "start": "bun run ./dist/server/index.js"
+  },
+  "dependencies": {
+    "@chr33s/solarflare": "file:../../"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.16"
+  }
+}
