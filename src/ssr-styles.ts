@@ -1,4 +1,5 @@
 import { peekRuntime } from "./runtime.ts";
+import { escapeJsonForHtml } from "./serialize.ts";
 
 /** Generates inline script to preload stylesheets. */
 export function generateStylePreloadScript(
@@ -6,15 +7,9 @@ export function generateStylePreloadScript(
 ): string {
   if (stylesheets.length === 0) return "";
 
-  // Serialize stylesheets for client
-  const data = stylesheets.map(({ id, css }) => ({
-    id,
-    css: css.replace(/</g, "\\u003c").replace(/>/g, "\\u003e"),
-  }));
-
   return /* tsx */ `
     <script type="application/json" id="sf-preloaded-styles">
-      ${JSON.stringify(data)}
+      ${escapeJsonForHtml(stylesheets)}
     </script>
     <script>
       (function() {

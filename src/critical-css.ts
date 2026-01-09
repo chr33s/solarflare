@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { escapeJsonForHtml } from "./serialize.ts";
 
 /** Critical CSS cache entry. */
 interface CriticalCssEntry {
@@ -85,7 +86,7 @@ export function generateCssFallback(stylesheets: string[]): string {
 export function generateAsyncCssLoader(stylesheets: string[]): string {
   if (stylesheets.length === 0) return "";
 
-  const hrefs = JSON.stringify(stylesheets);
+  const hrefs = escapeJsonForHtml(stylesheets);
 
   return /* html */ `
     <script>

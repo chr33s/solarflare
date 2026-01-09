@@ -1,35 +1,8 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
+import { generateStylePreloadScript } from "./ssr-styles.ts";
 
 describe("generateStylePreloadScript", () => {
-  const generateStylePreloadScript = (stylesheets: Array<{ id: string; css: string }>): string => {
-    if (stylesheets.length === 0) return "";
-
-    const data = stylesheets.map(({ id, css }) => ({
-      id,
-      css: css.replace(/</g, "\\u003c").replace(/>/g, "\\u003e"),
-    }));
-
-    return /* html */ `
-      <script type="application/json" id="sf-preloaded-styles">
-        ${JSON.stringify(data)}
-      </script>
-      <script>
-        (function() {
-          if (!('adoptedStyleSheets' in Document.prototype)) return;
-          var data = JSON.parse(document.getElementById('sf-preloaded-styles').textContent);
-          var g = globalThis.__solarflare__ = globalThis.__solarflare__ || {};
-          g.preloadedStyles = new Map();
-          data.forEach(function(s) {
-            var sheet = new CSSStyleSheet();
-            sheet.replaceSync(s.css);
-            g.preloadedStyles.set(s.id, sheet);
-          });
-        })();
-      </script>
-    `;
-  };
-
   it("should return empty string for no stylesheets", () => {
     const result = generateStylePreloadScript([]);
     assert.strictEqual(result, "");

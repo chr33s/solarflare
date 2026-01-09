@@ -1,6 +1,7 @@
 import { type FunctionComponent, type VNode, h } from "preact";
 import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
 import { parsePath } from "./paths.ts";
+import { escapeJsonForHtml } from "./serialize.ts";
 import {
   initStore,
   setPathname,
@@ -555,7 +556,7 @@ function createDeferredStream(
   /** Builds data island HTML with deferred hydration trigger. */
   async function buildDeferredHtml(dataIslandId: string, data: unknown, hydrateScriptId: string) {
     const dataIsland = await serializeDataIsland(dataIslandId, data);
-    const hydrationDetail = JSON.stringify({ tag, id: dataIslandId });
+    const hydrationDetail = escapeJsonForHtml({ tag, id: dataIslandId });
     const hydrationScript = /* html */ `<script id="${hydrateScriptId}">setTimeout(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})),0)</script>`;
     return dataIsland + hydrationScript;
   }
@@ -599,7 +600,7 @@ function createDeferredStream(
             enqueueDeferredChunk(html);
           })
           .catch((err) => {
-            const errorScript = /* html */ `<script>console.error("[solarflare] Deferred error (${JSON.stringify(key)}):", ${JSON.stringify((err as Error).message)})</script>`;
+            const errorScript = /* html */ `<script>console.error("[solarflare] Deferred error (${escapeJsonForHtml(key)}):", ${escapeJsonForHtml((err as Error).message)})</script>`;
             enqueueDeferredChunk(errorScript);
           })
           .finally(() => {
