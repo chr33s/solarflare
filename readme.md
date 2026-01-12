@@ -63,7 +63,7 @@ solarflare [options]
 
 ```tsx
 export default async function server(request: Request, params: Record<string, string>) {
-  return { title: "Hello" }
+  return { title: "Hello" };
 }
 ```
 
@@ -71,8 +71,8 @@ Promise-valued props are streamed independently (deferred):
 
 ```tsx
 export default async function server() {
-  const user = await fetchUser();                 // blocking
-  const analytics = fetchAnalytics();             // deferred
+  const user = await fetchUser(); // blocking
+  const analytics = fetchAnalytics(); // deferred
   const recommendations = fetchRecommendations(); // deferred
   return { user, analytics, recommendations };
 }
@@ -85,8 +85,8 @@ export default async function server() {
   return {
     _status: 201,
     _headers: { "Cache-Control": "max-age=3600" },
-    title: "Created"
-  }
+    title: "Created",
+  };
 }
 ```
 
@@ -94,7 +94,7 @@ export default async function server() {
 
 ```tsx
 export default function Client({ title }: { title: string }) {
-  return <h1>{title}</h1>
+  return <h1>{title}</h1>;
 }
 ```
 
@@ -102,7 +102,11 @@ export default function Client({ title }: { title: string }) {
 
 ```tsx
 export default function Layout({ children }: { children: ComponentChildren }) {
-  return <html><body>{children}</body></html>
+  return (
+    <html>
+      <body>{children}</body>
+    </html>
+  );
 }
 ```
 
@@ -111,12 +115,9 @@ export default function Layout({ children }: { children: ComponentChildren }) {
 ```tsx
 import { Deferred } from "@chr33s/solarflare/client";
 
-<Deferred
-  priority="high"
-  fallback={<div>Loading additional content...</div>}
->
+<Deferred priority="high" fallback={<div>Loading additional content...</div>}>
   ...
-</Deferred>
+</Deferred>;
 ```
 
 ### Performance Meta Tags
@@ -132,15 +133,15 @@ import { Deferred } from "@chr33s/solarflare/client";
 ### Custom Web Component
 
 ```tsx
-import { define } from '@chr33s/solarflare/client'
-export default define(MyComponent, { shadow: true })
+import { define } from "@chr33s/solarflare/client";
+export default define(MyComponent, { shadow: true });
 ```
 
 ### HMR Events
 
 ```tsx
-import { onHMREvent } from "@chr33s/solarflare/client"
-onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`))
+import { onHMREvent } from "@chr33s/solarflare/client";
+onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`));
 ```
 
 ## Environment
