@@ -26,6 +26,7 @@ function spawnAsync(
 ): { process: ChildProcess; exited: Promise<number | null> } {
   const proc = spawn(command[0], command.slice(1), {
     cwd: options.cwd,
+    env: { ...process.env, WRANGLER_LOG: "error" },
     stdio: ["ignore", "inherit", "inherit"],
   });
 

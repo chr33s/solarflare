@@ -11,6 +11,6 @@
   "name": "solarflare",
   "vars": {
     "HELLO": "WORLD",
-    "WRANGLER_LOG": "log"
+    "WRANGLER_LOG": "error"
   }
 }
