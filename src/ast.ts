@@ -105,7 +105,7 @@ export interface ValidationResult {
 export function validateModule(
   program: ts.Program,
   filePath: string,
-  baseDir: string = "./src/app",
+  baseDir: string = "./src",
 ): ValidationResult {
   const fullPath = join(baseDir, filePath);
   const sourceFile = program.getSourceFile(fullPath);
