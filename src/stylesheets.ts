@@ -22,7 +22,6 @@ interface StylesheetEntry {
 class StylesheetManager {
   #sheets = new Map<string, StylesheetEntry>();
   #documentSheets: CSSStyleSheet[] = [];
-  #supported = supportsConstructableStylesheets();
 
   /** Registers a stylesheet with the manager. */
   register(
@@ -30,7 +29,7 @@ class StylesheetManager {
     css: string,
     options: { isGlobal?: boolean; consumer?: string } = {},
   ): CSSStyleSheet | null {
-    if (!this.#supported) {
+    if (!this.#isSupported()) {
       this.#injectStyleElement(id, css);
       return null;
     }
@@ -139,7 +138,7 @@ class StylesheetManager {
 
   /** Adopts stylesheets to a Shadow Root. */
   adoptToShadowRoot(shadowRoot: ShadowRoot, stylesheetIds: string[]): void {
-    if (!this.#supported) return;
+    if (!this.#isSupported()) return;
 
     const sheets = stylesheetIds
       .map((id) => this.#sheets.get(id)?.sheet)
@@ -166,7 +165,7 @@ class StylesheetManager {
   /** Clears all stylesheets. */
   clear(): void {
     this.#sheets.clear();
-    if (this.#supported) {
+    if (this.#isSupported()) {
       document.adoptedStyleSheets = [];
     }
   }
@@ -178,6 +177,10 @@ class StylesheetManager {
       this.#documentSheets.push(sheet);
       document.adoptedStyleSheets = [...this.#documentSheets];
     }
+  }
+
+  #isSupported(): boolean {
+    return supportsConstructableStylesheets();
   }
 
   #hash(css: string): string {

@@ -1,307 +1,203 @@
-import { describe, it, beforeEach } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
 
-// Mock CSSStyleSheet for Node.js testing
+import { StylesheetManager, supportsConstructableStylesheets } from "./stylesheets.ts";
+
+class MockCSSStyleRule {
+  selectorText: string;
+  cssText: string;
+
+  constructor(selectorText: string, cssText: string) {
+    this.selectorText = selectorText;
+    this.cssText = cssText;
+  }
+}
+
 class MockCSSStyleSheet {
-  cssRules: Array<{ selectorText?: string; cssText: string }> = [];
+  cssRules: MockCSSStyleRule[] = [];
 
   replaceSync(css: string): void {
-    this.cssRules = this.#parseRules(css);
+    this.cssRules = parseCssRules(css);
   }
 
   insertRule(rule: string, index?: number): number {
+    const selector = (rule.match(/^([^{}]+)\s*\{/u)?.[1] ?? "").trim();
     const insertIndex = index ?? this.cssRules.length;
-    this.cssRules.splice(insertIndex, 0, { cssText: rule });
+    this.cssRules.splice(insertIndex, 0, new MockCSSStyleRule(selector, rule));
     return insertIndex;
   }
 
   deleteRule(index: number): void {
     this.cssRules.splice(index, 1);
   }
-
-  #parseRules(css: string): Array<{ selectorText?: string; cssText: string }> {
-    // Simple rule parser for testing
-    const rules: Array<{ selectorText?: string; cssText: string }> = [];
-    const ruleRegex = /([^{]+)\s*\{([^}]*)\}/g;
-    let match;
-    while ((match = ruleRegex.exec(css)) !== null) {
-      rules.push({
-        selectorText: match[1].trim(),
-        cssText: match[0],
-      });
-    }
-    return rules;
-  }
 }
 
-describe("StylesheetManager", () => {
-  describe("hash function logic", () => {
-    // Test the hashing algorithm used by StylesheetManager
-    const hash = (css: string): string => {
-      let h = 0;
-      for (let i = 0; i < css.length; i++) {
-        const char = css.charCodeAt(i);
-        h = ((h << 5) - h + char) | 0;
-      }
-      return h.toString(36);
-    };
+function parseCssRules(css: string): MockCSSStyleRule[] {
+  const rules: MockCSSStyleRule[] = [];
+  const ruleRegex = /([^{}]+)\s*\{([^}]*)\}/gu;
+  let match: RegExpExecArray | null;
 
-    it("should produce consistent hashes", () => {
-      const css = ".test { color: red; }";
-      const hash1 = hash(css);
-      const hash2 = hash(css);
-      assert.strictEqual(hash1, hash2);
-    });
+  while ((match = ruleRegex.exec(css)) !== null) {
+    const selector = match[1]?.trim() ?? "";
+    rules.push(new MockCSSStyleRule(selector, match[0]));
+  }
 
-    it("should produce different hashes for different CSS", () => {
-      const hash1 = hash(".test { color: red; }");
-      const hash2 = hash(".test { color: blue; }");
-      assert.notStrictEqual(hash1, hash2);
-    });
+  return rules;
+}
 
-    it("should handle empty string", () => {
-      const result = hash("");
-      assert.strictEqual(result, "0");
-    });
+function installMockDom(options: { supported: boolean }): () => void {
+  const prevWindow = (globalThis as any).window;
+  const prevDocument = (globalThis as any).document;
+  const prevCSSStyleSheet = (globalThis as any).CSSStyleSheet;
+  const prevCSSStyleRule = (globalThis as any).CSSStyleRule;
 
-    it("should handle unicode content", () => {
-      const result = hash(".emoji { content: '🎨'; }");
-      assert.ok(typeof result === "string");
-    });
+  const elementsById = new Map<string, any>();
+  const headChildren: any[] = [];
+
+  (globalThis as any).document = {
+    adoptedStyleSheets: [] as any[],
+    head: {
+      appendChild(el: any) {
+        headChildren.push(el);
+      },
+    },
+    createElement(tag: string) {
+      return { tagName: tag.toUpperCase(), id: "", textContent: "" };
+    },
+    getElementById(id: string) {
+      return elementsById.get(id) ?? null;
+    },
+    __getHeadChildren() {
+      return headChildren;
+    },
+    __upsertById(el: any) {
+      if (el?.id) elementsById.set(el.id, el);
+    },
+  };
+
+  if (options.supported) {
+    (globalThis as any).window = {};
+    (globalThis as any).CSSStyleSheet = MockCSSStyleSheet;
+    (globalThis as any).CSSStyleRule = MockCSSStyleRule;
+  } else {
+    delete (globalThis as any).window;
+    delete (globalThis as any).CSSStyleSheet;
+    delete (globalThis as any).CSSStyleRule;
+  }
+
+  const documentAny = (globalThis as any).document;
+  const originalAppendChild = documentAny.head.appendChild;
+  documentAny.head.appendChild = (el: any) => {
+    documentAny.__upsertById(el);
+    return originalAppendChild.call(documentAny.head, el);
+  };
+
+  return () => {
+    (globalThis as any).window = prevWindow;
+    (globalThis as any).document = prevDocument;
+    (globalThis as any).CSSStyleSheet = prevCSSStyleSheet;
+    (globalThis as any).CSSStyleRule = prevCSSStyleRule;
+  };
+}
+
+describe("stylesheets", () => {
+  let restoreGlobals: (() => void) | undefined;
+
+  afterEach(() => {
+    restoreGlobals?.();
+    restoreGlobals = undefined;
   });
 
-  describe("supportsConstructableStylesheets logic", () => {
-    it("should return false in Node.js environment", () => {
-      // In Node.js, window is undefined
-      const supportsConstructableStylesheets = (): boolean => {
-        if (typeof globalThis.window === "undefined") return false;
-        try {
-          new CSSStyleSheet();
-          return true;
-        } catch {
-          return false;
-        }
-      };
-
-      // Node.js environment check
-      assert.strictEqual(supportsConstructableStylesheets(), false);
-    });
+  it("supportsConstructableStylesheets is false without window", () => {
+    restoreGlobals = installMockDom({ supported: false });
+    assert.strictEqual(supportsConstructableStylesheets(), false);
   });
 
-  describe("StylesheetEntry management", () => {
-    interface StylesheetEntry {
-      sheet: MockCSSStyleSheet;
-      source: string;
-      hash: string;
-      consumers: Set<string>;
-      isGlobal: boolean;
-    }
-
-    it("should create entry with consumers set", () => {
-      const entry: StylesheetEntry = {
-        sheet: new MockCSSStyleSheet(),
-        source: ".test { color: red; }",
-        hash: "abc123",
-        consumers: new Set(["component-a"]),
-        isGlobal: false,
-      };
-
-      assert.strictEqual(entry.consumers.has("component-a"), true);
-      assert.strictEqual(entry.consumers.size, 1);
-    });
-
-    it("should track multiple consumers", () => {
-      const entry: StylesheetEntry = {
-        sheet: new MockCSSStyleSheet(),
-        source: ".shared { margin: 0; }",
-        hash: "def456",
-        consumers: new Set(["component-a", "component-b"]),
-        isGlobal: false,
-      };
-
-      assert.strictEqual(entry.consumers.size, 2);
-      assert.strictEqual(entry.consumers.has("component-a"), true);
-      assert.strictEqual(entry.consumers.has("component-b"), true);
-    });
-
-    it("should mark global stylesheets", () => {
-      const entry: StylesheetEntry = {
-        sheet: new MockCSSStyleSheet(),
-        source: "* { box-sizing: border-box; }",
-        hash: "ghi789",
-        consumers: new Set(),
-        isGlobal: true,
-      };
-
-      assert.strictEqual(entry.isGlobal, true);
-    });
-
-    it("should allow consumer removal", () => {
-      const consumers = new Set(["a", "b", "c"]);
-      consumers.delete("b");
-      assert.strictEqual(consumers.size, 2);
-      assert.strictEqual(consumers.has("b"), false);
-    });
+  it("supportsConstructableStylesheets is true when CSSStyleSheet is available", () => {
+    restoreGlobals = installMockDom({ supported: true });
+    assert.strictEqual(supportsConstructableStylesheets(), true);
   });
 
-  describe("MockCSSStyleSheet operations", () => {
-    let sheet: MockCSSStyleSheet;
-
+  describe("StylesheetManager", () => {
     beforeEach(() => {
-      sheet = new MockCSSStyleSheet();
+      restoreGlobals?.();
+      restoreGlobals = installMockDom({ supported: true });
     });
 
-    it("should replaceSync and parse rules", () => {
-      sheet.replaceSync(".test { color: red; }");
-      assert.strictEqual(sheet.cssRules.length, 1);
-      assert.strictEqual(sheet.cssRules[0].selectorText, ".test");
-    });
+    it("registers global and consumer sheets, and returns them for consumer", () => {
+      const manager = new StylesheetManager();
 
-    it("should insertRule at end by default", () => {
-      sheet.replaceSync(".a { color: red; }");
-      sheet.insertRule(".b { color: blue; }");
-      assert.strictEqual(sheet.cssRules.length, 2);
-    });
-
-    it("should insertRule at specific index", () => {
-      sheet.replaceSync(".a { color: red; } .b { color: blue; }");
-      sheet.insertRule(".inserted { color: green; }", 1);
-      assert.strictEqual(sheet.cssRules.length, 3);
-      assert.strictEqual(sheet.cssRules[1].cssText, ".inserted { color: green; }");
-    });
-
-    it("should deleteRule at index", () => {
-      sheet.replaceSync(".a { color: red; } .b { color: blue; }");
-      sheet.deleteRule(0);
-      assert.strictEqual(sheet.cssRules.length, 1);
-      assert.strictEqual(sheet.cssRules[0].selectorText, ".b");
-    });
-
-    it("should handle multiple rules", () => {
-      sheet.replaceSync(`
-        .header { background: #fff; }
-        .nav { display: flex; }
-        .footer { margin-top: 20px; }
-      `);
-      assert.strictEqual(sheet.cssRules.length, 3);
-    });
-  });
-
-  describe("incremental update detection", () => {
-    const canIncrementalUpdate = (oldCss: string, newCss: string): boolean => {
-      const sizeDiff = Math.abs(newCss.length - oldCss.length);
-      return sizeDiff < 500;
-    };
-
-    it("should allow incremental update for small changes", () => {
-      const oldCss = ".test { color: red; }";
-      const newCss = ".test { color: blue; }";
-      assert.strictEqual(canIncrementalUpdate(oldCss, newCss), true);
-    });
-
-    it("should disallow incremental update for large changes", () => {
-      const oldCss = ".test { color: red; }";
-      const newCss = ".test { color: blue; }" + "x".repeat(600);
-      assert.strictEqual(canIncrementalUpdate(oldCss, newCss), false);
-    });
-
-    it("should handle deletions", () => {
-      const oldCss = ".test { color: red; }" + "x".repeat(600);
-      const newCss = ".test { color: red; }";
-      assert.strictEqual(canIncrementalUpdate(oldCss, newCss), false);
-    });
-  });
-
-  describe("consumer tracking", () => {
-    it("should track consumers per stylesheet", () => {
-      const sheets = new Map<string, { consumers: Set<string> }>();
-
-      // Register stylesheet with consumer
-      sheets.set("styles.css", { consumers: new Set(["sf-header"]) });
-
-      // Add another consumer
-      sheets.get("styles.css")!.consumers.add("sf-nav");
-
-      assert.strictEqual(sheets.get("styles.css")!.consumers.size, 2);
-    });
-
-    it("should clean up orphaned stylesheets", () => {
-      const sheets = new Map<string, { consumers: Set<string>; isGlobal: boolean }>();
-
-      sheets.set("component.css", {
-        consumers: new Set(["sf-widget"]),
-        isGlobal: false,
-      });
-
-      // Remove consumer
-      const entry = sheets.get("component.css")!;
-      entry.consumers.delete("sf-widget");
-
-      // Clean up if no consumers and not global
-      if (!entry.isGlobal && entry.consumers.size === 0) {
-        sheets.delete("component.css");
-      }
-
-      assert.strictEqual(sheets.has("component.css"), false);
-    });
-
-    it("should preserve global stylesheets without consumers", () => {
-      const sheets = new Map<string, { consumers: Set<string>; isGlobal: boolean }>();
-
-      sheets.set("global.css", {
-        consumers: new Set(),
+      const globalSheet = manager.register("/global.css", "html { color: black; }", {
         isGlobal: true,
       });
+      assert.ok(globalSheet);
+      assert.strictEqual((globalThis as any).document.adoptedStyleSheets.length, 1);
 
-      const entry = sheets.get("global.css")!;
+      const componentSheet = manager.register("/widget.css", ".widget { color: red; }", {
+        consumer: "sf-widget",
+      });
+      assert.ok(componentSheet);
 
-      // Should not delete global stylesheet
-      if (!entry.isGlobal && entry.consumers.size === 0) {
-        sheets.delete("global.css");
-      }
+      const forWidget = manager.getForConsumer("sf-widget");
+      assert.deepStrictEqual(forWidget, [globalSheet!, componentSheet!]);
+    });
 
-      assert.strictEqual(sheets.has("global.css"), true);
+    it("removeConsumer deletes orphaned non-global sheets", () => {
+      const manager = new StylesheetManager();
+      manager.register("/global.css", "* { box-sizing: border-box; }", {
+        isGlobal: true,
+      });
+      manager.register("/only-widget.css", ".x { color: red; }", {
+        consumer: "sf-widget",
+      });
+
+      assert.ok(manager.get("/only-widget.css"));
+      manager.removeConsumer("sf-widget");
+      assert.strictEqual(manager.get("/only-widget.css"), null);
+      assert.ok(manager.get("/global.css"));
+    });
+
+    it("update returns true when css changes, false when unchanged", () => {
+      const manager = new StylesheetManager();
+      manager.register("/a.css", ".a { color: red; }", { consumer: "sf-a" });
+
+      assert.strictEqual(manager.update("/a.css", ".a { color: red; }"), false);
+      assert.strictEqual(manager.update("/a.css", ".a { color: blue; }"), true);
+    });
+
+    it("insertRule and deleteRule mutate the sheet", () => {
+      const manager = new StylesheetManager();
+      const sheet = manager.register("/rules.css", ".a { color: red; }", {
+        consumer: "sf-a",
+      });
+      assert.ok(sheet);
+      assert.strictEqual(sheet!.cssRules.length, 1);
+
+      const idx = manager.insertRule("/rules.css", ".b { color: blue; }");
+      assert.strictEqual(idx, 1);
+      assert.strictEqual(sheet!.cssRules.length, 2);
+
+      assert.strictEqual(manager.deleteRule("/rules.css", 0), true);
+      assert.strictEqual(sheet!.cssRules.length, 1);
+      assert.strictEqual((sheet!.cssRules[0] as any).selectorText, ".b");
     });
   });
 
-  describe("getForConsumer logic", () => {
-    it("should return stylesheets for a specific consumer", () => {
-      const sheets = new Map<
-        string,
-        { sheet: string; consumers: Set<string>; isGlobal: boolean }
-      >();
+  it("falls back to <style> injection when unsupported", () => {
+    restoreGlobals = installMockDom({ supported: false });
+    const manager = new StylesheetManager();
 
-      sheets.set("global.css", {
-        sheet: "global-sheet",
-        consumers: new Set(),
-        isGlobal: true,
-      });
-      sheets.set("component.css", {
-        sheet: "component-sheet",
-        consumers: new Set(["sf-widget"]),
-        isGlobal: false,
-      });
-      sheets.set("other.css", {
-        sheet: "other-sheet",
-        consumers: new Set(["sf-other"]),
-        isGlobal: false,
-      });
+    const result = manager.register("fallback", ".a { color: red; }");
+    assert.strictEqual(result, null);
 
-      const getForConsumer = (consumer: string): string[] => {
-        const result: string[] = [];
-        for (const entry of sheets.values()) {
-          if (entry.isGlobal || entry.consumers.has(consumer)) {
-            result.push(entry.sheet);
-          }
-        }
-        return result;
-      };
+    const doc: any = (globalThis as any).document;
+    const injected = doc.getElementById("sf-style-fallback");
+    assert.ok(injected);
+    assert.strictEqual(injected.textContent, ".a { color: red; }");
 
-      const result = getForConsumer("sf-widget");
-      assert.strictEqual(result.length, 2);
-      assert.ok(result.includes("global-sheet"));
-      assert.ok(result.includes("component-sheet"));
-      assert.ok(!result.includes("other-sheet"));
-    });
+    manager.register("fallback", ".a { color: blue; }");
+    const injected2 = doc.getElementById("sf-style-fallback");
+    assert.strictEqual(injected2, injected);
+    assert.strictEqual(injected2.textContent, ".a { color: blue; }");
   });
 });
