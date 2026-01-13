@@ -1,0 +1,25 @@
+name = "solarflare"
+handle = "solarflare"
+application_url = "https://localhost:8443"
+client_id = "38082271996e726abab8efae4e316cce"
+embedded = true
+
+[webhooks]
+api_version = "2026-01"
+
+[access.admin]
+direct_api_mode = "online"
+embedded_app_direct_api_access = true
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products"
+optional_scopes = []
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = ["https://localhost:8443/auth"]
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "solarflare-3.myshopify.com"

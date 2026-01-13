@@ -1,0 +1,5 @@
+.shopify/
+.wrangler/
+.env*
+dist/
+node_modules/

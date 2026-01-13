@@ -1,0 +1,14 @@
+{
+  "assets": { "directory": "./dist/client" },
+  "compatibility_date": "2025-12-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": {
+    "ip": "0.0.0.0",
+    "port": 8080
+  },
+  "main": "./dist/server/index.js",
+  "name": "solarflare",
+  "vars": {
+    "SHOPIFY_API_KEY": "38082271996e726abab8efae4e316cce"
+  }
+}

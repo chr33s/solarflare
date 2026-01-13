@@ -1,0 +1,21 @@
+{
+  "name": "@chr33s/solarflare-examples-shopify-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx shopify app dev --use-localhost --localhost-port=8443",
+    "deploy": "solarflare --production && wrangler deploy"
+  },
+  "dependencies": {
+    "@chr33s/solarflare": "file:../../"
+  },
+  "devDependencies": {
+    "@shopify/app-bridge-types": "^0.5.3",
+    "@shopify/cli": "3.88.1",
+    "@shopify/polaris-types": "^1.0.1"
+  },
+  "engines": {
+    "node": ">=24.12.0"
+  }
+}
