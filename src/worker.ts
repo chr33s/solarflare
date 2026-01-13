@@ -129,10 +129,10 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
   const headers = {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Encoding": "identity",
+    "Content-Security-Policy": "frame-ancestors 'self'",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Transfer-Encoding": "chunked",
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "SAMEORIGIN",
   };
 
   try {

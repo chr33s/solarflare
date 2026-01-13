@@ -1213,31 +1213,31 @@ describe("optimization headers unit tests", () => {
     const headers = {
       "Content-Type": "text/html; charset=utf-8",
       "Content-Encoding": "identity",
+      "Content-Security-Policy": "frame-ancestors 'self'",
       "Referrer-Policy": "strict-origin-when-cross-origin",
       "Transfer-Encoding": "chunked",
       "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "SAMEORIGIN",
     };
 
     assert.strictEqual(headers["Content-Type"], "text/html; charset=utf-8");
     assert.strictEqual(headers["Content-Encoding"], "identity");
+    assert.strictEqual(headers["Content-Security-Policy"], "frame-ancestors 'self'");
     assert.strictEqual(headers["X-Content-Type-Options"], "nosniff");
     assert.strictEqual(headers["Transfer-Encoding"], "chunked");
     assert.strictEqual(headers["Referrer-Policy"], "strict-origin-when-cross-origin");
-    assert.strictEqual(headers["X-Frame-Options"], "SAMEORIGIN");
   });
 
   it("should create Response with proper security headers", () => {
     const response = new Response("test", {
       headers: {
+        "Content-Security-Policy": "frame-ancestors 'self'",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "X-Frame-Options": "SAMEORIGIN",
         "X-Content-Type-Options": "nosniff",
       },
     });
 
     assert.ok(response.headers.get("Referrer-Policy"));
-    assert.strictEqual(response.headers.get("X-Frame-Options"), "SAMEORIGIN");
+    assert.strictEqual(response.headers.get("Content-Security-Policy"), "frame-ancestors 'self'");
     assert.strictEqual(response.headers.get("X-Content-Type-Options"), "nosniff");
   });
 });
