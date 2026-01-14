@@ -9,6 +9,7 @@ import {
   type RouteManifestEntry,
   type RouterConfig,
   type RouteMatch,
+  handleDeferredHydrationNode,
 } from "./router.ts";
 
 describe("supportsViewTransitions", () => {
@@ -209,7 +210,12 @@ describe("Router", () => {
 
     it("should match dynamic route and extract params", () => {
       const manifest = createManifest([
-        { pattern: "/blog/:slug", tag: "sf-blog-slug", type: "client", params: ["slug"] },
+        {
+          pattern: "/blog/:slug",
+          tag: "sf-blog-slug",
+          type: "client",
+          params: ["slug"],
+        },
       ]);
       const router = new Router(manifest);
       const url = new URL("http://localhost/blog/hello-world");
@@ -255,8 +261,18 @@ describe("Router", () => {
 
     it("should prefer more specific routes", () => {
       const manifest = createManifest([
-        { pattern: "/blog/:slug", tag: "sf-blog-slug", type: "client", params: ["slug"] },
-        { pattern: "/blog/featured", tag: "sf-blog-featured", type: "client", params: [] },
+        {
+          pattern: "/blog/:slug",
+          tag: "sf-blog-slug",
+          type: "client",
+          params: ["slug"],
+        },
+        {
+          pattern: "/blog/featured",
+          tag: "sf-blog-featured",
+          type: "client",
+          params: [],
+        },
       ]);
       const router = new Router(manifest);
       const url = new URL("http://localhost/blog/featured");
@@ -285,7 +301,12 @@ describe("Router", () => {
 
     it("should check prefix match", () => {
       const manifest = createManifest([
-        { pattern: "/blog/:slug", tag: "sf-blog-slug", type: "client", params: ["slug"] },
+        {
+          pattern: "/blog/:slug",
+          tag: "sf-blog-slug",
+          type: "client",
+          params: ["slug"],
+        },
       ]);
       const router = new Router(manifest);
 
@@ -304,7 +325,12 @@ describe("Router", () => {
   describe("isActiveSignal", () => {
     it("should return reactive signal for isActive", () => {
       const manifest = createManifest([
-        { pattern: "/blog/:slug", tag: "sf-blog-slug", type: "client", params: ["slug"] },
+        {
+          pattern: "/blog/:slug",
+          tag: "sf-blog-slug",
+          type: "client",
+          params: ["slug"],
+        },
       ]);
       const router = new Router(manifest);
 
@@ -384,6 +410,125 @@ describe("Router", () => {
       const result = router.stop();
       assert.strictEqual(result, router);
     });
+  });
+});
+
+describe("deferred hydration observer", () => {
+  it("should dispatch hydration when a deferred data island is inserted", () => {
+    const originalDocument = globalThis.document;
+    const originalCustomEvent = globalThis.CustomEvent;
+    const events: Array<{ type: string; detail: unknown }> = [];
+
+    globalThis.document = {
+      dispatchEvent: (event: { type: string; detail: unknown }) => {
+        events.push(event);
+        return true;
+      },
+    } as unknown as Document;
+
+    globalThis.CustomEvent = class CustomEventMock {
+      type: string;
+      detail: unknown;
+      constructor(type: string, init?: { detail?: unknown }) {
+        this.type = type;
+        this.detail = init?.detail;
+      }
+    } as unknown as typeof CustomEvent;
+
+    try {
+      const processed = new Set<string>();
+
+      class FakeScript {
+        tagName = "SCRIPT";
+        id = "";
+        textContent: string | null = null;
+        private attrs: Record<string, string> = {};
+        constructor(attrs: Record<string, string>) {
+          this.attrs = attrs;
+        }
+        getAttribute(name: string) {
+          return this.attrs[name] ?? null;
+        }
+      }
+
+      class FakeContainer {
+        tagName = "DIV";
+        private scripts: FakeScript[];
+        constructor(scripts: FakeScript[]) {
+          this.scripts = scripts;
+        }
+        querySelectorAll() {
+          return this.scripts as unknown as NodeListOf<HTMLScriptElement>;
+        }
+      }
+
+      const dataScript = new FakeScript({
+        "data-island": "sf-root-deferred-defer-abc123",
+      });
+      const container = new FakeContainer([dataScript]);
+
+      handleDeferredHydrationNode("sf-root", processed, container as unknown as Element);
+
+      assert.strictEqual(events.length, 1);
+      assert.deepStrictEqual(events[0].detail, {
+        tag: "sf-root",
+        id: "sf-root-deferred-defer-abc123",
+      });
+
+      handleDeferredHydrationNode("sf-root", processed, container as unknown as Element);
+      assert.strictEqual(events.length, 1);
+    } finally {
+      globalThis.document = originalDocument;
+      globalThis.CustomEvent = originalCustomEvent;
+    }
+  });
+
+  it("should dispatch hydration when a hydration script is inserted", () => {
+    const originalDocument = globalThis.document;
+    const originalCustomEvent = globalThis.CustomEvent;
+    const events: Array<{ type: string; detail: unknown }> = [];
+
+    globalThis.document = {
+      dispatchEvent: (event: { type: string; detail: unknown }) => {
+        events.push(event);
+        return true;
+      },
+    } as unknown as Document;
+
+    globalThis.CustomEvent = class CustomEventMock {
+      type: string;
+      detail: unknown;
+      constructor(type: string, init?: { detail?: unknown }) {
+        this.type = type;
+        this.detail = init?.detail;
+      }
+    } as unknown as typeof CustomEvent;
+
+    try {
+      const processed = new Set<string>();
+
+      class FakeScript {
+        tagName = "SCRIPT";
+        id = "sf-root-hydrate-defer-abc123";
+        textContent = 'detail:{"tag":"sf-root","id":"sf-root-deferred-defer-abc123"}';
+        getAttribute() {
+          return null;
+        }
+      }
+
+      const script = new FakeScript();
+
+      handleDeferredHydrationNode("sf-root", processed, script as unknown as Element);
+
+      assert.strictEqual(events.length, 1);
+      assert.deepStrictEqual(events[0].detail, {
+        tag: "sf-root",
+        id: "sf-root-deferred-defer-abc123",
+      });
+    } finally {
+      globalThis.document = originalDocument;
+      globalThis.CustomEvent = originalCustomEvent;
+    }
   });
 });
 

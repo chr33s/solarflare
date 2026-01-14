@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "@preact/signals": "2.5.1",
-    "diff-dom-streaming": "0.6.6",
     "lightningcss": "1.30.2",
     "preact": "10.28.2",
     "preact-custom-element": "4.6.0",

@@ -182,8 +182,11 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
 
     // Prevent duplicate hydration on SPA navigations where multiple triggers may fire
     // for the same deferred island (inline scripts + router scanning).
-    const scripts = document.querySelectorAll(`script[data-island="${CSS.escape(islandId)}"]`);
-    scripts.forEach((script) => script.remove());
+    // During navigation mode, DON'T remove scripts - they'll be needed after the clone.
+    if (!navigationMode) {
+      const scripts = document.querySelectorAll(`script[data-island="${CSS.escape(islandId)}"]`);
+      scripts.forEach((script) => script.remove());
+    }
 
     element.dispatchEvent(
       new CustomEvent("sf:hydrate", {
@@ -199,6 +202,19 @@ let hydrationReady = false;
 const hydrationQueue: [string, string][] = [];
 let eventListenerAttached = false;
 let processingQueue = false;
+
+/** Navigation mode flag - when true, don't remove data island scripts during hydration. */
+let navigationMode = false;
+
+/** Sets navigation mode (called by router during client-side navigation). */
+export function setNavigationMode(active: boolean): void {
+  navigationMode = active;
+}
+
+/** Checks if in navigation mode. */
+export function isNavigationMode(): boolean {
+  return navigationMode;
+}
 
 /** Handles hydration queue events. */
 function handleQueueHydrateEvent(e: Event): void {

@@ -523,6 +523,7 @@ function createDeferredStream(
   let allowDeferredFlush = true;
   let closed = false;
   const pendingChunks: Uint8Array[] = [];
+  const emittedDeferred = new Set<string>();
 
   function maybeClose(): void {
     if (closed) return;
@@ -591,9 +592,11 @@ function createDeferredStream(
         void Promise.resolve(promise)
           .then(async (value) => {
             const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, "_");
-            const uniqueId = Math.random().toString(36).slice(2, 8);
-            const dataIslandId = `${tag}-deferred-${safeKey}-${uniqueId}`;
-            const hydrateScriptId = `${tag}-hydrate-${safeKey}-${uniqueId}`;
+            const dataIslandId = `${tag}-deferred-${safeKey}`;
+            const hydrateScriptId = `${tag}-hydrate-${safeKey}`;
+            if (emittedDeferred.has(dataIslandId) || emittedDeferred.has(hydrateScriptId)) return;
+            emittedDeferred.add(dataIslandId);
+            emittedDeferred.add(hydrateScriptId);
             const html = await buildDeferredHtml(dataIslandId, { [key]: value }, hydrateScriptId);
             enqueueDeferredChunk(html);
           })

@@ -570,6 +570,7 @@ function generateChunkedClientEntry(
     ${stylesheetSetup}
     let CurrentComponent = BaseComponent;
     const hmrVersion = signal(0);
+    const navVersion = signal(0);
 
     const scrollPositions = new Map();
 
@@ -762,6 +763,7 @@ function generateChunkedClientEntry(
       const deferredSignals = useMemo(() => new Map(), []);
       const deferredVersion = useSignal(0);
       const hmrVer = hmrVersion.value;
+      const navVer = navVersion.value;
 
       const getOrCreateSignal = (key, value) => {
         if (!deferredSignals.has(key)) {
@@ -777,6 +779,9 @@ function generateChunkedClientEntry(
         if (!el) return;
         
         const extractDeferred = () => {
+          // Skip if element has been disconnected (e.g. after cloneNode replacement)
+          if (!el.isConnected) return;
+          
           if (el._sfDeferred) {
             for (const [key, value] of Object.entries(el._sfDeferred)) {
               getOrCreateSignal(key, value);
@@ -790,6 +795,8 @@ function generateChunkedClientEntry(
 
           (async () => {
             for (const script of scripts) {
+              // Re-check connection before each script processing
+              if (!el.isConnected) return;
               const id = script.getAttribute('data-island');
               if (!id) continue;
               const data = await extractDataIsland(id);
@@ -814,13 +821,18 @@ function generateChunkedClientEntry(
         el.addEventListener('sf:hydrate', hydrateHandler);
         
         const navHandler = () => setTimeout(extractDeferred, 0);
+        const rerenderHandler = () => {
+          navVersion.value++;
+        };
         window.addEventListener('sf:navigate', navHandler);
+        el.addEventListener('sf:rerender', rerenderHandler);
         
         ensureRouter();
         
         return () => {
           el.removeEventListener('sf:hydrate', hydrateHandler);
           window.removeEventListener('sf:navigate', navHandler);
+          el.removeEventListener('sf:rerender', rerenderHandler);
         };
       });
 
@@ -845,7 +857,9 @@ function generateChunkedClientEntry(
       );
     }
 
-    register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });
+    if (!customElements.get('${meta.tag}')) {
+      register(Component, '${meta.tag}', ${JSON.stringify(meta.props)}, { shadow: false });
+    }
   `;
 }
 

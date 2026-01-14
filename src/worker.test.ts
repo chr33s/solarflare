@@ -543,6 +543,14 @@ describe("e2e", () => {
 
     const before = await getCountText();
     await countButton.click();
+    await page.waitForFunction((prev) => {
+      const btn = Array.from(document.querySelectorAll("button")).find((el) =>
+        /count is/i.test(el.textContent ?? ""),
+      );
+      if (!btn) return false;
+      const text = btn.textContent ?? "";
+      return text !== prev;
+    }, before);
     const after = await getCountText();
     assert.notStrictEqual(after, before);
 
@@ -555,13 +563,91 @@ describe("e2e", () => {
     await page.waitForURL("**/");
     await waitForHydration(page);
 
-    const beforeReturn = await getCountText();
-    await countButton.click();
-    const afterReturn = await getCountText();
+    // Ensure deferred islands have resolved before checking button interactivity.
+    await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+      timeout: 10_000,
+    });
+
+    const countButtonAfterReturn = page.getByRole("button", {
+      name: /count is/i,
+    });
+    await countButtonAfterReturn.waitFor({ state: "visible" });
+    const getCountTextAfterReturn = async () => (await countButtonAfterReturn.textContent()) ?? "";
+
+    const beforeReturn = await getCountTextAfterReturn();
+    await countButtonAfterReturn.click();
+    await page.waitForFunction((prev) => {
+      const btn = Array.from(document.querySelectorAll("button")).find((el) =>
+        /count is/i.test(el.textContent ?? ""),
+      );
+      if (!btn) return false;
+      const text = btn.textContent ?? "";
+      return text !== prev;
+    }, beforeReturn);
+    const afterReturn = await getCountTextAfterReturn();
     assert.notStrictEqual(
       afterReturn,
       beforeReturn,
       "Counter button should remain interactive after navigating back to /",
+    );
+  });
+
+  it("should keep button interactivity on blog page after client-side navigation", async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL);
+
+    await waitForHydration(page);
+
+    // Navigate to blog via client-side nav
+    await page.click('nav a[href="/blog/hello-world"]');
+    await page.waitForURL("**/blog/hello-world");
+    await waitForHydration(page, "sf-blog-slug");
+
+    // The blog page also has a CountButton - check that it's interactive
+    const countButton = page.getByRole("button", { name: /count is/i });
+    const getCountText = async () => (await countButton.textContent()) ?? "";
+
+    const before = await getCountText();
+    await countButton.click();
+    const after = await getCountText();
+    assert.notStrictEqual(
+      after,
+      before,
+      "Counter button on blog page should be interactive after client-side navigation",
+    );
+  });
+
+  it("should keep button interactivity on page / -> /blog/* -> / on client-side navigation", async () => {
+    const page = await browser.newPage();
+    await page.goto(BASE_URL);
+
+    await waitForHydration(page);
+
+    // Navigate to blog via client-side nav
+    await page.click('nav a[href="/blog/hello-world"]');
+    await page.waitForURL("**/blog/hello-world");
+    await waitForHydration(page, "sf-blog-slug");
+
+    await page.click('nav a[href="/"]');
+    await page.waitForURL("**/");
+    await waitForHydration(page, "sf-root");
+
+    // Wait for deferred content to resolve before checking interactivity
+    await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+      timeout: 10_000,
+    });
+
+    // The blog page also has a CountButton - check that it's interactive
+    const countButton = page.getByRole("button", { name: /count is/i });
+    const getCountText = async () => (await countButton.textContent()) ?? "";
+
+    const before = await getCountText();
+    await countButton.click();
+    const after = await getCountText();
+    assert.notStrictEqual(
+      after,
+      before,
+      "Counter button on blog page should be interactive after client-side navigation",
     );
   });
 

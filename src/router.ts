@@ -1,6 +1,7 @@
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
-import diff from "diff-dom-streaming";
+import diff from "./diff-dom-streaming.ts";
 import { resetHeadContext } from "./head.ts";
+import { setNavigationMode } from "./store.ts";
 
 /** Route entry from build-time manifest. */
 export interface RouteManifestEntry {
@@ -50,6 +51,82 @@ export interface RouterConfig {
 
 /** Subscription callback for route changes. */
 export type RouteSubscriber = (match: RouteMatch | null) => void;
+
+export function handleDeferredHydrationNode(
+  entryTag: string,
+  processedScripts: Set<string>,
+  node: Element,
+): void {
+  const processHydrationScript = (script: HTMLScriptElement) => {
+    const scriptId = script.id;
+    if (!scriptId || !scriptId.includes("-hydrate-")) return;
+    if (processedScripts.has(scriptId)) return;
+    processedScripts.add(scriptId);
+
+    // Parse the hydration detail from the script content
+    // Format: detail:{"tag":"sf-root","id":"sf-root-deferred-defer-xxx"}
+    const scriptContent = script.textContent;
+    if (scriptContent) {
+      const match = scriptContent.match(/detail:(\{[^}]+\})/);
+      if (match) {
+        try {
+          const detail = JSON.parse(match[1]) as { tag: string; id: string };
+          document.dispatchEvent(new CustomEvent("sf:queue-hydrate", { detail }));
+          return;
+        } catch {
+          // Fallback: script will execute naturally when inserted
+        }
+      }
+    }
+  };
+
+  const processDataIsland = (script: HTMLScriptElement) => {
+    const id = script.getAttribute("data-island");
+    if (!id || !id.startsWith(`${entryTag}-deferred-`)) return;
+    const islandKey = `island:${id}`;
+    if (processedScripts.has(islandKey)) return;
+    processedScripts.add(islandKey);
+    document.dispatchEvent(
+      new CustomEvent("sf:queue-hydrate", {
+        detail: { tag: entryTag, id },
+      }),
+    );
+  };
+
+  if (node.tagName === "SCRIPT") {
+    const script = node as HTMLScriptElement;
+    processHydrationScript(script);
+    processDataIsland(script);
+    return;
+  }
+
+  // Also scan descendants in case a container node was inserted
+  const scripts = node.querySelectorAll("script");
+  for (const script of scripts) {
+    processHydrationScript(script as HTMLScriptElement);
+    processDataIsland(script as HTMLScriptElement);
+  }
+}
+
+function dedupeDeferredScripts(entryTag: string): void {
+  const scripts = document.querySelectorAll(
+    `script[data-island^="${entryTag}-deferred-"], script[id^="${entryTag}-hydrate-"]`,
+  );
+  const seen = new Map<string, HTMLScriptElement>();
+
+  for (const script of scripts) {
+    const dataIsland = script.getAttribute("data-island");
+    const key = dataIsland ? `island:${dataIsland}` : script.id ? `hydrate:${script.id}` : null;
+
+    if (!key) continue;
+
+    const previous = seen.get(key);
+    if (previous) {
+      previous.remove();
+    }
+    seen.set(key, script as HTMLScriptElement);
+  }
+}
 
 /** Checks if View Transitions API is supported. */
 export function supportsViewTransitions(): boolean {
@@ -217,17 +294,10 @@ export class Router {
   }
 
   /** Executes navigation with optional view transition. */
-  async #executeNavigation(
-    url: URL,
-    match: RouteMatch | null,
-    options: NavigateOptions,
-  ): Promise<void> {
-    const useTransition =
-      this.#config.viewTransitions && supportsViewTransitions() && !options.skipTransition;
-
+  async #executeNavigation(url: URL, match: RouteMatch | null): Promise<void> {
     try {
       if (match) {
-        await this.#loadRoute(match, url, useTransition);
+        await this.#loadRoute(match, url);
         this.current.value = match;
         this.#config.onNavigate(match);
       } else {
@@ -244,7 +314,7 @@ export class Router {
   }
 
   /** Loads route assets and swaps page content. */
-  async #loadRoute(match: RouteMatch, url: URL, useTransition: boolean): Promise<void> {
+  async #loadRoute(match: RouteMatch, url: URL): Promise<void> {
     const { entry } = match;
 
     // Preload the route chunk *before* DOM diffing so any custom elements for the
@@ -267,66 +337,21 @@ export class Router {
     }
 
     // During client-side navigation we apply streamed HTML via diff-dom-streaming.
-    // Deferred data islands may arrive before the full response completes.
-    // If we only scan after `diff()` finishes, deferred props appear "batched".
-    // Observe DOM mutations during diff so we can queue hydration as each deferred island arrives.
-    const queuedDeferredIslands = new Set<string>();
-    const queueDeferredIsland = (dataIslandId: string) => {
-      if (queuedDeferredIslands.has(dataIslandId)) return;
+    // Track processed hydration scripts and trigger hydration as they're inserted.
+    const processedScripts = new Set<string>();
 
-      const deferredIndex = dataIslandId.indexOf("-deferred-");
-      if (deferredIndex === -1) return;
+    // Capture the current route tag before diffing so we can detect tag changes.
+    const previousTag = document.querySelector("#app > *")?.tagName?.toLowerCase();
 
-      const tag = dataIslandId.slice(0, deferredIndex);
-
-      // Only queue hydration once the host element exists; otherwise we might mark it queued
-      // before it can hydrate, and then never retry.
-      if (!document.querySelector(tag)) return;
-
-      queuedDeferredIslands.add(dataIslandId);
-
-      // Delay to allow component mount before triggering hydration.
-      setTimeout(() => {
-        requestAnimationFrame(() => {
-          document.dispatchEvent(
-            new CustomEvent("sf:queue-hydrate", {
-              detail: { tag, id: dataIslandId },
-            }),
-          );
-        });
-      }, 0);
-    };
-
-    const maybeQueueFromNode = (node: Node) => {
-      if (node.nodeType !== Node.ELEMENT_NODE) return;
-
-      const el = node as Element;
-      if (el.tagName === "SCRIPT") {
-        const script = el as HTMLScriptElement;
-        if (script.type === "application/json") {
-          const dataIslandId = script.getAttribute("data-island");
-          if (dataIslandId) queueDeferredIsland(dataIslandId);
-        }
-      }
-
-      // Also check any deferred islands inserted as descendants.
-      const scripts = el.querySelectorAll?.(
-        'script[type="application/json"][data-island*="-deferred-"]',
-      );
-      if (!scripts?.length) return;
-
-      for (const script of scripts) {
-        const dataIslandId = script.getAttribute("data-island");
-        if (dataIslandId) queueDeferredIsland(dataIslandId);
-      }
-    };
-
+    // Use MutationObserver to detect when deferred hydration scripts are inserted
+    // into the real DOM and trigger hydration immediately for progressive streaming.
     let observer: MutationObserver | null = null;
     if (typeof MutationObserver !== "undefined") {
       observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-          for (const added of mutation.addedNodes) {
-            maybeQueueFromNode(added);
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType !== 1) continue;
+            handleDeferredHydrationNode(entry.tag, processedScripts, node as Element);
           }
         }
       });
@@ -336,36 +361,81 @@ export class Router {
       });
     }
 
-    // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree.
-    // If the subtree is already mounted by preact-custom-element, external DOM mutations can
-    // desync Preact's event delegation/handlers, leading to "dead" UI after navigation.
-    //
-    // Instead of patching inside a mounted host and then forcing a second remount (which
-    // creates duplicate renders and breaks progressive deferred updates ordering), eagerly
-    // detach the existing host so the incoming HTML inserts a fresh instance.
-    const existingHost = document.querySelector(entry.tag) as HTMLElement | null;
-    if (existingHost) {
-      const placeholder = document.createElement("div");
-      placeholder.setAttribute("data-sf-host-placeholder", entry.tag);
-      existingHost.replaceWith(placeholder);
-    }
+    // Enter navigation mode - tells hydration coordinator to preserve data island scripts
+    // during diff, so they can be used by the cloned element after replacement.
+    setNavigationMode(true);
+
+    // Use view transitions for visual animation if supported and enabled.
+    // Use syncMutations to apply DOM changes immediately during streaming for progressive
+    // deferred content hydration. This ensures each streamed chunk is visible immediately.
+    const useTransition = this.#config.viewTransitions && supportsViewTransitions();
 
     try {
-      await diff(document, response.body!, { transition: useTransition });
+      await diff(document, response.body!, {
+        transition: useTransition,
+        syncMutations: !useTransition, // Apply mutations synchronously when not using view transitions
+      });
+    } catch (diffError) {
+      // diff-dom-streaming can fail with "insertBefore" errors when the DOM was mutated
+      // by external factors (Preact custom elements, HMR, extensions). Fallback to a
+      // full navigation which lets the browser handle parsing.
+      observer?.disconnect();
+      setNavigationMode(false);
+      console.warn("[solarflare] DOM diff failed, falling back to full navigation:", diffError);
+      location.href = url.href;
+      return;
     } finally {
       observer?.disconnect();
     }
 
-    // Clean up placeholder if it somehow survived diffing.
-    document
-      .querySelectorAll(`div[data-sf-host-placeholder="${CSS.escape(entry.tag)}"]`)
-      .forEach((el) => el.remove());
+    // Wait for any pending DOM work to settle before element replacement.
+    // With view transitions, wait for ALL transitions to complete (not just the last one).
+    // Without them, mutations are flushed synchronously via FLUSH_SYNC, but wait two frames
+    // to ensure custom elements have mounted.
+    if (useTransition) {
+      const transitions: ViewTransition[] | undefined = (window as any).lastDiffTransitions;
+      if (transitions?.length) {
+        await Promise.all(transitions.map((t) => t.finished.catch(() => {})));
+        // Clear for next navigation
+        (window as any).lastDiffTransitions = [];
+      }
+    } else {
+      // First frame: batched mutations apply
+      await new Promise((r) => requestAnimationFrame(r));
+      // Second frame: custom element connectedCallbacks complete
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree,
+    // or when tag names differ, it updates children in-place then moves them to a new wrapper.
+    // Either way, Preact's event delegation/handlers can be desynced, leading to "dead" UI.
+    //
+    // Replace the host after diffing to ensure a fresh connectedCallback + event wiring
+    // when the route tag changes. When the tag is the same, trigger a rerender to
+    // re-bind events without losing local state (e.g. counters).
+    const host = document.querySelector(entry.tag) as HTMLElement;
+    const needsReplacement = previousTag && previousTag !== entry.tag;
+
+    if (host && needsReplacement) {
+      const replacement = host.cloneNode(true) as HTMLElement;
+      host.replaceWith(replacement);
+      // Wait for connectedCallback of the replacement element to complete
+      await new Promise((r) => requestAnimationFrame(r));
+    } else if (host) {
+      host.dispatchEvent(new CustomEvent("sf:rerender"));
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    // Clean up any duplicate deferred islands or hydrate scripts introduced by
+    // streaming diffs while navigation mode preserved previous scripts.
+    dedupeDeferredScripts(entry.tag);
+
+    // Exit navigation mode - allow normal script cleanup going forward
+    setNavigationMode(false);
 
     // Reset head context after navigation - the new HTML has fresh head tags
     // and any new useHead calls from hydrated components will be fresh
     resetHeadContext();
-
-    this.#hydrateDeferredDataIslands(queuedDeferredIslands);
 
     if (entry.styles?.length) {
       for (const href of entry.styles) {
@@ -377,52 +447,6 @@ export class Router {
           document.head.appendChild(link);
         }
       }
-    }
-  }
-
-  /** Hydrates deferred data islands after DOM diffing. */
-  #hydrateDeferredDataIslands(queuedDeferredIslands?: ReadonlySet<string>): void {
-    const dataIslands = document.querySelectorAll('script[type="application/json"][data-island]');
-    const processedIslands = new Set<string>();
-
-    for (const island of dataIslands) {
-      const dataIslandId = island.getAttribute("data-island");
-
-      if (!dataIslandId) continue;
-
-      const deferredIndex = dataIslandId.indexOf("-deferred-");
-      if (deferredIndex === -1) continue;
-
-      if (processedIslands.has(dataIslandId)) {
-        island.remove();
-        continue;
-      }
-      processedIslands.add(dataIslandId);
-
-      const tag = dataIslandId.slice(0, deferredIndex);
-
-      if (!document.querySelector(tag)) {
-        island.remove();
-        continue;
-      }
-
-      // If we already queued this island during streaming diff, don't re-queue it.
-      // The script stays in the DOM until hydration extracts it.
-      if (queuedDeferredIslands?.has(dataIslandId)) {
-        continue;
-      }
-
-      // Delay to allow component mount before triggering hydration
-      // Use custom event to communicate with hydration coordinator (no window pollution)
-      setTimeout(() => {
-        requestAnimationFrame(() => {
-          document.dispatchEvent(
-            new CustomEvent("sf:queue-hydrate", {
-              detail: { tag, id: dataIslandId },
-            }),
-          );
-        });
-      }, 0);
     }
   }
 
@@ -486,7 +510,7 @@ export class Router {
 
       event.intercept({
         scroll: "manual",
-        handler: () => this.#executeNavigation(url, match, {}),
+        handler: () => this.#executeNavigation(url, match),
       });
     };
 
