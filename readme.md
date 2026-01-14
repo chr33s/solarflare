@@ -12,7 +12,7 @@ Cloudflare-optimized streaming SSR/CSR meta-framework built on web platform APIs
 - **SPA Navigation** — Navigation API + View Transitions
 - **HMR** — Hot module replacement with scroll restoration
 - **Styles** — Constructable Stylesheets, critical CSS extraction
-- **Performance** — Early hints, route caching, preconnect hints
+- **Performance** — Early hints, route caching, preconnect hints, speculation rules
 - **Cloudflare** — Workers-optimized with edge caching
 - **TypeScript** — Full type safety
 
@@ -128,6 +128,10 @@ import { Deferred } from "@chr33s/solarflare/client";
 <meta name="sf:critical-css" content="true" />
 <meta name="sf:cache-max-age" content="300" />
 <meta name="sf:cache-swr" content="3600" />
+<meta name="sf:prefetch" content="/about, /faq, /blog/*" />
+<meta name="sf:prerender" content="/, /landing" />
+<meta name="sf:prefetch-selector" content="a.nav-link" />
+<meta name="sf:speculation-eagerness" content="moderate" />
 ```
 
 ### Custom Web Component

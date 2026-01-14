@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import { deepStrictEqual, strictEqual } from "node:assert";
-import { parseMetaConfig, workerConfigMeta } from "./worker-config.ts";
+import {
+  parseMetaConfig,
+  workerConfigMeta,
+  buildSpeculationRulesFromConfig,
+} from "./worker-config.ts";
 
 describe("parseMetaConfig", () => {
   it("should return defaults for empty HTML", () => {
@@ -13,6 +17,10 @@ describe("parseMetaConfig", () => {
     strictEqual(config.earlyFlush, false);
     strictEqual(config.criticalCss, false);
     strictEqual(config.cacheConfig, undefined);
+    deepStrictEqual(config.prefetch, []);
+    deepStrictEqual(config.prerender, []);
+    strictEqual(config.prefetchSelector, undefined);
+    strictEqual(config.speculationEagerness, "moderate");
   });
 
   it("should extract lang from html tag", () => {
@@ -109,6 +117,30 @@ describe("parseMetaConfig", () => {
     const config = parseMetaConfig(html);
     deepStrictEqual(config.preconnectOrigins, ["https://a.com", "https://b.com"]);
   });
+
+  it("should extract prefetch URLs", () => {
+    const html = '<meta name="sf:prefetch" content="/about, /faq, /blog/*">';
+    const config = parseMetaConfig(html);
+    deepStrictEqual(config.prefetch, ["/about", "/faq", "/blog/*"]);
+  });
+
+  it("should extract prerender URLs", () => {
+    const html = '<meta name="sf:prerender" content="/, /landing">';
+    const config = parseMetaConfig(html);
+    deepStrictEqual(config.prerender, ["/", "/landing"]);
+  });
+
+  it("should extract prefetch-selector", () => {
+    const html = '<meta name="sf:prefetch-selector" content="a.nav-link">';
+    const config = parseMetaConfig(html);
+    strictEqual(config.prefetchSelector, "a.nav-link");
+  });
+
+  it("should extract speculation-eagerness", () => {
+    const html = '<meta name="sf:speculation-eagerness" content="eager">';
+    const config = parseMetaConfig(html);
+    strictEqual(config.speculationEagerness, "eager");
+  });
 });
 
 describe("workerConfigMeta", () => {
@@ -173,6 +205,41 @@ describe("workerConfigMeta", () => {
     ]);
   });
 
+  it("should generate prefetch meta", () => {
+    const meta = workerConfigMeta({
+      prefetch: ["/about", "/blog/*"],
+    });
+    deepStrictEqual(meta, [{ name: "sf:prefetch", content: "/about,/blog/*" }]);
+  });
+
+  it("should generate prerender meta", () => {
+    const meta = workerConfigMeta({
+      prerender: ["/", "/landing"],
+    });
+    deepStrictEqual(meta, [{ name: "sf:prerender", content: "/,/landing" }]);
+  });
+
+  it("should generate prefetch-selector meta", () => {
+    const meta = workerConfigMeta({
+      prefetchSelector: "a.prefetch",
+    });
+    deepStrictEqual(meta, [{ name: "sf:prefetch-selector", content: "a.prefetch" }]);
+  });
+
+  it("should generate speculation-eagerness meta when not default", () => {
+    const meta = workerConfigMeta({
+      speculationEagerness: "eager",
+    });
+    deepStrictEqual(meta, [{ name: "sf:speculation-eagerness", content: "eager" }]);
+  });
+
+  it("should not generate speculation-eagerness meta when moderate (default)", () => {
+    const meta = workerConfigMeta({
+      speculationEagerness: "moderate",
+    });
+    deepStrictEqual(meta, []);
+  });
+
   it("should roundtrip through parseMetaConfig", () => {
     const original = {
       preconnect: ["https://cdn.example.com"],
@@ -190,5 +257,74 @@ describe("workerConfigMeta", () => {
     strictEqual(parsed.cacheConfig?.staleWhileRevalidate, original.cacheSwr);
     strictEqual(parsed.earlyFlush, original.earlyFlush);
     strictEqual(parsed.criticalCss, original.criticalCss);
+  });
+});
+
+describe("buildSpeculationRulesFromConfig", () => {
+  it("should return null when no speculation rules configured", () => {
+    const config = parseMetaConfig("");
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules, null);
+  });
+
+  it("should build prefetch list rules for exact URLs", () => {
+    const config = parseMetaConfig('<meta name="sf:prefetch" content="/about, /faq">');
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prefetch?.length, 1);
+    strictEqual(rules?.prefetch?.[0].source, "list");
+    deepStrictEqual((rules!.prefetch![0] as { urls: string[] }).urls, ["/about", "/faq"]);
+  });
+
+  it("should build prefetch document rules for patterns", () => {
+    const config = parseMetaConfig('<meta name="sf:prefetch" content="/blog/*">');
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prefetch?.length, 1);
+    strictEqual(rules?.prefetch?.[0].source, "document");
+  });
+
+  it("should build separate rules for URLs and patterns", () => {
+    const config = parseMetaConfig('<meta name="sf:prefetch" content="/about, /blog/*">');
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prefetch?.length, 2);
+  });
+
+  it("should build prefetch selector rules", () => {
+    const config = parseMetaConfig('<meta name="sf:prefetch-selector" content="a.nav">');
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prefetch?.length, 1);
+    strictEqual(rules?.prefetch?.[0].source, "document");
+    deepStrictEqual((rules!.prefetch![0] as { where: { selector_matches: string } }).where, {
+      selector_matches: "a.nav",
+    });
+  });
+
+  it("should build prerender list rules", () => {
+    const config = parseMetaConfig('<meta name="sf:prerender" content="/, /landing">');
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prerender?.length, 1);
+    strictEqual(rules?.prerender?.[0].source, "list");
+    deepStrictEqual((rules!.prerender![0] as { urls: string[] }).urls, ["/", "/landing"]);
+  });
+
+  it("should apply eagerness setting", () => {
+    const html = `
+      <meta name="sf:prefetch" content="/about">
+      <meta name="sf:speculation-eagerness" content="eager">
+    `;
+    const config = parseMetaConfig(html);
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prefetch?.[0].eagerness, "eager");
+  });
+
+  it("should build combined prefetch and prerender rules", () => {
+    const html = `
+      <meta name="sf:prefetch" content="/about, /blog/*">
+      <meta name="sf:prerender" content="/">
+      <meta name="sf:prefetch-selector" content="a.prefetch">
+    `;
+    const config = parseMetaConfig(html);
+    const rules = buildSpeculationRulesFromConfig(config);
+    strictEqual(rules?.prefetch?.length, 3); // list + document + selector
+    strictEqual(rules?.prerender?.length, 1);
   });
 });
