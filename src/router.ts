@@ -118,10 +118,20 @@ export class Router {
   readonly pathname: ReadonlySignal<string>;
 
   constructor(manifest: RoutesManifest, config: RouterConfig = {}) {
+    const getMeta = <T extends string>(name: string): T | null => {
+      if (typeof document === "undefined") return null;
+      const meta = document.querySelector(`meta[name="sf:${name}"]`);
+      return (meta?.getAttribute("content") as T) ?? null;
+    };
+
+    const metaBase = getMeta("base");
+    const metaViewTransitions = getMeta<"true" | "false">("view-transitions");
+    const metaScrollBehavior = getMeta<"auto" | "smooth" | "instant">("scroll-behavior");
+
     this.#config = {
-      base: manifest.base ?? config.base ?? "",
-      viewTransitions: config.viewTransitions ?? supportsViewTransitions(),
-      scrollBehavior: config.scrollBehavior ?? "auto",
+      base: config.base ?? metaBase ?? manifest.base ?? "",
+      viewTransitions: config.viewTransitions ?? metaViewTransitions === "true",
+      scrollBehavior: config.scrollBehavior ?? metaScrollBehavior ?? "auto",
       onNotFound: config.onNotFound ?? (() => {}),
       onNavigate: config.onNavigate ?? (() => {}),
       onError:
@@ -256,27 +266,106 @@ export class Router {
       throw new Error(`Failed to fetch ${url.href}: ${response.status}`);
     }
 
-    await diff(document, response.body!, { transition: useTransition });
+    // During client-side navigation we apply streamed HTML via diff-dom-streaming.
+    // Deferred data islands may arrive before the full response completes.
+    // If we only scan after `diff()` finishes, deferred props appear "batched".
+    // Observe DOM mutations during diff so we can queue hydration as each deferred island arrives.
+    const queuedDeferredIslands = new Set<string>();
+    const queueDeferredIsland = (dataIslandId: string) => {
+      if (queuedDeferredIslands.has(dataIslandId)) return;
+
+      const deferredIndex = dataIslandId.indexOf("-deferred-");
+      if (deferredIndex === -1) return;
+
+      const tag = dataIslandId.slice(0, deferredIndex);
+
+      // Only queue hydration once the host element exists; otherwise we might mark it queued
+      // before it can hydrate, and then never retry.
+      if (!document.querySelector(tag)) return;
+
+      queuedDeferredIslands.add(dataIslandId);
+
+      // Delay to allow component mount before triggering hydration.
+      setTimeout(() => {
+        requestAnimationFrame(() => {
+          document.dispatchEvent(
+            new CustomEvent("sf:queue-hydrate", {
+              detail: { tag, id: dataIslandId },
+            }),
+          );
+        });
+      }, 0);
+    };
+
+    const maybeQueueFromNode = (node: Node) => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      const el = node as Element;
+      if (el.tagName === "SCRIPT") {
+        const script = el as HTMLScriptElement;
+        if (script.type === "application/json") {
+          const dataIslandId = script.getAttribute("data-island");
+          if (dataIslandId) queueDeferredIsland(dataIslandId);
+        }
+      }
+
+      // Also check any deferred islands inserted as descendants.
+      const scripts = el.querySelectorAll?.(
+        'script[type="application/json"][data-island*="-deferred-"]',
+      );
+      if (!scripts?.length) return;
+
+      for (const script of scripts) {
+        const dataIslandId = script.getAttribute("data-island");
+        if (dataIslandId) queueDeferredIsland(dataIslandId);
+      }
+    };
+
+    let observer: MutationObserver | null = null;
+    if (typeof MutationObserver !== "undefined") {
+      observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          for (const added of mutation.addedNodes) {
+            maybeQueueFromNode(added);
+          }
+        }
+      });
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
+    }
 
     // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree.
     // If the subtree is already mounted by preact-custom-element, external DOM mutations can
     // desync Preact's event delegation/handlers, leading to "dead" UI after navigation.
     //
-    // To keep semantics simple and reliable, remount the route's root island by swapping
-    // the host element node (this triggers disconnected/connected lifecycle and a fresh mount).
-    const host = document.querySelector(entry.tag) as HTMLElement & {
-      _vdom?: unknown;
-    };
-    if (host) {
-      const replacement = host.cloneNode(true) as HTMLElement;
-      host.replaceWith(replacement);
+    // Instead of patching inside a mounted host and then forcing a second remount (which
+    // creates duplicate renders and breaks progressive deferred updates ordering), eagerly
+    // detach the existing host so the incoming HTML inserts a fresh instance.
+    const existingHost = document.querySelector(entry.tag) as HTMLElement | null;
+    if (existingHost) {
+      const placeholder = document.createElement("div");
+      placeholder.setAttribute("data-sf-host-placeholder", entry.tag);
+      existingHost.replaceWith(placeholder);
     }
+
+    try {
+      await diff(document, response.body!, { transition: useTransition });
+    } finally {
+      observer?.disconnect();
+    }
+
+    // Clean up placeholder if it somehow survived diffing.
+    document
+      .querySelectorAll(`div[data-sf-host-placeholder="${CSS.escape(entry.tag)}"]`)
+      .forEach((el) => el.remove());
 
     // Reset head context after navigation - the new HTML has fresh head tags
     // and any new useHead calls from hydrated components will be fresh
     resetHeadContext();
 
-    this.#hydrateDeferredDataIslands();
+    this.#hydrateDeferredDataIslands(queuedDeferredIslands);
 
     if (entry.styles?.length) {
       for (const href of entry.styles) {
@@ -292,7 +381,7 @@ export class Router {
   }
 
   /** Hydrates deferred data islands after DOM diffing. */
-  #hydrateDeferredDataIslands(): void {
+  #hydrateDeferredDataIslands(queuedDeferredIslands?: ReadonlySet<string>): void {
     const dataIslands = document.querySelectorAll('script[type="application/json"][data-island]');
     const processedIslands = new Set<string>();
 
@@ -314,6 +403,12 @@ export class Router {
 
       if (!document.querySelector(tag)) {
         island.remove();
+        continue;
+      }
+
+      // If we already queued this island during streaming diff, don't re-queue it.
+      // The script stays in the DOM until hydration extracts it.
+      if (queuedDeferredIslands?.has(dataIslandId)) {
         continue;
       }
 

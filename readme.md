@@ -120,6 +120,14 @@ import { Deferred } from "@chr33s/solarflare/client";
 </Deferred>;
 ```
 
+### Configuration Meta Tags
+
+```tsx
+<meta name="sf:base" content="/" />
+<meta name="sf:scroll-behavior" content="auto" />
+<meta name="sf:view-transitions" content="false" />
+```
+
 ### Performance Meta Tags
 
 ```tsx

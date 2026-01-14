@@ -396,17 +396,17 @@ describe("renderToStream with response metadata", () => {
       if (done) break;
       if (value) {
         seen += decoder.decode(value, { stream: true });
-        if (!timestamps.fast && seen.includes('data-island="test-component-deferred-fast"')) {
+        if (!timestamps.fast && seen.includes('data-island="test-component-deferred-fast')) {
           timestamps.fast = Date.now() - start;
         }
-        if (!timestamps.slow && seen.includes('data-island="test-component-deferred-slow"')) {
+        if (!timestamps.slow && seen.includes('data-island="test-component-deferred-slow')) {
           timestamps.slow = Date.now() - start;
         }
       }
     }
 
-    assert.ok(seen.includes('data-island="test-component-deferred-fast"'));
-    assert.ok(seen.includes('data-island="test-component-deferred-slow"'));
+    assert.ok(seen.includes('data-island="test-component-deferred-fast'));
+    assert.ok(seen.includes('data-island="test-component-deferred-slow'));
 
     // Fast should arrive before slow (with some tolerance for timing)
     assert.ok(

@@ -557,7 +557,7 @@ function createDeferredStream(
   async function buildDeferredHtml(dataIslandId: string, data: unknown, hydrateScriptId: string) {
     const dataIsland = await serializeDataIsland(dataIslandId, data);
     const hydrationDetail = escapeJsonForHtml({ tag, id: dataIslandId });
-    const hydrationScript = /* html */ `<script id="${hydrateScriptId}">setTimeout(()=>document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}})),0)</script>`;
+    const hydrationScript = /* html */ `<script id="${hydrateScriptId}">(function(){var s=document.currentScript;setTimeout(()=>{document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}}));s?.remove();},0);})()</script>`;
     return dataIsland + hydrationScript;
   }
 
@@ -591,12 +591,10 @@ function createDeferredStream(
         void Promise.resolve(promise)
           .then(async (value) => {
             const safeKey = key.replace(/[^a-zA-Z0-9_-]/g, "_");
-            const dataIslandId = `${tag}-deferred-${safeKey}`;
-            const html = await buildDeferredHtml(
-              dataIslandId,
-              { [key]: value },
-              `${tag}-hydrate-${safeKey}`,
-            );
+            const uniqueId = Math.random().toString(36).slice(2, 8);
+            const dataIslandId = `${tag}-deferred-${safeKey}-${uniqueId}`;
+            const hydrateScriptId = `${tag}-hydrate-${safeKey}-${uniqueId}`;
+            const html = await buildDeferredHtml(dataIslandId, { [key]: value }, hydrateScriptId);
             enqueueDeferredChunk(html);
           })
           .catch((err) => {

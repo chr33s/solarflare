@@ -180,6 +180,11 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
     element.removeAttribute("data-loading");
     element._sfDeferred = { ...element._sfDeferred, ...data };
 
+    // Prevent duplicate hydration on SPA navigations where multiple triggers may fire
+    // for the same deferred island (inline scripts + router scanning).
+    const scripts = document.querySelectorAll(`script[data-island="${CSS.escape(islandId)}"]`);
+    scripts.forEach((script) => script.remove());
+
     element.dispatchEvent(
       new CustomEvent("sf:hydrate", {
         detail: data,

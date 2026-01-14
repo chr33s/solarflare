@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type ConsoleMessage, type Page } from "playwright";
 
 async function waitForHydration(page: Page, tag = "sf-root"): Promise<void> {
   // 1) Ensure the custom element class is registered
@@ -667,6 +667,165 @@ describe("e2e", () => {
     await page.waitForSelector("text=Deferred2: world2", { timeout: 10_000 });
     const finalSecondH3 = await h3s.nth(1).textContent();
     assert.ok(finalSecondH3?.includes("Deferred2: world2"));
+  });
+
+  describe("console logs asynchronously", () => {
+    function collectPropsLogs(page: Page): Promise<Record<string, unknown>>[] {
+      const logs: Promise<Record<string, unknown>>[] = [];
+      page.on("console", (msg: ConsoleMessage) => {
+        if (msg.type() === "log") {
+          logs.push(
+            msg
+              .args()[0]
+              ?.jsonValue()
+              .catch(() => null) as Promise<Record<string, unknown>>,
+          );
+        }
+      });
+      return logs;
+    }
+
+    function filterPropsLogs(logs: (Record<string, unknown> | null)[]): Record<string, unknown>[] {
+      return logs.filter(
+        (log): log is Record<string, unknown> =>
+          log !== null && typeof log === "object" && "async" in log && "string" in log,
+      );
+    }
+
+    const EXPECTED_LOGS = [
+      { async: "WORLD", string: "World", children: undefined },
+      { async: "WORLD", string: "World", children: undefined, defer: "WORLD" },
+      {
+        async: "WORLD",
+        string: "World",
+        children: undefined,
+        defer: "WORLD",
+        defer2: "world2",
+      },
+    ];
+
+    function assertLogsMatch(
+      logs: Record<string, unknown>[],
+      expected: Record<string, unknown>[],
+      context: string,
+    ) {
+      assert.ok(
+        logs.length >= expected.length,
+        `${context}: Expected at least ${expected.length} logs, got ${logs.length}`,
+      );
+      for (let i = 0; i < expected.length; i++) {
+        assert.deepStrictEqual(logs[i], expected[i], `${context}: Log ${i + 1} mismatch`);
+      }
+    }
+
+    it("should log props correctly on initial load", async () => {
+      const page = await browser.newPage();
+      const logsPromises = collectPropsLogs(page);
+
+      await page.goto(BASE_URL);
+      await waitForHydration(page);
+
+      // Wait for all deferred props to resolve (defer: 1.5s, defer2: 3s)
+      await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+        timeout: 10_000,
+      });
+
+      const initialLogs = filterPropsLogs(await Promise.all(logsPromises));
+      assertLogsMatch(initialLogs, EXPECTED_LOGS, "Initial load");
+    });
+
+    it("should log props correctly after navigation", async () => {
+      const page = await browser.newPage();
+
+      // Initial load
+      await page.goto(BASE_URL);
+      await waitForHydration(page);
+      await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+        timeout: 10_000,
+      });
+
+      // Navigate to blog
+      await page.click('a[href="/blog/hello-world"]');
+      await waitForHydration(page);
+
+      // Navigate back and collect logs
+      const logsPromises = collectPropsLogs(page);
+      await page.click('a[href="/"]');
+      await waitForHydration(page);
+      await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+        timeout: 10_000,
+      });
+
+      const navLogs = filterPropsLogs(await Promise.all(logsPromises));
+      assertLogsMatch(navLogs, EXPECTED_LOGS, "After navigation");
+    });
+  });
+
+  it("should render asynchronously", async () => {
+    const page = await browser.newPage();
+    const assertHomeAsyncSequence = async (
+      context: string,
+      options: { expectIncrementalDefer: boolean },
+    ) => {
+      // Initial streamed shell state.
+      await page.waitForSelector("h1");
+      await page.waitForSelector("h2");
+      await page.waitForSelector("h3");
+
+      const h1Text = (await page.locator("h1").first().textContent()) ?? "";
+      const h2Text = (await page.locator("h2").first().textContent()) ?? "";
+      assert.strictEqual(h1Text, "Hello World", `${context}: unexpected h1: ${h1Text}`);
+      assert.strictEqual(h2Text, "Async: WORLD", `${context}: unexpected h2: ${h2Text}`);
+
+      const h3s = page.locator("h3");
+
+      if (options.expectIncrementalDefer) {
+        // For full document loads, we should see incremental resolution: first defer resolves
+        // while second remains Loading.
+        await page.waitForFunction(
+          () => {
+            const h3Elements = document.querySelectorAll("h3");
+            const first = h3Elements[0]?.textContent ?? "";
+            const second = h3Elements[1]?.textContent ?? "";
+            return first.includes("Deferred:") && second === "Loading...";
+          },
+          { timeout: 10_000 },
+        );
+      }
+
+      // Always wait for eventual final state.
+      await page.waitForSelector("text=Deferred: WORLD", { timeout: 10_000 });
+      await page.waitForSelector("text=Deferred2: world2", { timeout: 10_000 });
+
+      const firstH3Final = (await h3s.nth(0).textContent()) ?? "";
+      const secondH3Final = (await h3s.nth(1).textContent()) ?? "";
+      assert.ok(
+        firstH3Final.includes("Deferred: WORLD"),
+        `${context}: first h3 did not resolve: ${firstH3Final}`,
+      );
+      assert.ok(
+        secondH3Final.includes("Deferred2: world2"),
+        `${context}: second h3 did not resolve: ${secondH3Final}`,
+      );
+    };
+
+    await page.goto(BASE_URL, { waitUntil: "commit" });
+    await assertHomeAsyncSequence("Initial load", {
+      expectIncrementalDefer: true,
+    });
+
+    // Navigate to blog (client-side), then back home (client-side) and ensure
+    // the async/deferred sequence still works.
+    await page.click('nav a[href="/blog/hello-world"]');
+    await page.waitForURL("**/blog/hello-world");
+    await waitForHydration(page, "sf-blog-slug");
+
+    await page.click('nav a[href="/"]');
+    await page.waitForURL("**/");
+    await waitForHydration(page);
+    await assertHomeAsyncSequence("After client-side navigation", {
+      expectIncrementalDefer: false,
+    });
   });
 });
 
