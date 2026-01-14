@@ -121,7 +121,7 @@ export async function hydrateStore(): Promise<void> {
   setPathname(state.pathname);
 
   // Clean up the data island after extraction
-  const script = document.querySelector(`script[data-island="${STORE_ISLAND_ID}"]`);
+  const script = document.querySelector(`script[data-island="${CSS.escape(STORE_ISLAND_ID)}"]`);
   script?.remove();
 }
 
@@ -129,7 +129,7 @@ export async function hydrateStore(): Promise<void> {
 export async function hydrateHead(): Promise<void> {
   if (typeof document === "undefined") return;
 
-  const script = document.querySelector(`script[data-island="${HEAD_ISLAND_ID}"]`);
+  const script = document.querySelector(`script[data-island="${CSS.escape(HEAD_ISLAND_ID)}"]`);
   if (!script?.textContent) return;
 
   hydrateHeadState(script.textContent);
@@ -152,7 +152,7 @@ export async function serializeDataIsland(id: string, data: unknown): Promise<st
 export async function extractDataIsland<T = unknown>(id: string): Promise<T | null> {
   if (typeof document === "undefined") return null;
 
-  const script = document.querySelector(`script[data-island="${id}"]`);
+  const script = document.querySelector(`script[data-island="${CSS.escape(id)}"]`);
   if (!script?.textContent) return null;
 
   try {
