@@ -139,6 +139,10 @@ export function workerConfigMeta(config: {
   cacheSwr?: number;
   earlyFlush?: boolean;
   criticalCss?: boolean;
+  prefetch?: string[];
+  prerender?: string[];
+  prefetchSelector?: string;
+  speculationEagerness?: SpeculationEagerness;
 }): Array<{ name: string; content: string }> {
   const meta: Array<{ name: string; content: string }> = [];
 
@@ -173,11 +177,17 @@ export function workerConfigMeta(config: {
   }
 
   if (config.prefetchSelector) {
-    meta.push({ name: "sf:prefetch-selector", content: config.prefetchSelector });
+    meta.push({
+      name: "sf:prefetch-selector",
+      content: config.prefetchSelector,
+    });
   }
 
   if (config.speculationEagerness && config.speculationEagerness !== "moderate") {
-    meta.push({ name: "sf:speculation-eagerness", content: config.speculationEagerness });
+    meta.push({
+      name: "sf:speculation-eagerness",
+      content: config.speculationEagerness,
+    });
   }
 
   return meta;

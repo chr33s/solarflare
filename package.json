@@ -21,7 +21,7 @@
   },
   "scripts": {
     "check": "oxfmt --check && oxlint --type-aware --type-check",
-    "fix": "oxlint --type-aware --fix && oxfmt --write",
+    "fix": "oxlint --type-aware --type-check --fix && oxfmt --write",
     "test": "WRANGLER_LOG=error; node --test src/*.test.ts"
   },
   "dependencies": {
