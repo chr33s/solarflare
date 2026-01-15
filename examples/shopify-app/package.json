@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx shopify app dev --use-localhost --localhost-port=8443",
+    "build": "shopify app build",
+    "dev": "shopify app dev --use-localhost --localhost-port=8443",
     "deploy": "solarflare --production && wrangler deploy"
   },
   "dependencies": {
