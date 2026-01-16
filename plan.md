@@ -1,5 +1,22 @@
 # Simplification Plan
 
+## Status (Jan 16, 2026)
+
+Completed:
+
+- ✅ Centralized manifest types (`src/manifest.ts`) and updated imports.
+- ✅ Unified CSS HMR into `src/hmr.ts` with `stylesheets` as single manager.
+- ✅ Moved HMR wrapper logic to helpers in `src/hmr.ts` and wired generated entry to use them.
+- ✅ Split worker pipeline into `handleDevEndpoints`, `matchAndLoad`, `renderStream`, `applyPerfFeatures`.
+- ✅ Extracted deferred hydration DOM handling to `src/router-deferred.ts`.
+- ✅ Split build steps into `src/build.*` modules.
+
+Remaining tasks:
+
+- ⬜ Store vs hydration separation: move hydration queue + data island hydration out of `src/store.ts` into `src/hydration.ts` (keep store signals + setters only).
+- ⬜ Entry generation clarity: further reduce template logic in `src/build.hmr-entry.ts` (extract CSS registration + router init helpers).
+- ⬜ Architecture doc alignment: update file names/paths to new module layout (e.g., `client.hmr.ts`, `server.hmr.ts`, `client.styles.ts`) and remove stale references.
+
 ## Goals
 
 - Reduce cross-module coupling and duplicate logic.

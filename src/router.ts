@@ -1,7 +1,7 @@
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "./diff-dom-streaming.ts";
 import { resetHeadContext } from "./head.ts";
-import { setNavigationMode } from "./store.ts";
+import { setNavigationMode } from "./hydration.ts";
 import type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
 export type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
 import { dedupeDeferredScripts, handleDeferredHydrationNode } from "./router-deferred.ts";

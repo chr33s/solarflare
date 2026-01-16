@@ -61,7 +61,7 @@ flowchart TB
   - APIs: `Deferred` (`src/render-priority.ts`) for priority-based rendering holes, `define()` for custom elements.
 
 - **Styles & CSS**:
-  - `src/stylesheets.ts` & `src/client-styles.ts`: Manage Constructable Stylesheets.
+  - `src/stylesheets.ts` & `src/client.styles.ts`: Manage Constructable Stylesheets.
   - `src/hmr.ts`: Handles CSS HMR updates (granular + full replacement).
   - `src/critical-css.ts`: Extracts critical CSS for inlining.
 
@@ -76,9 +76,9 @@ flowchart TB
   - `src/route-cache.ts`: Edge caching logic for server routes.
 
 - **DX / Dev mode**
-  - HMR client: `src/hmr-client.ts` (EventSource → `/_hmr`)
+  - HMR client: `src/client.hmr.ts` (EventSource → `/_hmr`)
   - HMR utilities + error boundary: `src/hmr.ts`
-  - HMR server endpoint: `src/hmr-server.ts` (`/_hmr` SSE)
+  - HMR server endpoint: `src/server.hmr.ts` (`/_hmr` SSE)
   - Console forwarding: `src/console-forward.ts` (`/_console` + injected `console-forward.js`)
   - Codemod: `src/codemod.ts` (CLI tool for migration)
 
@@ -96,7 +96,7 @@ The build/runtime boundary shares a small set of manifest shapes:
 
 | Concern                            | Build-generated entry (via `src/build.ts`)                             | Runtime helpers                                                                 |
 | ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------ |
-| Module swap + versioning           | Listens for `sf:module:*`, increments `hmrVersion`, re-renders wrapper | `src/hmr-client.ts` establishes HMR channel and dispatches events               |
+| Module swap + versioning           | Listens for `sf:module:*`, increments `hmrVersion`, re-renders wrapper | `src/client.hmr.ts` establishes HMR channel and dispatches events               |
 | Error boundary recovery            | Inline `HMRErrorBoundary` wrapper in generated entry                   | `src/hmr.ts` provides `HMRErrorBoundary` + helpers (used for shared wrappers)   |
 | CSS updates (constructable sheets) | Wires per-file `sf:css:*` listeners and inline reload hooks            | `src/hmr.ts` handles `sf:css-update`/`sf:css-replace` and updates `stylesheets` |
 | Event dispatch                     | Emits `sf:hmr:update                                                   | error                                                                           | recover` events | `src/hmr.ts` exposes `dispatchHMREvent` / `onHMREvent` |
@@ -174,9 +174,10 @@ Named pipeline stages (inputs → outputs):
 Key steps (simplified):
 
 1. **Dev endpoints** short-circuit early:
-   - `/_hmr` → SSE stream (`src/hmr-server.ts`)
-   - `/_console` → console forwarding (`src/console-forward.ts`)
-   - devtools JSON → `src/devtools-json.ts`
+
+- `/_hmr` → SSE stream (`src/server.hmr.ts`)
+- `/_console` → console forwarding (`src/console-forward.ts`)
+- devtools JSON → `src/devtools-json.ts`
 
 2. **Route match** using `URLPattern` against generated routes.
 
@@ -326,8 +327,8 @@ sequenceDiagram
 
 ### HMR
 
-- Server side: `/_hmr` is an SSE endpoint (`src/hmr-server.ts`).
-- Client side: `src/hmr-client.ts` connects via `EventSource` and dispatches HMR events.
+- Server side: `/_hmr` is an SSE endpoint (`src/server.hmr.ts`).
+- Client side: `src/client.hmr.ts` connects via `EventSource` and dispatches HMR events.
 - Component-level helpers in `src/hmr.ts` preserve hook state, scroll position, and isolate failures via `HMRErrorBoundary`.
 
 ```mermaid

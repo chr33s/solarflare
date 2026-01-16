@@ -30,8 +30,8 @@ describe("generateChunkedClientEntry", () => {
     });
 
     assert.ok(result.includes("import css0 from './styles.css?raw'"));
-    assert.ok(result.includes("stylesheets.register"));
-    assert.ok(result.includes("onCssUpdate: reloadStylesheets"));
+    assert.ok(result.includes("registerInlineStyles"));
+    assert.ok(result.includes("onCssUpdate: reloadAllStylesheets"));
   });
 
   it("omits CSS imports in production mode", () => {
@@ -40,7 +40,7 @@ describe("generateChunkedClientEntry", () => {
       debug: false,
     });
 
-    assert.ok(!result.includes("stylesheets.register"));
+    assert.ok(!result.includes("registerInlineStyles"));
     assert.ok(!result.includes("?raw"));
   });
 });

@@ -1,10 +1,11 @@
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
-import { hydrateStore } from "./store.ts";
-import { initHydrationCoordinator } from "./hydration.ts";
+import { hydrateStore, initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 import { getRuntime, peekRuntime, clearRuntime } from "./runtime.ts";
+import { stylesheets, supportsConstructableStylesheets } from "./stylesheets.ts";
+import { getPreloadedStylesheet } from "./server.styles.ts";
 
 export { Deferred } from "./render-priority.ts";
 export { installHeadHoisting, createHeadContext, setHeadContext };
@@ -19,6 +20,31 @@ export async function initClient(): Promise<void> {
 
   await hydrateStore();
   initHydrationCoordinator();
+}
+
+/** Inline stylesheet entry for dev HMR registration. */
+export interface InlineStyleEntry {
+  id: string;
+  css: string;
+}
+
+/** Registers inline stylesheets for a component (dev HMR). */
+export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]): void {
+  if (!styles.length) return;
+  if (!supportsConstructableStylesheets() || typeof document === "undefined") return;
+
+  for (const style of styles) {
+    const preloaded = getPreloadedStylesheet(style.id);
+    if (!preloaded) {
+      stylesheets.register(style.id, style.css, { consumer: tag });
+    }
+  }
+
+  const sheets = stylesheets.getForConsumer(tag);
+  document.adoptedStyleSheets = [
+    ...document.adoptedStyleSheets.filter((s) => !sheets.includes(s)),
+    ...sheets,
+  ];
 }
 
 /** Tag metadata from file path. */
@@ -173,13 +199,7 @@ export {
   setParams,
   setServerData,
   setPathname,
-  hydrateStore,
   resetStore,
-  // Data islands
-  serializeDataIsland,
-  extractDataIsland,
-  // Hydration coordinator
-  hydrateComponent,
   // Re-exports from signals-core
   signal,
   computed,
@@ -193,6 +213,13 @@ export {
 } from "./store.ts";
 
 export {
+  // Data islands
+  serializeDataIsland,
+  extractDataIsland,
+  // Store hydration
+  hydrateStore,
+  // Component hydration
+  hydrateComponent,
   initHydrationCoordinator,
   cleanupHydrationCoordinator,
   queueHydration,
@@ -234,6 +261,7 @@ export {
   HMRErrorBoundary,
   // CSS HMR
   reloadStylesheet,
+  reloadAllStylesheets,
   removeStylesheet,
   acceptCssHMR,
   // HMR wrapper

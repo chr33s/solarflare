@@ -158,6 +158,15 @@ declare module "@chr33s/solarflare/client" {
    */
   export function initClient(): Promise<void>;
 
+  /** Inline stylesheet entry for dev HMR registration. */
+  export interface InlineStyleEntry {
+    id: string;
+    css: string;
+  }
+
+  /** Registers inline stylesheets for a component (dev HMR). */
+  export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]): void;
+
   // Signals
   export const params: ReadonlySignal<Record<string, string>>;
   export const serverData: ReadonlySignal<ServerData<unknown>>;
@@ -326,6 +335,11 @@ declare module "@chr33s/solarflare/client" {
    * Reloads a CSS file by updating its href with a cache-busting query
    */
   export function reloadStylesheet(href: string): void;
+
+  /**
+   * Reloads all linked stylesheets on the page
+   */
+  export function reloadAllStylesheets(): void;
 
   /**
    * Removes a stylesheet from the document

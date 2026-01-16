@@ -3,8 +3,7 @@ import { signal, type Signal, useSignal, useSignalEffect } from "@preact/signals
 import { useMemo } from "preact/hooks";
 import register from "preact-custom-element";
 import { initRouter, getRouter } from "./router.ts";
-import { extractDataIsland } from "./store.ts";
-import { initHydrationCoordinator } from "./hydration.ts";
+import { extractDataIsland, initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 import { getRuntime } from "./runtime.ts";
 import type { RoutesManifest } from "./manifest.ts";
@@ -366,6 +365,24 @@ export function reloadStylesheet(href: string): void {
     loadedStylesheets.set(href, link);
     console.log(`[HMR] Injected stylesheet: ${href}`);
   }
+}
+
+/** Reloads all linked stylesheets on the page. */
+export function reloadAllStylesheets(): void {
+  if (typeof document === "undefined") return;
+  const links = document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]');
+
+  links.forEach((link) => {
+    const href = link.getAttribute("href");
+    if (!href) return;
+    if (!href.includes("?")) {
+      link.setAttribute("href", `${href}?t=${Date.now()}`);
+    } else {
+      link.setAttribute("href", href.replace(/\?t=\d+/, `?t=${Date.now()}`));
+    }
+  });
+
+  console.log("[HMR] Reloaded stylesheets");
 }
 
 /** Removes a stylesheet from the document. */

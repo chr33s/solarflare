@@ -2,13 +2,8 @@ import { type FunctionComponent, type VNode, h } from "preact";
 import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
 import { parsePath } from "./paths.ts";
 import { escapeJsonForHtml } from "./serialize.ts";
-import {
-  initStore,
-  setPathname,
-  serializeStoreForHydration,
-  serializeDataIsland,
-  resetStore,
-} from "./store.ts";
+import { initStore, setPathname, resetStore } from "./store.ts";
+import { serializeStoreForHydration, serializeDataIsland } from "./hydration.ts";
 import {
   createHeadContext,
   setHeadContext,
@@ -622,11 +617,14 @@ export {
   setServerData,
   setPathname,
   resetStore,
-  serializeStoreForHydration,
-  serializeHeadForHydration,
-  hydrateHead,
-  serializeDataIsland,
   params,
   serverData,
   pathname,
 } from "./store.ts";
+
+export {
+  serializeStoreForHydration,
+  serializeHeadForHydration,
+  hydrateHead,
+  serializeDataIsland,
+} from "./hydration.ts";
