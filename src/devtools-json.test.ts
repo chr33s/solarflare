@@ -1,4 +1,4 @@
-import { test, describe } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   isDevToolsRequest,
@@ -8,7 +8,7 @@ import {
 } from "./devtools-json.ts";
 
 describe("isDevToolsRequest", () => {
-  test("returns true for correct endpoint with GET method", () => {
+  it("returns true for correct endpoint with GET method", () => {
     const request = new Request(
       "http://localhost:8080/.well-known/appspecific/com.chrome.devtools.json",
       { method: "GET" },
@@ -16,14 +16,14 @@ describe("isDevToolsRequest", () => {
     assert.strictEqual(isDevToolsRequest(request), true);
   });
 
-  test("returns false for incorrect path", () => {
+  it("returns false for incorrect path", () => {
     const request = new Request("http://localhost:8080/other-path", {
       method: "GET",
     });
     assert.strictEqual(isDevToolsRequest(request), false);
   });
 
-  test("returns false for POST method", () => {
+  it("returns false for POST method", () => {
     const request = new Request(
       "http://localhost:8080/.well-known/appspecific/com.chrome.devtools.json",
       { method: "POST" },
@@ -31,7 +31,7 @@ describe("isDevToolsRequest", () => {
     assert.strictEqual(isDevToolsRequest(request), false);
   });
 
-  test("returns false for partial path match", () => {
+  it("returns false for partial path match", () => {
     const request = new Request("http://localhost:8080/.well-known/appspecific", {
       method: "GET",
     });
@@ -40,13 +40,13 @@ describe("isDevToolsRequest", () => {
 });
 
 describe("handleDevToolsRequest", () => {
-  test("returns JSON response with correct content-type", () => {
+  it("returns JSON response with correct content-type", () => {
     const response = handleDevToolsRequest({ projectRoot: "/test/project" });
     assert.strictEqual(response.status, 200);
     assert.strictEqual(response.headers.get("Content-Type"), "application/json");
   });
 
-  test("returns workspace with root and uuid", async () => {
+  it("returns workspace with root and uuid", async () => {
     const response = handleDevToolsRequest({ projectRoot: "/test/project" });
     const json = (await response.json()) as DevToolsJSON;
     assert.ok(json.workspace);
@@ -58,7 +58,7 @@ describe("handleDevToolsRequest", () => {
     );
   });
 
-  test("uses provided uuid option", async () => {
+  it("uses provided uuid option", async () => {
     const fixedUuid = "6ec0bd7f-11c0-43da-975e-2a8ad9ebae0b";
     const response = handleDevToolsRequest({
       projectRoot: "/test/project",
@@ -68,7 +68,7 @@ describe("handleDevToolsRequest", () => {
     assert.strictEqual(json.workspace.uuid, fixedUuid);
   });
 
-  test("caches uuid across calls", async () => {
+  it("caches uuid across calls", async () => {
     setDevToolsUuid("cached-uuid-1234");
     const response1 = handleDevToolsRequest({ projectRoot: "/test" });
     const response2 = handleDevToolsRequest({ projectRoot: "/test" });

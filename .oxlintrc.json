@@ -14,7 +14,7 @@
         "allowForKnownSafeCalls": [
           {
             "from": "package",
-            "name": ["test", "it", "suite", "describe"],
+            "name": ["it", "describe"],
             "package": "node:test"
           }
         ]

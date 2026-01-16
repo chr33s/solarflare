@@ -820,35 +820,31 @@ describe("e2e", () => {
       assertLogsMatch(initialLogs, EXPECTED_LOGS, "Initial load");
     });
 
-    it(
-      "should log props correctly after navigation",
-      async () => {
-        const page = await browser.newPage();
+    it("should log props correctly after navigation", { timeout: 20_000 }, async () => {
+      const page = await browser.newPage();
 
-        // Initial load
-        await page.goto(BASE_URL);
-        await waitForHydration(page);
-        await page.waitForSelector("h3:has-text('Deferred2: world2')", {
-          timeout: 10_000,
-        });
+      // Initial load
+      await page.goto(BASE_URL);
+      await waitForHydration(page);
+      await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+        timeout: 10_000,
+      });
 
-        // Navigate to blog
-        await page.click('a[href="/blog/hello-world"]');
-        await waitForHydration(page);
+      // Navigate to blog
+      await page.click('a[href="/blog/hello-world"]');
+      await waitForHydration(page);
 
-        // Navigate back and collect logs
-        const logsPromises = collectPropsLogs(page);
-        await page.click('a[href="/"]');
-        await waitForHydration(page);
-        await page.waitForSelector("h3:has-text('Deferred2: world2')", {
-          timeout: 10_000,
-        });
+      // Navigate back and collect logs
+      const logsPromises = collectPropsLogs(page);
+      await page.click('a[href="/"]');
+      await waitForHydration(page);
+      await page.waitForSelector("h3:has-text('Deferred2: world2')", {
+        timeout: 10_000,
+      });
 
-        const navLogs = filterPropsLogs(await Promise.all(logsPromises));
-        assertLogsMatch(navLogs, EXPECTED_LOGS, "After navigation");
-      },
-      { timeout: 20_000 },
-    );
+      const navLogs = filterPropsLogs(await Promise.all(logsPromises));
+      assertLogsMatch(navLogs, EXPECTED_LOGS, "After navigation");
+    });
   });
 
   it("should render asynchronously", async () => {
