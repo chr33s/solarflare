@@ -23,5 +23,5 @@ it("getChunkName should strip extensions and params", () => {
 });
 
 it("getChunkName should include hash when provided", () => {
-  assert.strictEqual(getChunkName("index.client.tsx", "abc12345"), "index.abc12345.js");
+  assert.strictEqual(getChunkName("index.client.tsx", "abc12345"), "index-abc12345.js");
 });

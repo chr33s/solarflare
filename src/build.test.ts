@@ -61,7 +61,7 @@ describe("getChunkName logic", () => {
   });
 
   it("should generate chunk name with hash", () => {
-    assert.strictEqual(getChunkName("index.client.tsx", "abc12345"), "index.abc12345.js");
+    assert.strictEqual(getChunkName("index.client.tsx", "abc12345"), "index-abc12345.js");
   });
 
   it("should handle nested paths", () => {

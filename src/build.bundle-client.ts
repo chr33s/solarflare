@@ -6,6 +6,7 @@ import { rolldown } from "rolldown";
 import { replacePlugin } from "rolldown/plugins";
 import { transform } from "lightningcss";
 import { createProgram, getDefaultExportInfo } from "./ast.ts";
+import { assetUrlPrefixPlugin } from "./build.bundle.ts";
 import { parsePath } from "./paths.ts";
 import { generateClientScript } from "./console-forward.ts";
 import { createScanner } from "./build.scan.ts";
@@ -75,7 +76,7 @@ export function getChunkName(file: string, contentHash?: string): string {
     .replace(/\$/g, "")
     .replace(/^index$/, "index");
 
-  return contentHash ? `${base}.${contentHash}.js` : `${base}.js`;
+  return contentHash ? `${base}-${contentHash}.js` : `${base}.js`;
 }
 
 function extractPropsFromProgram(program: ts.Program, filePath: string): string[] {
@@ -113,7 +114,39 @@ async function getComponentMeta(
 
 export async function buildClient(options: BuildClientOptions): Promise<void> {
   const { args, rootDir, appDir, distDir, distClient, publicDir, chunksPath } = options;
+  const distClientAssets = join(distClient, "assets");
   const scanner = createScanner({ rootDir, appDir });
+
+  const cssAssetCache = new Map<string, string>();
+  const cssOutputsByBase = new Map<string, string>();
+
+  async function emitCssAsset(cssSourcePath: string): Promise<string | null> {
+    if (!(await exists(cssSourcePath))) return null;
+
+    const cached = cssAssetCache.get(cssSourcePath);
+    if (cached) return cached;
+
+    const cssRelativePath = cssSourcePath.replace(appDir + "/", "");
+    const cssContent = transform({
+      code: Buffer.from(await readText(cssSourcePath)),
+      filename: cssSourcePath,
+      minify: args.production,
+    }).code.toString();
+
+    const cssHash = hash(cssContent);
+    const cssBase = normalizeAssetPath(cssRelativePath.replace(/\.css$/, ""));
+    const cssOutputName = `${cssBase}-${cssHash}.css`;
+
+    cssOutputsByBase.set(cssBase, cssOutputName);
+
+    await mkdir(distClientAssets, { recursive: true });
+    const destPath = join(distClientAssets, cssOutputName);
+    await write(destPath, cssContent);
+
+    const outputPath = `/assets/${cssOutputName}`;
+    cssAssetCache.set(cssSourcePath, outputPath);
+    return outputPath;
+  }
 
   console.log("🔍 Scanning for client components...");
   const clientFiles = await scanner.findClientComponents();
@@ -128,6 +161,7 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
 
   const layoutFiles = await scanner.findLayouts();
   const layoutCssMap: Record<string, string[]> = {};
+  const componentCssMap: Record<string, string[]> = {};
 
   for (const layoutFile of layoutFiles) {
     const layoutPath = join(appDir, layoutFile);
@@ -145,27 +179,8 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
           cssSourcePath = join(appDir, layoutDir, cssImport);
         }
 
-        if (!(await exists(cssSourcePath))) {
-          continue;
-        }
-
-        const cssRelativePath = cssSourcePath.replace(appDir + "/", "");
-        const cssContent = transform({
-          code: Buffer.from(await readText(cssSourcePath)),
-          filename: cssSourcePath,
-          minify: args.production,
-        }).code.toString();
-
-        const cssHash = hash(cssContent);
-        const cssBase = normalizeAssetPath(cssRelativePath.replace(/\.css$/, ""));
-        const cssOutputName = `${cssBase}.${cssHash}.css`;
-
-        await mkdir(distClient, { recursive: true });
-        const destPath = join(distClient, cssOutputName);
-        await write(destPath, cssContent);
-
-        const outputPath = `/${cssOutputName}`;
-        if (!cssOutputPaths.includes(outputPath)) {
+        const outputPath = await emitCssAsset(cssSourcePath);
+        if (outputPath && !cssOutputPaths.includes(outputPath)) {
           cssOutputPaths.push(outputPath);
         }
       }
@@ -199,9 +214,9 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
   }
 
   if (!args.production) {
-    await mkdir(distClient, { recursive: true });
+    await mkdir(distClientAssets, { recursive: true });
     const consoleScript = generateClientScript();
-    const consoleScriptPath = join(distClient, "console-forward.js");
+    const consoleScriptPath = join(distClientAssets, "console-forward.js");
     await write(consoleScriptPath, consoleScript);
     console.log("   Generated console-forward.js (dev mode)");
   }
@@ -210,7 +225,7 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     routes: metas.map((meta) => ({
       pattern: meta.parsed.pattern,
       tag: meta.tag,
-      chunk: `/${meta.chunk}`,
+      chunk: `/assets/${meta.chunk}`,
       styles: undefined,
       type: "client" as const,
       params: meta.parsed.params,
@@ -225,6 +240,31 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
   for (const meta of metas) {
     const componentPath = join(appDir, meta.file);
     const componentCssImports = await scanner.extractAllCssImports(componentPath);
+
+    const componentCssOutputPaths: string[] = [];
+    const componentDir = meta.file.split("/").slice(0, -1).join("/");
+
+    for (const cssImport of componentCssImports) {
+      let cssSourcePath: string;
+      if (cssImport.startsWith("./")) {
+        cssSourcePath = join(appDir, cssImport.replace("./", ""));
+      } else {
+        cssSourcePath = join(appDir, componentDir, cssImport);
+      }
+
+      const outputPath = await emitCssAsset(cssSourcePath);
+      if (outputPath && !componentCssOutputPaths.includes(outputPath)) {
+        componentCssOutputPaths.push(outputPath);
+      }
+    }
+
+    if (componentCssOutputPaths.length > 0) {
+      const existing = componentCssMap[meta.parsed.pattern] ?? [];
+      componentCssMap[meta.parsed.pattern] = [
+        ...existing,
+        ...componentCssOutputPaths.filter((path) => !existing.includes(path)),
+      ];
+    }
 
     const cssFiles: string[] = [];
     for (const cssImport of componentCssImports) {
@@ -301,36 +341,61 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
           return null;
         },
       },
+      assetUrlPrefixPlugin,
     ],
     resolve: {
       alias: packageImports,
     },
     transform: {
+      target: "es2020",
       jsx: {
         runtime: "automatic",
-        development: false,
+        development: !args.production,
       },
     },
   });
 
   await bundle.write({
-    dir: distClient,
+    dir: distClientAssets,
     format: "esm",
     entryFileNames: "[name].js",
     minify: args.production,
-    chunkFileNames: "[name].[hash].js",
-    advancedChunks: {
-      groups: [{ name: "vendor", test: /[\\/]node_modules[\\/]/ }],
+    chunkFileNames: "[name]-[hash].js",
+    assetFileNames: "[name]-[hash][extname]",
+    codeSplitting: {
+      minSize: 20000,
+      groups: [
+        {
+          name: "vendor",
+          test: /node_modules/,
+        },
+      ],
     },
     ...(args.sourcemap && { sourcemap: true }),
   });
 
+  if (cssOutputsByBase.size > 0) {
+    const emittedCss = new Set(cssOutputsByBase.values());
+    const cssFiles = await scanner.scanFiles("**/*.css", distClientAssets);
+
+    for (const cssFile of cssFiles) {
+      const withoutExt = cssFile.replace(/\.css$/, "");
+      const lastDot = withoutExt.lastIndexOf(".");
+      if (lastDot === -1) continue;
+      const base = withoutExt.slice(0, lastDot);
+      const expected = cssOutputsByBase.get(base);
+      if (expected && cssFile !== expected && !emittedCss.has(cssFile)) {
+        await remove(join(distClientAssets, cssFile));
+      }
+    }
+  }
+
   await bundle.close();
 
   if (args.production) {
-    const cssFiles = await scanner.scanFiles("?(.)*.css", distClient);
+    const cssFiles = await scanner.scanFiles("?(.)*.css", distClientAssets);
     for (const cssFile of cssFiles) {
-      const cssPath = join(distClient, cssFile);
+      const cssPath = join(distClientAssets, cssFile);
       let cssContent = await readText(cssPath);
       const result = transform({
         code: Buffer.from(cssContent),
@@ -348,12 +413,12 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     chunks: {},
     tags: {},
     styles: {},
-    devScripts: args.production ? undefined : ["/console-forward.js"],
+    devScripts: args.production ? undefined : ["/assets/console-forward.js"],
   };
 
   for (const meta of metas) {
-    manifest.chunks[meta.parsed.pattern] = `/${meta.chunk}`;
-    manifest.tags[meta.tag] = `/${meta.chunk}`;
+    manifest.chunks[meta.parsed.pattern] = `/assets/${meta.chunk}`;
+    manifest.tags[meta.tag] = `/assets/${meta.chunk}`;
   }
 
   for (const meta of metas) {
@@ -365,8 +430,13 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
       }
     }
 
+    const componentStyles = componentCssMap[meta.parsed.pattern];
+    if (componentStyles?.length) {
+      routeStyles.push(...componentStyles);
+    }
+
     if (routeStyles.length > 0) {
-      manifest.styles[meta.parsed.pattern] = routeStyles;
+      manifest.styles[meta.parsed.pattern] = [...new Set(routeStyles)];
     }
   }
 

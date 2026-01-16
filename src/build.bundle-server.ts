@@ -1,9 +1,9 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { glob } from "node:fs/promises";
 import { rolldown } from "rolldown";
-import { transform } from "lightningcss";
 import { createProgram } from "./ast.ts";
+import { assetUrlPrefixPlugin } from "./build.bundle.ts";
 import { createScanner } from "./build.scan.ts";
 import { validateRoutes, generateRoutesTypeFile } from "./build.validate.ts";
 import { generateModulesFile } from "./build.emit-manifests.ts";
@@ -27,10 +27,6 @@ export interface BuildServerOptions {
   modulesPath: string;
   chunksPath: string;
   routesTypePath: string;
-}
-
-async function readText(path: string): Promise<string> {
-  return readFile(path, "utf-8");
 }
 
 async function write(path: string, content: string): Promise<void> {
@@ -127,6 +123,7 @@ export async function buildServer(options: BuildServerOptions): Promise<void> {
         ".chunks.generated.json": chunksPath,
       },
     },
+    plugins: [assetUrlPrefixPlugin],
     transform: {
       jsx: {
         runtime: "automatic",
@@ -140,33 +137,17 @@ export async function buildServer(options: BuildServerOptions): Promise<void> {
     format: "esm",
     inlineDynamicImports: true,
     entryFileNames: "index.js",
+    assetFileNames: "[name]-[hash][extname]",
     minify: args.production,
     ...(args.sourcemap && { sourcemap: true }),
   });
 
   await bundle.close();
 
-  if (args.production) {
-    const cssFiles: string[] = [];
-    for await (const file of glob("?(.)*.css", {
-      cwd: distServer,
-      withFileTypes: false,
-    })) {
-      cssFiles.push(file as string);
-    }
-    for (const cssFile of cssFiles) {
-      const cssPath = join(distServer, cssFile);
-      let cssContent = await readText(cssPath);
-      const result = transform({
-        code: Buffer.from(cssContent),
-        filename: cssPath,
-        minify: true,
-      });
-      const minified = result.code.toString();
-      if (minified !== cssContent) {
-        await write(cssPath, minified);
-      }
-    }
+  // Remove emitted assets from server bundle - they're served from dist/client/assets
+  for await (const file of glob("*", { cwd: distServer, withFileTypes: false })) {
+    if (file === "index.js" || file === "index.js.map") continue;
+    await unlink(join(distServer, file as string));
   }
 
   console.log("✅ Server build complete");
