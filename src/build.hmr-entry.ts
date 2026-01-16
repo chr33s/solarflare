@@ -12,54 +12,43 @@ export interface ComponentMeta {
   chunk: string;
 }
 
-export function generateChunkedClientEntry(
-  meta: ComponentMeta,
-  routesManifest: RoutesManifest,
-  cssFiles: string[] = [],
-  args: HmrEntryArgs,
-): string {
-  const debugImports = args.debug
-    ? /* tsx */ `
+function buildDebugImports(args: HmrEntryArgs): string {
+  if (!args.debug) return "";
+  return /* tsx */ `
       import 'preact/debug'
       import '@preact/signals-debug'
-    `
-    : "";
+    `;
+}
 
-  const inlinedRoutes = JSON.stringify(routesManifest);
+function buildRouterInit(routesManifest: RoutesManifest): string {
+  return `const routesManifest = ${JSON.stringify(routesManifest)};`;
+}
 
-  const cssImports = args.production
-    ? ""
-    : cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
+function buildStylesheetRegistration(
+  meta: ComponentMeta,
+  cssFiles: string[],
+  args: HmrEntryArgs,
+): { imports: string; setup: string } {
+  if (!cssFiles.length || args.production) {
+    return { imports: "", setup: "" };
+  }
 
-  const inlineStyles = args.production
-    ? ""
-    : cssFiles.map((file, i) => `{ id: '${file}', css: css${i} }`).join(", ");
+  const cssImports = cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
+  const inlineStyles = cssFiles.map((file, i) => `{ id: '${file}', css: css${i} }`).join(", ");
 
-  const stylesheetImports =
-    cssFiles.length > 0 && !args.production
-      ? /* tsx */ `
+  return {
+    imports: /* tsx */ `
           import { registerInlineStyles } from '@chr33s/solarflare/client';
           ${cssImports}
-        `
-      : "";
-
-  const stylesheetSetup =
-    cssFiles.length > 0 && !args.production
-      ? /* tsx */ `
+        `,
+    setup: /* tsx */ `
         registerInlineStyles('${meta.tag}', [${inlineStyles}]);
-      `
-      : "";
+      `,
+  };
+}
 
+function buildEntryInit(meta: ComponentMeta, cssFiles: string[]): string {
   return /* tsx */ `
-    /** Auto-generated: ${meta.chunk} */
-    ${debugImports}
-    import { initHmrEntry, hmr, reloadAllStylesheets } from '@chr33s/solarflare/client';${stylesheetImports}
-    import BaseComponent from '../src/${meta.file}';
-
-    ${stylesheetSetup}
-
-    const routesManifest = ${inlinedRoutes};
-
     initHmrEntry({
       tag: '${meta.tag}',
       props: ${JSON.stringify(meta.props)},
@@ -69,5 +58,34 @@ export function generateChunkedClientEntry(
       cssFiles: ${JSON.stringify(cssFiles)},
       onCssUpdate: reloadAllStylesheets,
     });
+  `;
+}
+
+export function generateChunkedClientEntry(
+  meta: ComponentMeta,
+  routesManifest: RoutesManifest,
+  cssFiles: string[] = [],
+  args: HmrEntryArgs,
+): string {
+  const debugImports = buildDebugImports(args);
+  const { imports: stylesheetImports, setup: stylesheetSetup } = buildStylesheetRegistration(
+    meta,
+    cssFiles,
+    args,
+  );
+  const routesManifestInit = buildRouterInit(routesManifest);
+  const entryInit = buildEntryInit(meta, cssFiles);
+
+  return /* tsx */ `
+    /** Auto-generated: ${meta.chunk} */
+    ${debugImports}
+    import { initHmrEntry, hmr, reloadAllStylesheets } from '@chr33s/solarflare/client';${stylesheetImports}
+    import BaseComponent from '../src/${meta.file}';
+
+    ${stylesheetSetup}
+
+    ${routesManifestInit}
+
+    ${entryInit}
   `;
 }

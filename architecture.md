@@ -94,12 +94,12 @@ The build/runtime boundary shares a small set of manifest shapes:
 
 ## HMR responsibilities matrix
 
-| Concern                            | Build-generated entry (via `src/build.ts`)                             | Runtime helpers                                                                 |
-| ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------ |
+| Concern                            | Build-generated entry (via `src/build.hmr-entry.ts`)                   | Runtime helpers                                                                 |
+| ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | Module swap + versioning           | Listens for `sf:module:*`, increments `hmrVersion`, re-renders wrapper | `src/client.hmr.ts` establishes HMR channel and dispatches events               |
 | Error boundary recovery            | Inline `HMRErrorBoundary` wrapper in generated entry                   | `src/hmr.ts` provides `HMRErrorBoundary` + helpers (used for shared wrappers)   |
 | CSS updates (constructable sheets) | Wires per-file `sf:css:*` listeners and inline reload hooks            | `src/hmr.ts` handles `sf:css-update`/`sf:css-replace` and updates `stylesheets` |
-| Event dispatch                     | Emits `sf:hmr:update                                                   | error                                                                           | recover` events | `src/hmr.ts` exposes `dispatchHMREvent` / `onHMREvent` |
+| Event dispatch                     | Emits `sf:hmr:update`, `sf:hmr:error`, `sf:hmr:recover` events         | `src/hmr.ts` exposes `dispatchHMREvent` / `onHMREvent`                          |
 
 ## Key dependencies
 
@@ -270,7 +270,7 @@ Solarflare uses `@preact/signals` for reactive state:
 1. Server serializes store state via `turbo-stream` into a `<script type="application/json" data-island="sf-store">` tag.
 2. Client calls `hydrateStore()` to parse and initialize signals.
 3. Deferred data arrives as separate islands (`<script data-island="tag-deferred-key">`).
-4. The hydration coordinator (`src/store.ts`) processes `sf:queue-hydrate` events sequentially.
+4. The hydration coordinator (`src/hydration.ts`) processes `sf:queue-hydrate` events sequentially.
 
 ```mermaid
 flowchart LR

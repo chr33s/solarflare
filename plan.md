@@ -11,12 +11,13 @@ Completed:
 - ✅ Split worker pipeline into `handleDevEndpoints`, `matchAndLoad`, `renderStream`, `applyPerfFeatures`.
 - ✅ Extracted deferred hydration DOM handling to `src/router-deferred.ts`.
 - ✅ Split build steps into `src/build.*` modules.
+- ✅ Store vs hydration separation: moved hydration queue + data island hydration to `src/hydration.ts` (store holds signals + setters only).
+- ✅ Entry generation clarity: reduced template logic in `src/build.hmr-entry.ts` (CSS registration + router init helpers).
+- ✅ Architecture doc alignment: updated file names/paths and removed stale references.
 
 Remaining tasks:
 
-- ⬜ Store vs hydration separation: move hydration queue + data island hydration out of `src/store.ts` into `src/hydration.ts` (keep store signals + setters only).
-- ⬜ Entry generation clarity: further reduce template logic in `src/build.hmr-entry.ts` (extract CSS registration + router init helpers).
-- ⬜ Architecture doc alignment: update file names/paths to new module layout (e.g., `client.hmr.ts`, `server.hmr.ts`, `client.styles.ts`) and remove stale references.
+- ✅ All tasks complete.
 
 ## Goals
 
