@@ -215,8 +215,6 @@ export class Router {
         this.current.value = null;
         this.#config.onNotFound(url);
       }
-      this.#handleScroll(url);
-
       // Dispatch navigation event for components to re-extract deferred data
       window.dispatchEvent(new CustomEvent("sf:navigate", { detail: { url, match } }));
     } catch (error) {
@@ -280,11 +278,21 @@ export class Router {
     // Use syncMutations to apply DOM changes immediately during streaming for progressive
     // deferred content hydration. This ensures each streamed chunk is visible immediately.
     const useTransition = this.#config.viewTransitions && supportsViewTransitions();
+    let didScroll = false;
 
     try {
       await diff(document, response.body!, {
         transition: useTransition,
         syncMutations: !useTransition, // Apply mutations synchronously when not using view transitions
+        onChunkProcessed: () => {
+          if (didScroll) return;
+          didScroll = true;
+          // Scroll after the first chunk has been applied so we don't
+          // jump to top when deferred content resolves later.
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => this.#handleScroll(url));
+          });
+        },
       });
     } catch (diffError) {
       // diff-dom-streaming can fail with "insertBefore" errors when the DOM was mutated
@@ -318,21 +326,12 @@ export class Router {
     }
 
     // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree,
-    // or when tag names differ, it updates children in-place then moves them to a new wrapper.
-    // Either way, Preact's event delegation/handlers can be desynced, leading to "dead" UI.
-    //
-    // Replace the host after diffing to ensure a fresh connectedCallback + event wiring
-    // when the route tag changes. When the tag is the same, trigger a rerender to
-    // re-bind events without losing local state (e.g. counters).
+    // which can desync event delegation/handlers. When the route tag is the same,
+    // trigger a rerender to re-bind events without losing local state (e.g. counters).
     const host = document.querySelector(entry.tag) as HTMLElement;
-    const needsReplacement = previousTag && previousTag !== entry.tag;
+    const sameTag = previousTag && previousTag === entry.tag;
 
-    if (host && needsReplacement) {
-      const replacement = host.cloneNode(true) as HTMLElement;
-      host.replaceWith(replacement);
-      // Wait for connectedCallback of the replacement element to complete
-      await new Promise((r) => requestAnimationFrame(r));
-    } else if (host) {
+    if (host && sameTag) {
       host.dispatchEvent(new CustomEvent("sf:rerender"));
       await new Promise((r) => requestAnimationFrame(r));
     }
