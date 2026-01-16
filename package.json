@@ -12,12 +12,12 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/solarflare.d.ts"
+      "types": "./src/solarflare.d.ts",
+      "import": "./src/worker.ts"
     },
     "./client": "./src/client.ts",
     "./server": "./src/server.ts",
-    "./tsconfig.json": "./tsconfig.json",
-    "./worker": "./src/worker.ts"
+    "./tsconfig.json": "./tsconfig.json"
   },
   "scripts": {
     "check": "oxfmt --check && oxlint --type-aware --type-check",

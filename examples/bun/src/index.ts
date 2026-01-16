@@ -1,4 +1,4 @@
-import worker from "@chr33s/solarflare/worker";
+import worker from "@chr33s/solarflare";
 
 const clientDir = new URL("../client", import.meta.url).pathname;
 

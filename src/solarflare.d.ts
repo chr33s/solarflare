@@ -803,7 +803,7 @@ declare module "@chr33s/solarflare/server" {
   export function hydrateHead(): Promise<void>;
 }
 
-declare module "@chr33s/solarflare/worker" {
+declare module "@chr33s/solarflare" {
   import { ModuleMap } from "@chr33s/solarflare/server";
 
   /**

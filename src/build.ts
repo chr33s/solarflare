@@ -58,7 +58,7 @@ const { values: args, positionals } = parseArgs({
 /** Auto-scaffolds missing template files. */
 async function scaffoldTemplates(): Promise<void> {
   const templates: Record<string, string> = {
-    "index.ts": /* tsx */ `import worker from "@chr33s/solarflare/worker";
+    "index.ts": /* tsx */ `import worker from "@chr33s/solarflare";
 export default { fetch: worker };
 `,
     "_error.tsx": /* tsx */ `export default function ErrorPage({ error }: { error: Error }) {
