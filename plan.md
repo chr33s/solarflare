@@ -5,6 +5,7 @@
 Completed:
 
 - ✅ Centralized manifest types (`src/manifest.ts`) and updated imports.
+- ✅ Consolidated shared public types in `src/solarflare.d.ts` (server data/store config/routes manifest reuse).
 - ✅ Unified CSS HMR into `src/hmr.ts` with `stylesheets` as single manager.
 - ✅ Moved HMR wrapper logic to helpers in `src/hmr.ts` and wired generated entry to use them.
 - ✅ Split worker pipeline into `handleDevEndpoints`, `matchAndLoad`, `renderStream`, `applyPerfFeatures`.

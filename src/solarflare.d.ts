@@ -25,6 +25,40 @@ interface Window {
   __sfHeadInit?: boolean;
 }
 
+/** Shared server data shape used by client/server modules. */
+interface SolarflareServerData<T = unknown> {
+  data: T;
+  loading: boolean;
+  error: Error | null;
+}
+
+/** Shared store config used by client/server modules. */
+interface SolarflareStoreConfig {
+  params?: Record<string, string>;
+  serverData?: unknown;
+}
+
+/** Shared routes manifest types used by client module exports. */
+interface SolarflareRouteManifestEntry {
+  pattern: string;
+  tag: string;
+  chunk?: string;
+  styles?: string[];
+  type: "client" | "server";
+  params: string[];
+}
+
+interface SolarflareRoutesManifest {
+  routes: SolarflareRouteManifestEntry[];
+  base?: string;
+}
+
+interface SolarflareRouteMatch {
+  entry: SolarflareRouteManifestEntry;
+  params: Record<string, string>;
+  url: URL;
+}
+
 declare module "*.css" {
   const classNames: Record<string, string>;
   export default classNames;
@@ -118,11 +152,11 @@ declare module "@chr33s/solarflare/client" {
    */
   export interface ServerData<T = unknown> {
     /** The actual data payload */
-    data: T;
+    data: SolarflareServerData<T>["data"];
     /** Whether data is still loading (for streaming) */
-    loading: boolean;
+    loading: SolarflareServerData<T>["loading"];
     /** Error if data fetch failed */
-    error: Error | null;
+    error: SolarflareServerData<T>["error"];
   }
 
   /**
@@ -130,9 +164,9 @@ declare module "@chr33s/solarflare/client" {
    */
   export interface StoreConfig {
     /** Initial route params */
-    params?: Record<string, string>;
+    params?: SolarflareStoreConfig["params"];
     /** Initial server data */
-    serverData?: unknown;
+    serverData?: SolarflareStoreConfig["serverData"];
   }
 
   /**
@@ -198,23 +232,23 @@ declare module "@chr33s/solarflare/client" {
 
   // Router re-exports
   export interface RouteManifestEntry {
-    pattern: string;
-    tag: string;
-    chunk?: string;
-    styles?: string[];
-    type: "client" | "server";
-    params: string[];
+    pattern: SolarflareRouteManifestEntry["pattern"];
+    tag: SolarflareRouteManifestEntry["tag"];
+    chunk?: SolarflareRouteManifestEntry["chunk"];
+    styles?: SolarflareRouteManifestEntry["styles"];
+    type: SolarflareRouteManifestEntry["type"];
+    params: SolarflareRouteManifestEntry["params"];
   }
 
   export interface RoutesManifest {
-    routes: RouteManifestEntry[];
-    base?: string;
+    routes: SolarflareRoutesManifest["routes"];
+    base?: SolarflareRoutesManifest["base"];
   }
 
   export interface RouteMatch {
-    entry: RouteManifestEntry;
-    params: Record<string, string>;
-    url: URL;
+    entry: SolarflareRouteMatch["entry"];
+    params: SolarflareRouteMatch["params"];
+    url: SolarflareRouteMatch["url"];
   }
 
   export interface NavigateOptions {
@@ -742,17 +776,17 @@ declare module "@chr33s/solarflare/server" {
    * Server-rendered data passed to components
    */
   export interface ServerData<T = unknown> {
-    data: T;
-    loading: boolean;
-    error: Error | null;
+    data: SolarflareServerData<T>["data"];
+    loading: SolarflareServerData<T>["loading"];
+    error: SolarflareServerData<T>["error"];
   }
 
   /**
    * Store configuration
    */
   export interface StoreConfig {
-    params?: Record<string, string>;
-    serverData?: unknown;
+    params?: SolarflareStoreConfig["params"];
+    serverData?: SolarflareStoreConfig["serverData"];
   }
 
   /**
