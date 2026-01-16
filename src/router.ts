@@ -261,6 +261,15 @@ export class Router {
           for (const node of mutation.addedNodes) {
             if (node.nodeType !== 1) continue;
             handleDeferredHydrationNode(entry.tag, processedScripts, node as Element);
+
+            // Also scan subtree for scripts as diff-dom-streaming may insert trees
+            if (node.nodeName !== "SCRIPT") {
+              const el = node as Element;
+              const scripts = el.getElementsByTagName("script");
+              for (const script of scripts) {
+                handleDeferredHydrationNode(entry.tag, processedScripts, script);
+              }
+            }
           }
         }
       });
@@ -307,6 +316,18 @@ export class Router {
       observer?.disconnect();
     }
 
+    // Fix for broken interactivity + flicker:
+    // If navigating to a different component tag, replace the host immediately
+    // to ensure a fresh hydration without stale properties from previous component.
+    // Doing this BEFORE the settlement delay prevents visual flicker (replacement happens in same frame).
+    const host = document.querySelector(entry.tag) as HTMLElement;
+    const sameTag = previousTag && previousTag === entry.tag;
+
+    if (host && previousTag && !sameTag) {
+      const replacement = host.cloneNode(true) as HTMLElement;
+      host.replaceWith(replacement);
+    }
+
     // Wait for any pending DOM work to settle before element replacement.
     // With view transitions, wait for ALL transitions to complete (not just the last one).
     // Without them, mutations are flushed synchronously via FLUSH_SYNC, but wait two frames
@@ -328,12 +349,12 @@ export class Router {
     // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree,
     // which can desync event delegation/handlers. When the route tag is the same,
     // trigger a rerender to re-bind events without losing local state (e.g. counters).
-    const host = document.querySelector(entry.tag) as HTMLElement;
-    const sameTag = previousTag && previousTag === entry.tag;
-
-    if (host && sameTag) {
-      host.dispatchEvent(new CustomEvent("sf:rerender"));
-      await new Promise((r) => requestAnimationFrame(r));
+    if (sameTag) {
+      const currentHost = document.querySelector(entry.tag) as HTMLElement;
+      if (currentHost) {
+        currentHost.dispatchEvent(new CustomEvent("sf:rerender"));
+        await new Promise((r) => requestAnimationFrame(r));
+      }
     }
 
     // Clean up any duplicate deferred islands or hydrate scripts introduced by

@@ -122,7 +122,7 @@ import { Deferred } from "@chr33s/solarflare/client";
 
 ### Configuration Meta Tags
 
-```tsx
+```html
 <meta name="sf:base" content="/" />
 <meta name="sf:scroll-behavior" content="auto" />
 <meta name="sf:view-transitions" content="false" />
@@ -130,7 +130,7 @@ import { Deferred } from "@chr33s/solarflare/client";
 
 ### Performance Meta Tags
 
-```tsx
+```html
 <meta name="sf:preconnect" content="https://cdn.example.com" />
 <meta name="sf:early-flush" content="true" />
 <meta name="sf:critical-css" content="true" />
@@ -147,13 +147,6 @@ import { Deferred } from "@chr33s/solarflare/client";
 ```tsx
 import { define } from "@chr33s/solarflare/client";
 export default define(MyComponent, { shadow: true });
-```
-
-### HMR Events
-
-```tsx
-import { onHMREvent } from "@chr33s/solarflare/client";
-onHMREvent("update", ({ tag }) => console.log(`Updated: ${tag}`));
 ```
 
 ## Environment

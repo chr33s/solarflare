@@ -19,6 +19,35 @@ async function waitForHydration(page: Page, tag = "sf-root"): Promise<void> {
   }, tag);
 }
 
+async function clickCountButtonAndWait(
+  page: Page,
+  tag = "sf-root",
+): Promise<{ before: string; after: string }> {
+  const container = page.locator(tag);
+  const countButton = container.getByRole("button", { name: /count is/i });
+  await countButton.waitFor({ state: "visible" });
+
+  const before = (await countButton.textContent()) ?? "";
+  await countButton.click();
+
+  await page.waitForFunction(
+    (args) => {
+      const { selector, prev } = args as { selector: string; prev: string };
+      const containerEl = document.querySelector(selector);
+      if (!containerEl) return false;
+      const btn = Array.from(containerEl.querySelectorAll("button")).find((el) =>
+        /count is/i.test(el.textContent ?? ""),
+      );
+      if (!btn) return false;
+      return (btn.textContent ?? "") !== prev;
+    },
+    { selector: tag, prev: before },
+  );
+
+  const after = (await countButton.textContent()) ?? "";
+  return { before, after };
+}
+
 // Helper to spawn a process and wait for it
 function spawnAsync(
   command: string[],
@@ -536,22 +565,7 @@ describe("e2e", () => {
 
     await waitForHydration(page);
 
-    // The basic example has a counter button with text like: "count is 0".
-    // Be explicit to avoid clicking the PostForm submit button.
-    const countButton = page.getByRole("button", { name: /count is/i });
-    const getCountText = async () => (await countButton.textContent()) ?? "";
-
-    const before = await getCountText();
-    await countButton.click();
-    await page.waitForFunction((prev) => {
-      const btn = Array.from(document.querySelectorAll("button")).find((el) =>
-        /count is/i.test(el.textContent ?? ""),
-      );
-      if (!btn) return false;
-      const text = btn.textContent ?? "";
-      return text !== prev;
-    }, before);
-    const after = await getCountText();
+    const { before, after } = await clickCountButtonAndWait(page, "sf-root");
     assert.notStrictEqual(after, before);
 
     // Navigate to blog (client-side via nav), then back home (client-side).
@@ -568,23 +582,10 @@ describe("e2e", () => {
       timeout: 10_000,
     });
 
-    const countButtonAfterReturn = page.getByRole("button", {
-      name: /count is/i,
-    });
-    await countButtonAfterReturn.waitFor({ state: "visible" });
-    const getCountTextAfterReturn = async () => (await countButtonAfterReturn.textContent()) ?? "";
-
-    const beforeReturn = await getCountTextAfterReturn();
-    await countButtonAfterReturn.click();
-    await page.waitForFunction((prev) => {
-      const btn = Array.from(document.querySelectorAll("button")).find((el) =>
-        /count is/i.test(el.textContent ?? ""),
-      );
-      if (!btn) return false;
-      const text = btn.textContent ?? "";
-      return text !== prev;
-    }, beforeReturn);
-    const afterReturn = await getCountTextAfterReturn();
+    const { before: beforeReturn, after: afterReturn } = await clickCountButtonAndWait(
+      page,
+      "sf-root",
+    );
     assert.notStrictEqual(
       afterReturn,
       beforeReturn,
@@ -603,13 +604,7 @@ describe("e2e", () => {
     await page.waitForURL("**/blog/hello-world");
     await waitForHydration(page, "sf-blog-slug");
 
-    // The blog page also has a CountButton - check that it's interactive
-    const countButton = page.getByRole("button", { name: /count is/i });
-    const getCountText = async () => (await countButton.textContent()) ?? "";
-
-    const before = await getCountText();
-    await countButton.click();
-    const after = await getCountText();
+    const { before, after } = await clickCountButtonAndWait(page, "sf-blog-slug");
     assert.notStrictEqual(
       after,
       before,
@@ -637,13 +632,7 @@ describe("e2e", () => {
       timeout: 10_000,
     });
 
-    // The blog page also has a CountButton - check that it's interactive
-    const countButton = page.getByRole("button", { name: /count is/i });
-    const getCountText = async () => (await countButton.textContent()) ?? "";
-
-    const before = await getCountText();
-    await countButton.click();
-    const after = await getCountText();
+    const { before, after } = await clickCountButtonAndWait(page, "sf-root");
     assert.notStrictEqual(
       after,
       before,
