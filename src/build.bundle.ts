@@ -1,4 +1,4 @@
-import type { NormalizedOutputOptions, OutputBundle } from "rolldown";
+import type { ModuleTypes, NormalizedOutputOptions, OutputBundle } from "rolldown";
 
 export const assetUrlPrefixPlugin = {
   name: "asset-url-prefix",
@@ -24,4 +24,25 @@ export const assetUrlPrefixPlugin = {
       item.code = code;
     }
   },
+};
+
+export interface BuildArgs {
+  production: boolean;
+  sourcemap: boolean;
+  debug: boolean;
+  clean?: boolean;
+  serve?: boolean;
+  watch?: boolean;
+  codemod?: boolean;
+  dry?: boolean;
+}
+
+export const moduleTypes: ModuleTypes = {
+  ".svg": "asset",
+  ".png": "asset",
+  ".jpg": "asset",
+  ".jpeg": "asset",
+  ".gif": "asset",
+  ".webp": "asset",
+  ".ico": "asset",
 };

@@ -1,5 +1,7 @@
-import { access, glob, readFile } from "node:fs/promises";
+import { glob } from "node:fs/promises";
 import { join } from "node:path";
+
+import { exists, readText } from "./build.ts";
 
 export interface BuildScanContext {
   rootDir: string;
@@ -17,19 +19,6 @@ export interface BuildScanner {
   extractComponentImports: (filePath: string) => Promise<string[]>;
   resolveImportPath: (importPath: string, fromFile: string) => Promise<string | null>;
   extractAllCssImports: (filePath: string, visited?: Set<string>) => Promise<string[]>;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function readText(path: string): Promise<string> {
-  return readFile(path, "utf-8");
 }
 
 export function createScanner(ctx: BuildScanContext): BuildScanner {

@@ -1,28 +1,18 @@
 import { createHash } from "node:crypto";
-import { readFile, unlink, mkdir, writeFile, access } from "node:fs/promises";
+import { readFile, unlink, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import ts from "typescript";
 import { rolldown } from "rolldown";
 import { replacePlugin } from "rolldown/plugins";
 import { transform } from "lightningcss";
 import { createProgram, getDefaultExportInfo } from "./ast.ts";
-import { assetUrlPrefixPlugin } from "./build.bundle.ts";
+import { exists, readText, write } from "./build.ts";
+import { assetUrlPrefixPlugin, type BuildArgs, moduleTypes } from "./build.bundle.ts";
 import { parsePath } from "./paths.ts";
 import { generateClientScript } from "./console-forward.ts";
 import { createScanner } from "./build.scan.ts";
 import { generateChunkedClientEntry, type ComponentMeta } from "./build.hmr-entry.ts";
 import type { RoutesManifest, ChunkManifest } from "./manifest.ts";
-
-export interface BuildArgs {
-  production: boolean;
-  debug: boolean;
-  sourcemap: boolean;
-  clean?: boolean;
-  serve?: boolean;
-  watch?: boolean;
-  codemod?: boolean;
-  dry?: boolean;
-}
 
 export interface BuildClientOptions {
   args: BuildArgs;
@@ -32,23 +22,6 @@ export interface BuildClientOptions {
   distClient: string;
   publicDir: string;
   chunksPath: string;
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function readText(path: string): Promise<string> {
-  return readFile(path, "utf-8");
-}
-
-async function write(path: string, content: string): Promise<void> {
-  await writeFile(path, content);
 }
 
 async function remove(path: string): Promise<void> {
@@ -148,6 +121,25 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     return outputPath;
   }
 
+  async function resolveCssOutputs(cssImports: string[], baseDir: string): Promise<string[]> {
+    if (cssImports.length === 0) return [];
+
+    const cssOutputPaths: string[] = [];
+
+    for (const cssImport of cssImports) {
+      const cssSourcePath = cssImport.startsWith("./")
+        ? join(appDir, cssImport.replace("./", ""))
+        : join(appDir, baseDir, cssImport);
+
+      const outputPath = await emitCssAsset(cssSourcePath);
+      if (outputPath && !cssOutputPaths.includes(outputPath)) {
+        cssOutputPaths.push(outputPath);
+      }
+    }
+
+    return cssOutputPaths;
+  }
+
   console.log("🔍 Scanning for client components...");
   const clientFiles = await scanner.findClientComponents();
   console.log(`   Found ${clientFiles.length} client component(s)`);
@@ -168,22 +160,8 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     const allCssImports = await scanner.extractAllCssImports(layoutPath);
 
     if (allCssImports.length > 0) {
-      const cssOutputPaths: string[] = [];
       const layoutDir = layoutFile.split("/").slice(0, -1).join("/");
-
-      for (const cssImport of allCssImports) {
-        let cssSourcePath: string;
-        if (cssImport.startsWith("./")) {
-          cssSourcePath = join(appDir, cssImport.replace("./", ""));
-        } else {
-          cssSourcePath = join(appDir, layoutDir, cssImport);
-        }
-
-        const outputPath = await emitCssAsset(cssSourcePath);
-        if (outputPath && !cssOutputPaths.includes(outputPath)) {
-          cssOutputPaths.push(outputPath);
-        }
-      }
+      const cssOutputPaths = await resolveCssOutputs(allCssImports, layoutDir);
 
       if (cssOutputPaths.length > 0) {
         const layoutPattern = layoutDir ? `/${layoutDir}` : "/";
@@ -241,22 +219,8 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     const componentPath = join(appDir, meta.file);
     const componentCssImports = await scanner.extractAllCssImports(componentPath);
 
-    const componentCssOutputPaths: string[] = [];
     const componentDir = meta.file.split("/").slice(0, -1).join("/");
-
-    for (const cssImport of componentCssImports) {
-      let cssSourcePath: string;
-      if (cssImport.startsWith("./")) {
-        cssSourcePath = join(appDir, cssImport.replace("./", ""));
-      } else {
-        cssSourcePath = join(appDir, componentDir, cssImport);
-      }
-
-      const outputPath = await emitCssAsset(cssSourcePath);
-      if (outputPath && !componentCssOutputPaths.includes(outputPath)) {
-        componentCssOutputPaths.push(outputPath);
-      }
-    }
+    const componentCssOutputPaths = await resolveCssOutputs(componentCssImports, componentDir);
 
     if (componentCssOutputPaths.length > 0) {
       const existing = componentCssMap[meta.parsed.pattern] ?? [];
@@ -295,15 +259,7 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     input,
     platform: "browser",
     tsconfig: true,
-    moduleTypes: {
-      ".svg": "asset",
-      ".png": "asset",
-      ".jpg": "asset",
-      ".jpeg": "asset",
-      ".gif": "asset",
-      ".webp": "asset",
-      ".ico": "asset",
-    },
+    moduleTypes,
     plugins: [
       replacePlugin({
         "globalThis.__SF_DEV__": JSON.stringify(!args.production),

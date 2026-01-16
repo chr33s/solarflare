@@ -17,7 +17,9 @@ Completed:
 
 Remaining tasks:
 
-- ✅ All tasks complete.
+- Remove unnessary typescript return types, when they can be inferred
+- cleanup comments, ensure concise and in jsdoc format
+- update readme.md (list all ./examples)
 
 ## Goals
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn, type ChildProcess } from "node:child_process";
 import { watch } from "node:fs";
-import { access, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
@@ -9,7 +9,7 @@ import { buildClient } from "./build.bundle-client.ts";
 import { buildServer } from "./build.bundle-server.ts";
 
 // Node.js file system helpers
-async function exists(path: string): Promise<boolean> {
+export async function exists(path: string): Promise<boolean> {
   try {
     await access(path);
     return true;
@@ -18,7 +18,11 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function write(path: string, content: string): Promise<void> {
+export async function readText(path: string): Promise<string> {
+  return readFile(path, "utf-8");
+}
+
+export async function write(path: string, content: string): Promise<void> {
   await writeFile(path, content);
 }
 

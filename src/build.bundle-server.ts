@@ -3,21 +3,11 @@ import { join } from "node:path";
 import { glob } from "node:fs/promises";
 import { rolldown } from "rolldown";
 import { createProgram } from "./ast.ts";
-import { assetUrlPrefixPlugin } from "./build.bundle.ts";
+import { write } from "./build.ts";
+import { assetUrlPrefixPlugin, type BuildArgs, moduleTypes } from "./build.bundle.ts";
 import { createScanner } from "./build.scan.ts";
 import { validateRoutes, generateRoutesTypeFile } from "./build.validate.ts";
 import { generateModulesFile } from "./build.emit-manifests.ts";
-
-export interface BuildArgs {
-  production: boolean;
-  sourcemap: boolean;
-  debug?: boolean;
-  clean?: boolean;
-  serve?: boolean;
-  watch?: boolean;
-  codemod?: boolean;
-  dry?: boolean;
-}
 
 export interface BuildServerOptions {
   args: BuildArgs;
@@ -27,10 +17,6 @@ export interface BuildServerOptions {
   modulesPath: string;
   chunksPath: string;
   routesTypePath: string;
-}
-
-async function write(path: string, content: string): Promise<void> {
-  await import("node:fs/promises").then(({ writeFile }) => writeFile(path, content));
 }
 
 export async function buildServer(options: BuildServerOptions): Promise<void> {
@@ -92,15 +78,7 @@ export async function buildServer(options: BuildServerOptions): Promise<void> {
     input: join(appDir, "index.ts"),
     platform: "node",
     tsconfig: true,
-    moduleTypes: {
-      ".svg": "asset",
-      ".png": "asset",
-      ".jpg": "asset",
-      ".jpeg": "asset",
-      ".gif": "asset",
-      ".webp": "asset",
-      ".ico": "asset",
-    },
+    moduleTypes,
     external: [
       "cloudflare:workers",
       "preact",
