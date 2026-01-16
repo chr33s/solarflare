@@ -1,20 +1,17 @@
-import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
+import { hash as generateHash, normalizeAssetPath, getChunkName } from "./build.bundle-client.ts";
+import { generateRoutesTypeFile } from "./build.validate.ts";
 
 describe("generateHash logic", () => {
-  const generateHash = (content: string): string => {
-    return createHash("sha256").update(content).digest("hex").slice(0, 8);
-  };
-
   it("should generate 8 character hash", () => {
-    const hash = generateHash("test content");
-    assert.strictEqual(hash.length, 8);
+    const hashValue = generateHash("test content");
+    assert.strictEqual(hashValue.length, 8);
   });
 
   it("should generate hex characters only", () => {
-    const hash = generateHash("test content");
-    assert.strictEqual(/^[0-9a-f]+$/.test(hash), true);
+    const hashValue = generateHash("test content");
+    assert.strictEqual(/^[0-9a-f]+$/.test(hashValue), true);
   });
 
   it("should generate same hash for same content", () => {
@@ -30,21 +27,17 @@ describe("generateHash logic", () => {
   });
 
   it("should handle empty string", () => {
-    const hash = generateHash("");
-    assert.strictEqual(hash.length, 8);
+    const hashValue = generateHash("");
+    assert.strictEqual(hashValue.length, 8);
   });
 
   it("should handle unicode content", () => {
-    const hash = generateHash("Hello 世界 🌍");
-    assert.strictEqual(hash.length, 8);
+    const hashValue = generateHash("Hello 世界 🌍");
+    assert.strictEqual(hashValue.length, 8);
   });
 });
 
 describe("normalizeAssetPath logic", () => {
-  const normalizeAssetPath = (path: string): string => {
-    return path.replace(/\//g, ".");
-  };
-
   it("should replace slashes with dots", () => {
     assert.strictEqual(normalizeAssetPath("blog/posts/featured"), "blog.posts.featured");
   });
@@ -63,16 +56,6 @@ describe("normalizeAssetPath logic", () => {
 });
 
 describe("getChunkName logic", () => {
-  const getChunkName = (file: string, hash?: string): string => {
-    const base = file
-      .replace(/\.client\.tsx?$/, "")
-      .replace(/\//g, ".")
-      .replace(/\$/g, "")
-      .replace(/^index$/, "index");
-
-    return hash ? `${base}.${hash}.js` : `${base}.js`;
-  };
-
   it("should generate chunk name for index", () => {
     assert.strictEqual(getChunkName("index.client.tsx"), "index.js");
   });
@@ -106,39 +89,6 @@ describe("getChunkName logic", () => {
 });
 
 describe("generateRoutesTypeFile logic", () => {
-  // Simplified version of the route type generation
-  const generateRoutesTypeFile = (routeFiles: string[]): string => {
-    const clientRoutes = routeFiles.filter((f) => f.includes(".client."));
-
-    // Simplified path parsing
-    const parseRoute = (file: string) => {
-      const withoutExt = file.replace(/\.client\.tsx?$/, "");
-      const segments = withoutExt.split("/");
-      const params = segments.filter((s) => s.startsWith("$")).map((s) => s.slice(1));
-      const pattern =
-        "/" +
-        withoutExt
-          .replace(/\/index$/, "")
-          .replace(/^index$/, "")
-          .replace(/\$([^/]+)/g, ":$1");
-
-      return { pattern: pattern || "/", params };
-    };
-
-    const routeTypes = clientRoutes
-      .map((file) => {
-        const parsed = parseRoute(file);
-        const paramsType =
-          parsed.params.length > 0
-            ? `{ ${parsed.params.map((p) => `${p}: string`).join("; ")} }`
-            : "Record<string, never>";
-        return `  '${parsed.pattern}': { params: ${paramsType} }`;
-      })
-      .join("\n");
-
-    return `export interface Routes {\n${routeTypes}\n}`;
-  };
-
   it("should generate empty interface for no routes", () => {
     const result = generateRoutesTypeFile([]);
     assert.ok(result.includes("export interface Routes"));

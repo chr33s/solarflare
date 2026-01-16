@@ -47,83 +47,81 @@ function installMockDom(options: { supported: boolean }): () => void {
   };
 }
 
-describe("client styles", () => {
-  let restoreGlobals: (() => void) | undefined;
+let restoreGlobals: (() => void) | undefined;
 
-  afterEach(() => {
+afterEach(() => {
+  restoreGlobals?.();
+  restoreGlobals = undefined;
+});
+
+it("loadComponentStyles caches per tag (no double fetch)", async () => {
+  restoreGlobals = installMockDom({ supported: false });
+
+  let fetchCalls = 0;
+  (globalThis as any).fetch = async (_url: string) => {
+    fetchCalls++;
+    return new Response(".a { color: red; }");
+  };
+
+  const tag = "sf-widget-cache";
+  const urls = ["/component.css"];
+  const sheets1 = await loadComponentStyles(tag, urls);
+  const sheets2 = await loadComponentStyles(tag, urls);
+
+  assert.deepStrictEqual(sheets1, []);
+  assert.deepStrictEqual(sheets2, []);
+  assert.strictEqual(fetchCalls, 1);
+
+  cleanupStyles(tag);
+});
+
+it("cleanupStyles clears per-tag cache (fetch happens again)", async () => {
+  restoreGlobals = installMockDom({ supported: false });
+
+  let fetchCalls = 0;
+  (globalThis as any).fetch = async (_url: string) => {
+    fetchCalls++;
+    return new Response(".a { color: red; }");
+  };
+
+  const tag = "sf-widget-cleanup";
+  const urls = ["/component.css"];
+  await loadComponentStyles(tag, urls);
+  cleanupStyles(tag);
+  await loadComponentStyles(tag, urls);
+
+  assert.strictEqual(fetchCalls, 2);
+
+  cleanupStyles(tag);
+});
+
+describe("applyStyles", () => {
+  beforeEach(() => {
     restoreGlobals?.();
-    restoreGlobals = undefined;
+    restoreGlobals = installMockDom({ supported: true });
   });
 
-  it("loadComponentStyles caches per tag (no double fetch)", async () => {
-    restoreGlobals = installMockDom({ supported: false });
+  it("applies to shadowRoot when present", () => {
+    const sheet1 = new (globalThis as any).CSSStyleSheet();
+    const sheet2 = new (globalThis as any).CSSStyleSheet();
+    const element = {
+      shadowRoot: {
+        adoptedStyleSheets: [] as any[],
+      },
+    } as unknown as HTMLElement;
 
-    let fetchCalls = 0;
-    (globalThis as any).fetch = async (_url: string) => {
-      fetchCalls++;
-      return new Response(".a { color: red; }");
-    };
-
-    const tag = "sf-widget-cache";
-    const urls = ["/component.css"];
-    const sheets1 = await loadComponentStyles(tag, urls);
-    const sheets2 = await loadComponentStyles(tag, urls);
-
-    assert.deepStrictEqual(sheets1, []);
-    assert.deepStrictEqual(sheets2, []);
-    assert.strictEqual(fetchCalls, 1);
-
-    cleanupStyles(tag);
+    applyStyles(element, [sheet1, sheet2]);
+    assert.deepStrictEqual((element.shadowRoot as any).adoptedStyleSheets, [sheet1, sheet2]);
   });
 
-  it("cleanupStyles clears per-tag cache (fetch happens again)", async () => {
-    restoreGlobals = installMockDom({ supported: false });
+  it("applies to document for light DOM, de-duplicating sheets", () => {
+    const sheet1 = new (globalThis as any).CSSStyleSheet();
+    const sheet2 = new (globalThis as any).CSSStyleSheet();
 
-    let fetchCalls = 0;
-    (globalThis as any).fetch = async (_url: string) => {
-      fetchCalls++;
-      return new Response(".a { color: red; }");
-    };
+    (globalThis as any).document.adoptedStyleSheets = [sheet1];
+    const element = { shadowRoot: null } as unknown as HTMLElement;
 
-    const tag = "sf-widget-cleanup";
-    const urls = ["/component.css"];
-    await loadComponentStyles(tag, urls);
-    cleanupStyles(tag);
-    await loadComponentStyles(tag, urls);
-
-    assert.strictEqual(fetchCalls, 2);
-
-    cleanupStyles(tag);
-  });
-
-  describe("applyStyles", () => {
-    beforeEach(() => {
-      restoreGlobals?.();
-      restoreGlobals = installMockDom({ supported: true });
-    });
-
-    it("applies to shadowRoot when present", () => {
-      const sheet1 = new (globalThis as any).CSSStyleSheet();
-      const sheet2 = new (globalThis as any).CSSStyleSheet();
-      const element = {
-        shadowRoot: {
-          adoptedStyleSheets: [] as any[],
-        },
-      } as unknown as HTMLElement;
-
-      applyStyles(element, [sheet1, sheet2]);
-      assert.deepStrictEqual((element.shadowRoot as any).adoptedStyleSheets, [sheet1, sheet2]);
-    });
-
-    it("applies to document for light DOM, de-duplicating sheets", () => {
-      const sheet1 = new (globalThis as any).CSSStyleSheet();
-      const sheet2 = new (globalThis as any).CSSStyleSheet();
-
-      (globalThis as any).document.adoptedStyleSheets = [sheet1];
-      const element = { shadowRoot: null } as unknown as HTMLElement;
-
-      applyStyles(element, [sheet1, sheet2]);
-      assert.deepStrictEqual((globalThis as any).document.adoptedStyleSheets, [sheet1, sheet2]);
-    });
+    applyStyles(element, [sheet1, sheet2]);
+    assert.deepStrictEqual((globalThis as any).document.adoptedStyleSheets, [sheet1, sheet2]);
   });
 });

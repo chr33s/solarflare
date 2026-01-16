@@ -100,104 +100,102 @@ function installMockDom(options: { supported: boolean }): () => void {
   };
 }
 
-describe("stylesheets", () => {
-  let restoreGlobals: (() => void) | undefined;
+let restoreGlobals: (() => void) | undefined;
 
-  afterEach(() => {
+afterEach(() => {
+  restoreGlobals?.();
+  restoreGlobals = undefined;
+});
+
+it("supportsConstructableStylesheets is false without window", () => {
+  restoreGlobals = installMockDom({ supported: false });
+  assert.strictEqual(supportsConstructableStylesheets(), false);
+});
+
+it("supportsConstructableStylesheets is true when CSSStyleSheet is available", () => {
+  restoreGlobals = installMockDom({ supported: true });
+  assert.strictEqual(supportsConstructableStylesheets(), true);
+});
+
+describe("StylesheetManager", () => {
+  beforeEach(() => {
     restoreGlobals?.();
-    restoreGlobals = undefined;
-  });
-
-  it("supportsConstructableStylesheets is false without window", () => {
-    restoreGlobals = installMockDom({ supported: false });
-    assert.strictEqual(supportsConstructableStylesheets(), false);
-  });
-
-  it("supportsConstructableStylesheets is true when CSSStyleSheet is available", () => {
     restoreGlobals = installMockDom({ supported: true });
-    assert.strictEqual(supportsConstructableStylesheets(), true);
   });
 
-  describe("StylesheetManager", () => {
-    beforeEach(() => {
-      restoreGlobals?.();
-      restoreGlobals = installMockDom({ supported: true });
-    });
-
-    it("registers global and consumer sheets, and returns them for consumer", () => {
-      const manager = new StylesheetManager();
-
-      const globalSheet = manager.register("/global.css", "html { color: black; }", {
-        isGlobal: true,
-      });
-      assert.ok(globalSheet);
-      assert.strictEqual((globalThis as any).document.adoptedStyleSheets.length, 1);
-
-      const componentSheet = manager.register("/widget.css", ".widget { color: red; }", {
-        consumer: "sf-widget",
-      });
-      assert.ok(componentSheet);
-
-      const forWidget = manager.getForConsumer("sf-widget");
-      assert.deepStrictEqual(forWidget, [globalSheet!, componentSheet!]);
-    });
-
-    it("removeConsumer deletes orphaned non-global sheets", () => {
-      const manager = new StylesheetManager();
-      manager.register("/global.css", "* { box-sizing: border-box; }", {
-        isGlobal: true,
-      });
-      manager.register("/only-widget.css", ".x { color: red; }", {
-        consumer: "sf-widget",
-      });
-
-      assert.ok(manager.get("/only-widget.css"));
-      manager.removeConsumer("sf-widget");
-      assert.strictEqual(manager.get("/only-widget.css"), null);
-      assert.ok(manager.get("/global.css"));
-    });
-
-    it("update returns true when css changes, false when unchanged", () => {
-      const manager = new StylesheetManager();
-      manager.register("/a.css", ".a { color: red; }", { consumer: "sf-a" });
-
-      assert.strictEqual(manager.update("/a.css", ".a { color: red; }"), false);
-      assert.strictEqual(manager.update("/a.css", ".a { color: blue; }"), true);
-    });
-
-    it("insertRule and deleteRule mutate the sheet", () => {
-      const manager = new StylesheetManager();
-      const sheet = manager.register("/rules.css", ".a { color: red; }", {
-        consumer: "sf-a",
-      });
-      assert.ok(sheet);
-      assert.strictEqual(sheet!.cssRules.length, 1);
-
-      const idx = manager.insertRule("/rules.css", ".b { color: blue; }");
-      assert.strictEqual(idx, 1);
-      assert.strictEqual(sheet!.cssRules.length, 2);
-
-      assert.strictEqual(manager.deleteRule("/rules.css", 0), true);
-      assert.strictEqual(sheet!.cssRules.length, 1);
-      assert.strictEqual((sheet!.cssRules[0] as any).selectorText, ".b");
-    });
-  });
-
-  it("falls back to <style> injection when unsupported", () => {
-    restoreGlobals = installMockDom({ supported: false });
+  it("registers global and consumer sheets, and returns them for consumer", () => {
     const manager = new StylesheetManager();
 
-    const result = manager.register("fallback", ".a { color: red; }");
-    assert.strictEqual(result, null);
+    const globalSheet = manager.register("/global.css", "html { color: black; }", {
+      isGlobal: true,
+    });
+    assert.ok(globalSheet);
+    assert.strictEqual((globalThis as any).document.adoptedStyleSheets.length, 1);
 
-    const doc: any = (globalThis as any).document;
-    const injected = doc.getElementById("sf-style-fallback");
-    assert.ok(injected);
-    assert.strictEqual(injected.textContent, ".a { color: red; }");
+    const componentSheet = manager.register("/widget.css", ".widget { color: red; }", {
+      consumer: "sf-widget",
+    });
+    assert.ok(componentSheet);
 
-    manager.register("fallback", ".a { color: blue; }");
-    const injected2 = doc.getElementById("sf-style-fallback");
-    assert.strictEqual(injected2, injected);
-    assert.strictEqual(injected2.textContent, ".a { color: blue; }");
+    const forWidget = manager.getForConsumer("sf-widget");
+    assert.deepStrictEqual(forWidget, [globalSheet!, componentSheet!]);
   });
+
+  it("removeConsumer deletes orphaned non-global sheets", () => {
+    const manager = new StylesheetManager();
+    manager.register("/global.css", "* { box-sizing: border-box; }", {
+      isGlobal: true,
+    });
+    manager.register("/only-widget.css", ".x { color: red; }", {
+      consumer: "sf-widget",
+    });
+
+    assert.ok(manager.get("/only-widget.css"));
+    manager.removeConsumer("sf-widget");
+    assert.strictEqual(manager.get("/only-widget.css"), null);
+    assert.ok(manager.get("/global.css"));
+  });
+
+  it("update returns true when css changes, false when unchanged", () => {
+    const manager = new StylesheetManager();
+    manager.register("/a.css", ".a { color: red; }", { consumer: "sf-a" });
+
+    assert.strictEqual(manager.update("/a.css", ".a { color: red; }"), false);
+    assert.strictEqual(manager.update("/a.css", ".a { color: blue; }"), true);
+  });
+
+  it("insertRule and deleteRule mutate the sheet", () => {
+    const manager = new StylesheetManager();
+    const sheet = manager.register("/rules.css", ".a { color: red; }", {
+      consumer: "sf-a",
+    });
+    assert.ok(sheet);
+    assert.strictEqual(sheet!.cssRules.length, 1);
+
+    const idx = manager.insertRule("/rules.css", ".b { color: blue; }");
+    assert.strictEqual(idx, 1);
+    assert.strictEqual(sheet!.cssRules.length, 2);
+
+    assert.strictEqual(manager.deleteRule("/rules.css", 0), true);
+    assert.strictEqual(sheet!.cssRules.length, 1);
+    assert.strictEqual((sheet!.cssRules[0] as any).selectorText, ".b");
+  });
+});
+
+it("falls back to <style> injection when unsupported", () => {
+  restoreGlobals = installMockDom({ supported: false });
+  const manager = new StylesheetManager();
+
+  const result = manager.register("fallback", ".a { color: red; }");
+  assert.strictEqual(result, null);
+
+  const doc: any = (globalThis as any).document;
+  const injected = doc.getElementById("sf-style-fallback");
+  assert.ok(injected);
+  assert.strictEqual(injected.textContent, ".a { color: red; }");
+
+  manager.register("fallback", ".a { color: blue; }");
+  const injected2 = doc.getElementById("sf-style-fallback");
+  assert.strictEqual(injected2, injected);
+  assert.strictEqual(injected2.textContent, ".a { color: blue; }");
 });

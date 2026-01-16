@@ -60,15 +60,15 @@ async function remove(path: string): Promise<void> {
   }
 }
 
-function hash(content: string): string {
+export function hash(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 8);
 }
 
-function normalizeAssetPath(path: string): string {
+export function normalizeAssetPath(path: string): string {
   return path.replace(/\//g, ".");
 }
 
-function getChunkName(file: string, contentHash?: string): string {
+export function getChunkName(file: string, contentHash?: string): string {
   const base = file
     .replace(/\.client\.tsx?$/, "")
     .replace(/\//g, ".")
