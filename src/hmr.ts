@@ -8,7 +8,7 @@ import { initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 import { getRuntime } from "./runtime.ts";
 import type { RoutesManifest } from "./manifest.ts";
-import type { HmrApi } from "./hmr-client.ts";
+import type { HmrApi } from "./client.hmr.ts";
 import { stylesheets } from "./stylesheets.ts";
 
 /** Global storage for component hook state across HMR updates. */

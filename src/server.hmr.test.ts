@@ -5,7 +5,7 @@ import {
   handleHmrRequest,
   broadcastHmrUpdate,
   type HmrEventType,
-} from "./hmr-server.ts";
+} from "./server.hmr.ts";
 
 describe("isHmrRequest", () => {
   it("should return true for GET /_hmr request", () => {

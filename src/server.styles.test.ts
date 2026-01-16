@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { generateStylePreloadScript } from "./ssr-styles.ts";
+import { generateStylePreloadScript } from "./server.styles.ts";
 
 describe("generateStylePreloadScript", () => {
   it("should return empty string for no stylesheets", () => {

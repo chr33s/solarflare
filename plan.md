@@ -45,6 +45,12 @@
    - Generated entry should call the helper with config only.
    - Acceptance: generated entry contains minimal wrapper code (config + imports only).
 
+4. **Migrate existing code into new module layout**
+   - Rehome files to match the Dir structure naming: `build.*`, `client.*`, `server.*`, and core runtime helpers.
+   - Update all internal imports to new locations.
+   - Keep public entry points stable via current `exports` map; no new export keys.
+   - Acceptance: workspace builds with no duplicate modules and no broken internal imports.
+
 ## Phase 3 — Runtime structure simplification
 
 1. **Worker pipeline functions**
@@ -109,6 +115,12 @@ src/
 
 - New modules introduced in this plan should follow the above naming, and avoid cross-layer imports (client ↔ server ↔ build).
 - Keep `src/index.ts`, `src/client.ts`, and `src/server.ts` as the stable public entry points.
+- Migrate existing files into this structure as part of the refactor:
+   - Move/rename runtime helpers into `src/[...file].ts`.
+   - Move/rename build steps into `src/build.[...file].ts`.
+   - Move/rename client-only logic into `src/client.[...file].ts`.
+   - Move/rename server-only logic into `src/server.[...file].ts`.
+   - Update all internal imports to the new locations; do not introduce cross-layer imports.
 
 ## Package.json
 
@@ -126,3 +138,6 @@ src/
 
 - Preserve the `bin` entry for CLI usage.
 - Any new public surface introduced by the refactor must be routed through the existing export points above (no new exports in this phase).
+- Migrate existing code without changing public entry points:
+   - Keep all user-facing imports working via the current `exports` map.
+   - If files are moved, update internal import paths only; do not add new export keys.

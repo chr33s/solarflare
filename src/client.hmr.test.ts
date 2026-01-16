@@ -6,7 +6,7 @@ function importWithFreshCache(relPath: string): Promise<any> {
   return import(`${href}?t=${Math.random()}`);
 }
 
-describe("hmr-client", () => {
+describe("client.hmr", () => {
   const prevDev = (globalThis as any).__SF_DEV__;
   const prevEventSource = (globalThis as any).EventSource;
   const prevLocation = (globalThis as any).location;
@@ -19,7 +19,7 @@ describe("hmr-client", () => {
 
   it("exports a no-op client by default", async () => {
     delete (globalThis as any).__SF_DEV__;
-    const { hmr } = await importWithFreshCache("./hmr-client.ts");
+    const { hmr } = await importWithFreshCache("./client.hmr.ts");
 
     assert.strictEqual(typeof hmr.on, "function");
     assert.strictEqual(typeof hmr.off, "function");
@@ -53,7 +53,7 @@ describe("hmr-client", () => {
 
     (globalThis as any).EventSource = MockEventSource;
 
-    const { hmr } = await importWithFreshCache("./hmr-client.ts");
+    const { hmr } = await importWithFreshCache("./client.hmr.ts");
     assert.strictEqual(instances.length, 1);
     assert.strictEqual(instances[0].url, "http://localhost:1234/_hmr");
 
@@ -88,7 +88,7 @@ describe("hmr-client", () => {
     }
 
     (globalThis as any).EventSource = MockEventSource;
-    const { hmr } = await importWithFreshCache("./hmr-client.ts");
+    const { hmr } = await importWithFreshCache("./client.hmr.ts");
 
     const ran: string[] = [];
     hmr.on("sf:test", () => {

@@ -13,8 +13,8 @@ import {
 } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
 import { isDevToolsRequest, handleDevToolsRequest } from "./devtools-json.ts";
-import { isHmrRequest, handleHmrRequest } from "./hmr-server.ts";
-export { broadcastHmrUpdate, type HmrEventType } from "./hmr-server.ts";
+import { isHmrRequest, handleHmrRequest } from "./server.hmr.ts";
+export { broadcastHmrUpdate, type HmrEventType } from "./server.hmr.ts";
 import {
   generateStaticShell,
   createEarlyFlushStream,

@@ -252,7 +252,7 @@ export {
   generateStylePreloadScript,
   getPreloadedStylesheet,
   hydratePreloadedStyles,
-} from "./ssr-styles.ts";
+} from "./server.styles.ts";
 
-export { hmr } from "./hmr-client.ts";
-export type { HmrApi, HmrCallback } from "./hmr-client.ts";
+export { hmr } from "./client.hmr.ts";
+export type { HmrApi, HmrCallback } from "./client.hmr.ts";

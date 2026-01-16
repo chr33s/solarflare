@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
 
-import { applyStyles, cleanupStyles, loadComponentStyles } from "./client-styles.ts";
+import { applyStyles, cleanupStyles, loadComponentStyles } from "./client.styles.ts";
 
 class MockCSSStyleSheet {
   cssRules: unknown[] = [];
