@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
 
-import { handleCssHmrUpdate, setupCssHmr } from "./hmr-styles.ts";
+import { handleCssHmrUpdate, setupCssHmr } from "./hmr.ts";
 import { stylesheets } from "./stylesheets.ts";
 
 class MockCSSStyleRule {

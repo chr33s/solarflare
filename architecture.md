@@ -55,14 +55,14 @@ flowchart TB
   - Streams _deferred promise props_ as independent “data islands”.
   - Uses `src/runtime.ts` for shared global state.
 
-- **Client runtime**: `src/client.ts`, `src/router.ts`, `src/store.ts`
+- **Client runtime**: `src/client.ts`, `src/router.ts`, `src/store.ts`, `src/hydration.ts`
   - `initClient()` hydrates store + head state and sets up hydration coordination.
   - SPA router fetches HTML, DOM-diffs it in, then hydrates deferred islands.
   - APIs: `Deferred` (`src/render-priority.ts`) for priority-based rendering holes, `define()` for custom elements.
 
 - **Styles & CSS**:
   - `src/stylesheets.ts` & `src/client-styles.ts`: Manage Constructable Stylesheets.
-  - `src/hmr-styles.ts`: Handles granular CSS HMR updates.
+  - `src/hmr.ts`: Handles CSS HMR updates (granular + full replacement).
   - `src/critical-css.ts`: Extracts critical CSS for inlining.
 
 - **Speculation Rules**: `src/speculation-rules.ts`
@@ -82,6 +82,25 @@ flowchart TB
   - Console forwarding: `src/console-forward.ts` (`/_console` + injected `console-forward.js`)
   - Codemod: `src/codemod.ts` (CLI tool for migration)
 
+## Shared manifest types
+
+The build/runtime boundary shares a small set of manifest shapes:
+
+- `src/manifest.ts`: single source of truth for `RouteManifestEntry`, `RoutesManifest`, and `ChunkManifest`.
+- Used by:
+  - `src/build.ts` (generation + inlining)
+  - `src/router.ts` (client router)
+  - `src/worker.ts` (runtime asset lookup)
+
+## HMR responsibilities matrix
+
+| Concern                            | Build-generated entry (via `src/build.ts`)                             | Runtime helpers                                                                 |
+| ---------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------ |
+| Module swap + versioning           | Listens for `sf:module:*`, increments `hmrVersion`, re-renders wrapper | `src/hmr-client.ts` establishes HMR channel and dispatches events               |
+| Error boundary recovery            | Inline `HMRErrorBoundary` wrapper in generated entry                   | `src/hmr.ts` provides `HMRErrorBoundary` + helpers (used for shared wrappers)   |
+| CSS updates (constructable sheets) | Wires per-file `sf:css:*` listeners and inline reload hooks            | `src/hmr.ts` handles `sf:css-update`/`sf:css-replace` and updates `stylesheets` |
+| Event dispatch                     | Emits `sf:hmr:update                                                   | error                                                                           | recover` events | `src/hmr.ts` exposes `dispatchHMREvent` / `onHMREvent` |
+
 ## Key dependencies
 
 | Package                          | Purpose                                    |
@@ -96,7 +115,16 @@ flowchart TB
 
 ## Build-time architecture
 
-Solarflare’s CLI (the package `bin`) is implemented in `src/build.ts`. Conceptually it does:
+Solarflare’s CLI (the package `bin`) is implemented in `src/build.ts` and delegates work to small build modules:
+
+- `src/build.scan.ts`: file discovery + CSS import scanning
+- `src/build.validate.ts`: route validation + route types
+- `src/build.hmr-entry.ts`: client entry generation template
+- `src/build.emit-manifests.ts`: module map generation
+- `src/build.bundle-client.ts`: client build + chunk manifest
+- `src/build.bundle-server.ts`: server build + module output
+
+Conceptually it does:
 
 1. **Scan** for route/layout files using naming conventions:
    - `*.client.tsx` client components (registered as custom elements)
@@ -133,6 +161,15 @@ sequenceDiagram
 ## Runtime: request lifecycle (Worker → SSR stream)
 
 At runtime, the Cloudflare Worker is the single entrypoint.
+
+Named pipeline stages (inputs → outputs):
+
+1. **Dev endpoints**: `(Request)` → `(Response)` when path matches `/_hmr`, `/_console`, or devtools JSON.
+2. **Routing**: `(Request, URL)` → `(RouteMatch | null)` using `URLPattern` + manifest.
+3. **Loader**: `(Request, params)` → `(props + response metadata)` from `*.server.tsx`.
+4. **Render**: `(VNode + layouts + props)` → `(ReadableStream + headers/status)` via `renderToStream`.
+5. **Perf features**: `(Response)` → `(Response)` early hints / early flush / critical CSS / route cache / speculation rules.
+6. **Response**: `(ReadableStream + headers/status)` → `(Response)` returned to client.
 
 Key steps (simplified):
 

@@ -1,7 +1,8 @@
 import { type FunctionComponent } from "preact";
 import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
-import { hydrateStore, initHydrationCoordinator } from "./store.ts";
+import { hydrateStore } from "./store.ts";
+import { initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 import { getRuntime, peekRuntime, clearRuntime } from "./runtime.ts";
 
@@ -179,10 +180,6 @@ export {
   extractDataIsland,
   // Hydration coordinator
   hydrateComponent,
-  initHydrationCoordinator,
-  cleanupHydrationCoordinator,
-  queueHydration,
-  isHydrationReady,
   // Re-exports from signals-core
   signal,
   computed,
@@ -194,6 +191,13 @@ export {
   type ReadonlySignal,
   type Signal,
 } from "./store.ts";
+
+export {
+  initHydrationCoordinator,
+  cleanupHydrationCoordinator,
+  queueHydration,
+  isHydrationReady,
+} from "./hydration.ts";
 
 // Router re-exports
 export {
@@ -234,6 +238,7 @@ export {
   acceptCssHMR,
   // HMR wrapper
   createHMRWrapper,
+  initHmrEntry,
   type HMRWrapperOptions,
   // HMR events
   dispatchHMREvent,

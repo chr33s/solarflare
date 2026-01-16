@@ -1,5 +1,15 @@
 import { type FunctionComponent, type VNode, h, Component as PreactComponent } from "preact";
-import { signal, type Signal } from "@preact/signals";
+import { signal, type Signal, useSignal, useSignalEffect } from "@preact/signals";
+import { useMemo } from "preact/hooks";
+import register from "preact-custom-element";
+import { initRouter, getRouter } from "./router.ts";
+import { extractDataIsland } from "./store.ts";
+import { initHydrationCoordinator } from "./hydration.ts";
+import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
+import { getRuntime } from "./runtime.ts";
+import type { RoutesManifest } from "./manifest.ts";
+import type { HmrApi } from "./hmr-client.ts";
+import { stylesheets } from "./stylesheets.ts";
 
 /** Global storage for component hook state across HMR updates. */
 const hookStateMap = new Map<string, unknown[]>();
@@ -235,6 +245,109 @@ export class HMRErrorBoundary extends PreactComponent<
 /** Tracks loaded CSS files for HMR. */
 const loadedStylesheets = new Map<string, HTMLLinkElement>();
 
+/** CSS HMR update payload. */
+export interface CssHmrUpdate {
+  id: string;
+  css: string;
+  /** Specific rules that changed (for incremental updates) */
+  changedRules?: Array<{
+    selector: string;
+    properties: string;
+    action: "add" | "update" | "delete";
+  }>;
+}
+
+/** Handles CSS HMR updates. */
+export function handleCssHmrUpdate(update: CssHmrUpdate): void {
+  const { id, css, changedRules } = update;
+
+  // Try granular update first
+  if (changedRules && changedRules.length < 10) {
+    const success = applyGranularUpdates(id, changedRules);
+    if (success) {
+      console.log(`[HMR] Incrementally updated ${changedRules.length} rules in ${id}`);
+      return;
+    }
+  }
+
+  // Fall back to full replacement
+  const updated = stylesheets.update(id, css);
+  if (updated) {
+    console.log(`[HMR] Replaced stylesheet: ${id}`);
+  }
+}
+
+/** Applies granular rule updates using insertRule/deleteRule. */
+function applyGranularUpdates(id: string, changes: CssHmrUpdate["changedRules"]): boolean {
+  if (!changes) return false;
+
+  const sheet = stylesheets.get(id);
+  if (!sheet) return false;
+
+  try {
+    // Build a map of existing rules by selector
+    const ruleMap = new Map<string, number>();
+    for (let i = 0; i < sheet.cssRules.length; i++) {
+      const rule = sheet.cssRules[i];
+      if (rule instanceof CSSStyleRule) {
+        ruleMap.set(rule.selectorText, i);
+      }
+    }
+
+    // Process changes in reverse order to maintain indices
+    const sortedChanges = [...changes].sort((a, b) => {
+      const idxA = ruleMap.get(a.selector) ?? -1;
+      const idxB = ruleMap.get(b.selector) ?? -1;
+      return idxB - idxA; // Reverse order
+    });
+
+    for (const change of sortedChanges) {
+      const existingIndex = ruleMap.get(change.selector);
+
+      switch (change.action) {
+        case "delete":
+          if (existingIndex !== undefined) {
+            sheet.deleteRule(existingIndex);
+          }
+          break;
+
+        case "update":
+          if (existingIndex !== undefined) {
+            // Delete and re-insert at same position
+            sheet.deleteRule(existingIndex);
+            sheet.insertRule(`${change.selector} { ${change.properties} }`, existingIndex);
+          }
+          break;
+
+        case "add":
+          sheet.insertRule(`${change.selector} { ${change.properties} }`, sheet.cssRules.length);
+          break;
+      }
+    }
+
+    return true;
+  } catch (e) {
+    console.warn("[HMR] Granular update failed, falling back to full replace", e);
+    return false;
+  }
+}
+
+/** Registers HMR handlers for CSS files. */
+export function setupCssHmr(hmr: {
+  on: (event: string, cb: (data: unknown) => void) => void;
+}): void {
+  hmr.on("sf:css-update", (data) => {
+    handleCssHmrUpdate(data as CssHmrUpdate);
+  });
+
+  // Handle full CSS file replacement
+  hmr.on("sf:css-replace", (data) => {
+    const { id, css } = data as { id: string; css: string };
+    stylesheets.update(id, css);
+    console.log(`[HMR] Full CSS replacement: ${id}`);
+  });
+}
+
 /** Reloads a CSS file by updating its href with a cache-busting query. */
 export function reloadStylesheet(href: string): void {
   const existing =
@@ -350,6 +463,218 @@ export function onHMREvent(
 
   document.addEventListener(`sf:hmr:${type}`, listener);
   return () => document.removeEventListener(`sf:hmr:${type}`, listener);
+}
+
+export interface HmrEntryOptions {
+  tag: string;
+  props: string[];
+  routesManifest: RoutesManifest;
+  BaseComponent: FunctionComponent<any>;
+  hmr: HmrApi;
+  cssFiles?: string[];
+  onCssUpdate?: () => void;
+}
+
+function initClientRuntime(): void {
+  if (typeof document !== "undefined") {
+    const runtime = getRuntime();
+    runtime.headContext ??= createHeadContext();
+    setHeadContext(runtime.headContext);
+    installHeadHoisting();
+  }
+  initHydrationCoordinator();
+}
+
+export function createHmrEntryComponent(options: HmrEntryOptions): FunctionComponent<any> {
+  const { tag, routesManifest, BaseComponent, hmr, cssFiles = [], onCssUpdate } = options;
+
+  initClientRuntime();
+
+  let CurrentComponent = BaseComponent;
+  const hmrVersion = signal(0);
+  const navVersion = signal(0);
+
+  if (onCssUpdate) {
+    hmr.on("sf:css-update", onCssUpdate);
+  }
+
+  for (const file of cssFiles) {
+    hmr.on<string>(`sf:css:${file}`, (newCss) => {
+      if (!newCss) return;
+      stylesheets.update(file, newCss);
+      console.log(`[HMR] Updated stylesheet: ${file}`);
+    });
+  }
+
+  const captureHookState = (el: any) => {
+    if (!el?._vdom?.__hooks?.list) return;
+    const list = el._vdom.__hooks.list as Array<{ _value?: unknown; current?: unknown } | null>;
+    saveHookState(
+      tag,
+      list.map((hook) => (hook?._value !== undefined ? hook._value : hook?.current)),
+    );
+  };
+
+  const applyHookState = (el: any) => {
+    const saved = restoreHookState(tag);
+    if (!saved || !el?._vdom?.__hooks?.list) return;
+    const list = el._vdom.__hooks.list as Array<{ _value?: unknown; current?: unknown } | null>;
+    list.forEach((hook, i) => {
+      if (saved[i] !== undefined) {
+        if (hook?._value !== undefined) hook._value = saved[i];
+        else if (hook?.current !== undefined) hook.current = saved[i];
+      }
+    });
+  };
+
+  hmr.on<{ default?: FunctionComponent<any> }>(`sf:module:${tag}`, (newModule) => {
+    if (newModule?.default) {
+      saveScrollPosition(tag);
+
+      const el = document.querySelector(tag) as any;
+      captureHookState(el);
+
+      CurrentComponent = newModule.default;
+      console.log(`[HMR] Updated <${tag}>`);
+      hmrVersion.value++;
+
+      requestAnimationFrame(() => {
+        restoreScrollPosition(tag);
+        const nextEl = document.querySelector(tag) as any;
+        applyHookState(nextEl);
+      });
+
+      dispatchHMREvent("update", { tag });
+    }
+  });
+
+  hmr.dispose(() => {
+    console.log(`[HMR] Disposing <${tag}>`);
+    saveScrollPosition(tag);
+    const el = document.querySelector(tag) as any;
+    captureHookState(el);
+  });
+
+  let routerInitialized = false;
+  function ensureRouter() {
+    if (typeof document === "undefined") return null;
+    if (routerInitialized) {
+      try {
+        return getRouter();
+      } catch {
+        return null;
+      }
+    }
+    routerInitialized = true;
+    return initRouter(routesManifest).start();
+  }
+
+  return function Component(props) {
+    const deferredSignals = useMemo(() => new Map<string, Signal<unknown>>(), []);
+    const deferredVersion = useSignal(0);
+    void hmrVersion.value;
+    const navVer = navVersion.value;
+
+    const getOrCreateSignal = (key: string, value: unknown) => {
+      if (!deferredSignals.has(key)) {
+        deferredSignals.set(key, signal(value));
+        deferredVersion.value++;
+      } else {
+        deferredSignals.get(key)!.value = value;
+      }
+    };
+
+    useSignalEffect(() => {
+      const el = document.querySelector(tag) as any;
+      if (!el) return;
+
+      const extractDeferred = () => {
+        if (!el.isConnected) return;
+
+        if (el._sfDeferred) {
+          for (const [key, value] of Object.entries(el._sfDeferred)) {
+            getOrCreateSignal(key, value);
+          }
+          delete el._sfDeferred;
+          return;
+        }
+
+        const scripts = document.querySelectorAll(
+          `script[type="application/json"][data-island^="${tag}-deferred"]`,
+        );
+        if (!scripts.length) return;
+
+        void (async () => {
+          for (const script of scripts) {
+            if (!el.isConnected) return;
+            const id = script.getAttribute("data-island");
+            if (!id) continue;
+            const data = await extractDataIsland<Record<string, unknown>>(id);
+            if (data && typeof data === "object") {
+              for (const [key, value] of Object.entries(data)) {
+                getOrCreateSignal(key, value);
+              }
+            }
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        })();
+      };
+
+      extractDeferred();
+
+      const hydrateHandler = (e: Event) => {
+        const detail = (e as CustomEvent).detail as Record<string, unknown>;
+        for (const [key, value] of Object.entries(detail)) {
+          getOrCreateSignal(key, value);
+        }
+        delete el._sfDeferred;
+      };
+
+      el.addEventListener("sf:hydrate", hydrateHandler);
+
+      const navHandler = () => setTimeout(extractDeferred, 0);
+      const rerenderHandler = () => {
+        navVersion.value++;
+      };
+      window.addEventListener("sf:navigate", navHandler);
+      el.addEventListener("sf:rerender", rerenderHandler);
+
+      ensureRouter();
+
+      return () => {
+        el.removeEventListener("sf:hydrate", hydrateHandler);
+        window.removeEventListener("sf:navigate", navHandler);
+        el.removeEventListener("sf:rerender", rerenderHandler);
+      };
+    });
+
+    const cleanProps: Record<string, unknown> = {};
+    for (const key in props) {
+      if (props[key] !== "undefined" && props[key] !== undefined) {
+        cleanProps[key] = props[key];
+      }
+    }
+
+    const _ver = deferredVersion.value;
+    void _ver;
+    void navVer;
+
+    const deferredProps: Record<string, unknown> = {};
+    for (const [key, sig] of deferredSignals) {
+      deferredProps[key] = sig.value;
+    }
+
+    const finalProps = { ...cleanProps, ...deferredProps };
+
+    return h(HMRErrorBoundary, { tag, hmrVersion }, h(CurrentComponent, finalProps));
+  };
+}
+
+export function initHmrEntry(options: HmrEntryOptions): void {
+  const Component = createHmrEntryComponent(options);
+  if (!customElements.get(options.tag)) {
+    register(Component, options.tag, options.props, { shadow: false });
+  }
 }
 
 export { signal };

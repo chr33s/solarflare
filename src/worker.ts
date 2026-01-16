@@ -8,6 +8,8 @@ import {
   renderToStream,
   renderErrorPage,
   type ModuleMap,
+  type Route,
+  type SolarflareStream,
 } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
 import { isDevToolsRequest, handleDevToolsRequest } from "./devtools-json.ts";
@@ -25,20 +27,13 @@ import { ResponseCache, withCache } from "./route-cache.ts";
 import { parseMetaConfig, workerConfigMeta } from "./worker-config.ts";
 export { workerConfigMeta };
 import { getHeadContext } from "./head.ts";
+import type { ChunkManifest } from "./manifest.ts";
 // @ts-ignore - Generated at build time, aliased by bundler
 import modules from ".modules.generated";
 // @ts-ignore - Generated at build time, aliased by bundler
 import chunkManifest from ".chunks.generated.json";
 
 const typedModules = modules as ModuleMap;
-
-/** Chunk manifest mapping routes to assets. */
-interface ChunkManifest {
-  chunks: Record<string, string>;
-  tags: Record<string, string>;
-  styles: Record<string, string[]>;
-  devScripts?: string[];
-}
 
 const manifest = chunkManifest as ChunkManifest;
 
@@ -106,27 +101,42 @@ interface WorkerEnv {
   [key: string]: unknown;
 }
 
-/** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
-async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
-  const url = new URL(request.url);
+interface SsrContext {
+  url: URL;
+  route: Route;
+  params: Record<string, string>;
+  content: ReturnType<typeof renderComponent>;
+  shellData: Record<string, unknown>;
+  deferredData: Record<string, Promise<unknown>> | null;
+  responseHeaders?: Record<string, string>;
+  responseStatus?: number;
+  responseStatusText?: string;
+  scriptPath?: string;
+  stylesheets: string[];
+  devScripts?: string[];
+  metaConfig: ReturnType<typeof parseMetaConfig>;
+}
 
-  // Handle HMR WebSocket upgrade requests in dev mode
-  if (isHmrRequest(request)) {
-    return handleHmrRequest();
-  }
+interface RenderPlan {
+  ssrStream: SolarflareStream;
+  finalHeaders: Record<string, string>;
+  status: number;
+  statusText?: string;
+  metaConfig: ReturnType<typeof parseMetaConfig>;
+  stylesheets: string[];
+  resourceHints: string;
+  useEarlyFlush: boolean;
+  useCriticalCss: boolean;
+  pathname: string;
+}
 
-  // Handle console forward requests in dev mode
-  if (isConsoleRequest(request)) {
-    const logLevel = env?.WRANGLER_LOG ?? "log";
-    return processConsoleLogs(request, logLevel);
-  }
+type MatchAndLoadResult =
+  | { kind: "not-found" }
+  | { kind: "api"; response: Response }
+  | { kind: "ssr"; context: SsrContext };
 
-  // Handle Chrome DevTools project settings in dev mode
-  if (isDevToolsRequest(request)) {
-    return handleDevToolsRequest();
-  }
-
-  const headers = {
+function getDefaultHeaders(): Record<string, string> {
+  return {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Encoding": "identity",
     "Content-Security-Policy": "frame-ancestors 'self'",
@@ -134,237 +144,305 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     "Transfer-Encoding": "chunked",
     "X-Content-Type-Options": "nosniff",
   };
+}
 
-  try {
-    // Match route using URLPattern - prefers client routes for SSR
-    const match = matchRoute(router, url);
+async function handleDevEndpoints(request: Request, env?: WorkerEnv): Promise<Response | null> {
+  if (isHmrRequest(request)) {
+    return handleHmrRequest();
+  }
 
-    if (!match) {
-      // Render 404 error page wrapped in layouts
-      const notFoundError = new Error(`Page not found: ${url.pathname}`);
-      const errorContent = await renderErrorPage(notFoundError, url, typedModules, 404);
+  if (isConsoleRequest(request)) {
+    const logLevel = env?.WRANGLER_LOG ?? "log";
+    return processConsoleLogs(request, logLevel);
+  }
 
-      // Get stylesheets for error page (use root layout styles)
-      const stylesheets = getStylesheets("/");
-      const devScripts = getDevScripts();
+  if (isDevToolsRequest(request)) {
+    return handleDevToolsRequest();
+  }
 
-      const stream = await renderToStream(errorContent, {
-        pathname: url.pathname,
-        styles: stylesheets,
-        devScripts,
-      });
+  return null;
+}
 
-      return new Response(stream, {
-        headers,
-        status: 404,
-      });
+async function renderErrorResponse(
+  error: Error,
+  url: URL,
+  status: number,
+  headers: Record<string, string>,
+): Promise<Response> {
+  const errorContent = await renderErrorPage(error, url, typedModules, status);
+  const stylesheets = getStylesheets("/");
+  const devScripts = getDevScripts();
+
+  const stream = await renderToStream(errorContent, {
+    pathname: url.pathname,
+    styles: stylesheets,
+    devScripts,
+  });
+
+  return new Response(stream, {
+    headers,
+    status,
+  });
+}
+
+async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadResult> {
+  const match = matchRoute(router, url);
+
+  if (!match) {
+    return { kind: "not-found" };
+  }
+
+  const { route, params } = match;
+
+  if (route.type === "server") {
+    const pairedClientPath = findPairedModule(route.path);
+    if (!pairedClientPath) {
+      const mod = await route.loader();
+      const handler = mod.default as (request: Request) => Response | Promise<Response>;
+      return { kind: "api", response: await handler(request) };
     }
+  }
 
-    const { route, params } = match;
+  let serverPath: string | null = null;
+  let clientPath: string;
 
-    // If this is a server-only route (no paired client), return Response directly
-    if (route.type === "server") {
-      const pairedClientPath = findPairedModule(route.path);
-      if (!pairedClientPath) {
-        // No paired client component - this is an API route
-        const mod = await route.loader();
-        const handler = mod.default as (request: Request) => Response | Promise<Response>;
-        return handler(request);
-      }
-    }
+  if (route.type === "server") {
+    serverPath = route.path;
+    clientPath = route.path.replace(".server.", ".client.");
+  } else {
+    clientPath = route.path;
+    serverPath = findPairedModule(route.path);
+  }
 
-    // Determine the server and client paths
-    let serverPath: string | null = null;
-    let clientPath: string;
+  let shellData: Record<string, unknown> = {};
+  let deferredData: Record<string, Promise<unknown>> | null = null;
+  let responseHeaders: Record<string, string> | undefined;
+  let responseStatus: number | undefined;
+  let responseStatusText: string | undefined;
 
-    if (route.type === "server") {
-      serverPath = route.path;
-      clientPath = route.path.replace(".server.", ".client.");
-    } else {
-      clientPath = route.path;
-      serverPath = findPairedModule(route.path);
-    }
-
-    // Load props from server loader if available
-    let shellData: Record<string, unknown> = {};
-    let deferredData: Record<string, Promise<unknown>> | null = null;
-    let responseHeaders: Record<string, string> | undefined;
-    let responseStatus: number | undefined;
-    let responseStatusText: string | undefined;
-
-    if (serverPath && serverPath in typedModules.server) {
-      const serverMod = await typedModules.server[serverPath]();
-      const loader = serverMod.default as ServerLoader;
-      const result = (await loader(request, params)) as Record<string, unknown> & {
-        _headers?: Record<string, string>;
-        _status?: number;
-        _statusText?: string;
-      };
-
-      // Extract response metadata from underscore-prefixed properties
-      responseHeaders = result._headers;
-      responseStatus = result._status;
-      responseStatusText = result._statusText;
-
-      const immediateData: Record<string, unknown> = {};
-      const deferredPromises: Record<string, Promise<unknown>> = {};
-
-      // Filter out underscore-prefixed properties (response metadata)
-      const dataEntries = Object.entries(result).filter(([key]) => !key.startsWith("_"));
-
-      for (const [key, value] of dataEntries) {
-        if (value instanceof Promise) {
-          deferredPromises[key] = value;
-        } else {
-          immediateData[key] = value;
-        }
-      }
-
-      shellData = immediateData;
-
-      const deferredKeys = Object.keys(deferredPromises);
-      deferredData = deferredKeys.length > 0 ? deferredPromises : null;
-    }
-
-    // Combine params and shell data as initial props
-    const props: Record<string, unknown> = { ...params, ...shellData };
-
-    // Load the client component
-    const clientMod = await typedModules.client[clientPath]();
-    const Component = clientMod.default as FunctionComponent<any>;
-
-    // Render component wrapped in custom element tag
-    let content = renderComponent(Component, route.tag, props);
-
-    // Find and apply layouts
-    const layouts = findLayouts(route.path, typedModules);
-    if (layouts.length > 0) {
-      content = await wrapWithLayouts(content, layouts);
-    }
-
-    // Get the script and styles for this route's chunk
-    const scriptPath = getScriptPath(route.tag);
-    const stylesheets = getStylesheets(route.parsedPattern.pathname);
-    const devScripts = getDevScripts();
-
-    // Get rendered head HTML to extract meta config
-    // useHead calls have already populated the context during component rendering
-    const headCtx = getHeadContext();
-    const headHtml = headCtx.renderToString();
-
-    // Parse worker configuration from meta tags
-    // Supports: sf:preconnect, sf:cache-max-age, sf:cache-swr, sf:early-flush, sf:critical-css
-    const metaConfig = parseMetaConfig(headHtml);
-
-    // Collect early hints using meta-configured preconnect origins
-    const earlyHints = collectEarlyHints({
-      scriptPath,
-      stylesheets,
-      preconnectOrigins: metaConfig.preconnectOrigins,
-    });
-
-    // Generate resource hints HTML for <head>
-    const resourceHints = generateResourceHints({
-      scripts: scriptPath ? [scriptPath] : [],
-      stylesheets,
-    });
-
-    // Get optimization settings from environment (can override meta)
-    const envOptimizations = env?.SF_OPTIMIZATIONS ?? {};
-    const useEarlyFlush = envOptimizations.earlyFlush ?? metaConfig.earlyFlush;
-    const useCriticalCss = envOptimizations.criticalCss ?? metaConfig.criticalCss;
-
-    // Render function (potentially cached)
-    const render = async (): Promise<Response> => {
-      // Render to streaming response with signal context
-      const ssrStream = await renderToStream(content, {
-        params,
-        serverData: shellData,
-        pathname: url.pathname,
-        script: scriptPath,
-        styles: useEarlyFlush ? [] : stylesheets, // Styles loaded async with early flush
-        devScripts,
-        deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
-        _headers: responseHeaders,
-        _status: responseStatus,
-        _statusText: responseStatusText,
-      });
-
-      // Merge custom headers with defaults, custom headers take priority
-      const finalHeaders: Record<string, string> = { ...headers };
-      if (ssrStream.headers) {
-        for (const [key, value] of Object.entries(ssrStream.headers)) {
-          finalHeaders[key] = value;
-        }
-      }
-
-      // Add Link header for early hints
-      if (earlyHints.length > 0) {
-        finalHeaders["Link"] = generateEarlyHintsHeader(earlyHints);
-      }
-
-      // Use early flush stream for faster TTFB if enabled
-      if (useEarlyFlush) {
-        const staticShell = getStaticShell(metaConfig.lang);
-
-        // Extract critical CSS if enabled and reader provided
-        let criticalCss = "";
-        if (useCriticalCss && envOptimizations.readCss) {
-          criticalCss = await extractCriticalCss(route.parsedPattern.pathname, stylesheets, {
-            readCss: envOptimizations.readCss,
-            cache: true,
-          });
-        }
-
-        const optimizedStream = createEarlyFlushStream(staticShell, {
-          criticalCss,
-          preloadHints: resourceHints,
-          contentStream: ssrStream,
-          headTags: "", // Head tags handled by existing system
-          bodyTags: generateAsyncCssLoader(stylesheets),
-        });
-
-        return new Response(optimizedStream, {
-          headers: finalHeaders,
-          status: ssrStream.status ?? 200,
-          statusText: ssrStream.statusText,
-        });
-      }
-
-      return new Response(ssrStream, {
-        headers: finalHeaders,
-        status: ssrStream.status ?? 200,
-        statusText: ssrStream.statusText,
-      });
+  if (serverPath && serverPath in typedModules.server) {
+    const serverMod = await typedModules.server[serverPath]();
+    const loader = serverMod.default as ServerLoader;
+    const result = (await loader(request, params)) as Record<string, unknown> & {
+      _headers?: Record<string, string>;
+      _status?: number;
+      _statusText?: string;
     };
 
-    // Use cache if meta-configured for this route
-    if (metaConfig.cacheConfig) {
-      return withCache(request, params, metaConfig.cacheConfig, render, responseCache);
+    responseHeaders = result._headers;
+    responseStatus = result._status;
+    responseStatusText = result._statusText;
+
+    const immediateData: Record<string, unknown> = {};
+    const deferredPromises: Record<string, Promise<unknown>> = {};
+
+    const dataEntries = Object.entries(result).filter(([key]) => !key.startsWith("_"));
+
+    for (const [key, value] of dataEntries) {
+      if (value instanceof Promise) {
+        deferredPromises[key] = value;
+      } else {
+        immediateData[key] = value;
+      }
+    }
+
+    shellData = immediateData;
+    deferredData = Object.keys(deferredPromises).length > 0 ? deferredPromises : null;
+  }
+
+  const props: Record<string, unknown> = { ...params, ...shellData };
+
+  const clientMod = await typedModules.client[clientPath]();
+  const Component = clientMod.default as FunctionComponent<any>;
+
+  let content = renderComponent(Component, route.tag, props);
+
+  const layouts = findLayouts(route.path, typedModules);
+  if (layouts.length > 0) {
+    content = await wrapWithLayouts(content, layouts);
+  }
+
+  const scriptPath = getScriptPath(route.tag);
+  const stylesheets = getStylesheets(route.parsedPattern.pathname);
+  const devScripts = getDevScripts();
+
+  const headCtx = getHeadContext();
+  const headHtml = headCtx.renderToString();
+  const metaConfig = parseMetaConfig(headHtml);
+
+  return {
+    kind: "ssr",
+    context: {
+      url,
+      route,
+      params,
+      content,
+      shellData,
+      deferredData,
+      responseHeaders,
+      responseStatus,
+      responseStatusText,
+      scriptPath,
+      stylesheets,
+      devScripts,
+      metaConfig,
+    },
+  };
+}
+
+async function renderStream(
+  context: SsrContext,
+  headers: Record<string, string>,
+  envOptimizations: WorkerOptimizations,
+): Promise<RenderPlan> {
+  const { url, route, params, content, shellData, deferredData, metaConfig } = context;
+  const { scriptPath, stylesheets, devScripts } = context;
+
+  const earlyHints = collectEarlyHints({
+    scriptPath,
+    stylesheets,
+    preconnectOrigins: metaConfig.preconnectOrigins,
+  });
+
+  const resourceHints = generateResourceHints({
+    scripts: scriptPath ? [scriptPath] : [],
+    stylesheets,
+  });
+
+  const useEarlyFlush = envOptimizations.earlyFlush ?? metaConfig.earlyFlush;
+  const useCriticalCss = envOptimizations.criticalCss ?? metaConfig.criticalCss;
+
+  const ssrStream = await renderToStream(content, {
+    params,
+    serverData: shellData,
+    pathname: url.pathname,
+    script: scriptPath,
+    styles: useEarlyFlush ? [] : stylesheets,
+    devScripts,
+    deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
+    _headers: context.responseHeaders,
+    _status: context.responseStatus,
+    _statusText: context.responseStatusText,
+  });
+
+  const finalHeaders: Record<string, string> = { ...headers };
+  if (ssrStream.headers) {
+    for (const [key, value] of Object.entries(ssrStream.headers)) {
+      finalHeaders[key] = value;
+    }
+  }
+
+  if (earlyHints.length > 0) {
+    finalHeaders["Link"] = generateEarlyHintsHeader(earlyHints);
+  }
+
+  return {
+    ssrStream,
+    finalHeaders,
+    status: ssrStream.status ?? 200,
+    statusText: ssrStream.statusText,
+    metaConfig,
+    stylesheets,
+    resourceHints,
+    useEarlyFlush,
+    useCriticalCss,
+    pathname: route.parsedPattern.pathname,
+  };
+}
+
+async function applyPerfFeatures(
+  plan: RenderPlan,
+  envOptimizations: WorkerOptimizations,
+): Promise<Response> {
+  const {
+    ssrStream,
+    finalHeaders,
+    status,
+    statusText,
+    stylesheets,
+    resourceHints,
+    useEarlyFlush,
+    useCriticalCss,
+    pathname,
+    metaConfig,
+  } = plan;
+
+  if (useEarlyFlush) {
+    const staticShell = getStaticShell(metaConfig.lang);
+
+    let criticalCss = "";
+    if (useCriticalCss && envOptimizations.readCss) {
+      criticalCss = await extractCriticalCss(pathname, stylesheets, {
+        readCss: envOptimizations.readCss,
+        cache: true,
+      });
+    }
+
+    const optimizedStream = createEarlyFlushStream(staticShell, {
+      criticalCss,
+      preloadHints: resourceHints,
+      contentStream: ssrStream,
+      headTags: "",
+      bodyTags: generateAsyncCssLoader(stylesheets),
+    });
+
+    return new Response(optimizedStream, {
+      headers: finalHeaders,
+      status,
+      statusText,
+    });
+  }
+
+  return new Response(ssrStream, {
+    headers: finalHeaders,
+    status,
+    statusText,
+  });
+}
+
+/** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
+async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
+  const url = new URL(request.url);
+  const devResponse = await handleDevEndpoints(request, env);
+  if (devResponse) return devResponse;
+
+  const headers = getDefaultHeaders();
+
+  try {
+    const result = await matchAndLoad(request, url);
+
+    if (result.kind === "not-found") {
+      const notFoundError = new Error(`Page not found: ${url.pathname}`);
+      return renderErrorResponse(notFoundError, url, 404, headers);
+    }
+
+    if (result.kind === "api") {
+      return result.response;
+    }
+
+    const { context } = result;
+    const envOptimizations = env?.SF_OPTIMIZATIONS ?? {};
+
+    const render = async (): Promise<Response> => {
+      const plan = await renderStream(context, headers, envOptimizations);
+      return applyPerfFeatures(plan, envOptimizations);
+    };
+
+    if (context.metaConfig.cacheConfig) {
+      return withCache(
+        request,
+        context.params,
+        context.metaConfig.cacheConfig,
+        render,
+        responseCache,
+      );
     }
 
     return render();
   } catch (error) {
-    // Render 500 error page wrapped in layouts
     const serverError = error instanceof Error ? error : new Error(String(error));
     console.error("[solarflare] Server error:", serverError);
-
-    const errorContent = await renderErrorPage(serverError, url, typedModules, 500);
-
-    // Get stylesheets for error page (use root layout styles)
-    const stylesheets = getStylesheets("/");
-    const devScripts = getDevScripts();
-
-    const stream = await renderToStream(errorContent, {
-      pathname: url.pathname,
-      styles: stylesheets,
-      devScripts,
-    });
-
-    return new Response(stream, {
-      headers,
-      status: 500,
-    });
+    return renderErrorResponse(serverError, url, 500, headers);
   }
 }
 

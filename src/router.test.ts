@@ -9,8 +9,8 @@ import {
   type RouteManifestEntry,
   type RouterConfig,
   type RouteMatch,
-  handleDeferredHydrationNode,
 } from "./router.ts";
+import { handleDeferredHydrationNode } from "./router-deferred.ts";
 
 describe("supportsViewTransitions", () => {
   it("should return false in non-browser environment", () => {
