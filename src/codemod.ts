@@ -71,7 +71,7 @@ interface TransformOptions {
 }
 
 /** Transform source code directly (for testing) */
-export function transformSource(source: string, filePath = "test.tsx"): string {
+export function transformSource(source: string, filePath = "test.tsx") {
   const project = new Project({ useInMemoryFileSystem: true });
   const sourceFile = project.createSourceFile(filePath, source);
 
@@ -95,7 +95,7 @@ export function transformSource(source: string, filePath = "test.tsx"): string {
 }
 
 /** Main transformer function (reads from disk) */
-export function transformer(filePath: string, options: TransformOptions = {}): string | null {
+export function transformer(filePath: string, options: TransformOptions = {}) {
   if (filePath.includes("node_modules")) {
     return null;
   }
@@ -124,12 +124,12 @@ export function transformer(filePath: string, options: TransformOptions = {}): s
 }
 
 /** Check if module is a Remix package */
-function isRemixModule(module: string): boolean {
+function isRemixModule(module: string) {
   return REMIX_MODULES.some((m) => module === m || module.startsWith(`${m}/`));
 }
 
 /** Transform React imports to Preact equivalents */
-function transformReactToPreact(sourceFile: SourceFile): void {
+function transformReactToPreact(sourceFile: SourceFile) {
   const hooksToAdd: string[] = [];
   const importsToRemove: number[] = [];
   const imports = sourceFile.getImportDeclarations();
@@ -243,7 +243,7 @@ function transformReactToPreact(sourceFile: SourceFile): void {
 }
 
 /** Analyze a React Router route module to extract exports */
-function analyzeRouteModule(sourceFile: SourceFile): RouteModule {
+function analyzeRouteModule(sourceFile: SourceFile) {
   const module: RouteModule = {};
 
   for (const exportDecl of sourceFile.getExportedDeclarations()) {
@@ -277,7 +277,7 @@ function transformRouteModule(
   filePath: string,
   routeModule: RouteModule,
   options: TransformOptions,
-): string | null {
+) {
   const baseName = filePath.replace(/\.(tsx|ts|jsx|js)$/, "");
 
   if (routeModule.loader || routeModule.action) {
@@ -308,7 +308,7 @@ function transformRouteModule(
 }
 
 /** Generate Solarflare server handler from React Router loader/action */
-function generateServerFile(sourceFile: SourceFile, routeModule: RouteModule): string {
+function generateServerFile(sourceFile: SourceFile, routeModule: RouteModule) {
   const imports: string[] = [];
   const serverCode: string[] = [];
 
@@ -359,7 +359,7 @@ function generateServerFile(sourceFile: SourceFile, routeModule: RouteModule): s
 }
 
 /** Transform React Router/Remix loader to Solarflare server handler */
-function transformLoaderToServerHandler(loaderCode: string): string {
+function transformLoaderToServerHandler(loaderCode: string) {
   let body = loaderCode
     .replace(/export (async )?function loader\s*\([^)]*\)\s*{/, "")
     .replace(/}$/, "")
@@ -398,7 +398,7 @@ function transformLoaderToServerHandler(loaderCode: string): string {
 }
 
 /** Transform React Router/Remix action to Solarflare server handler */
-function transformActionToServerHandler(actionCode: string): string {
+function transformActionToServerHandler(actionCode: string) {
   let body = actionCode
     .replace(/export (async )?function action\s*\([^)]*\)\s*{/, "")
     .replace(/}$/, "")
@@ -424,7 +424,7 @@ function transformActionToServerHandler(actionCode: string): string {
 }
 
 /** Generate Solarflare client component from React Router component */
-function generateClientFile(sourceFile: SourceFile, routeModule: RouteModule): string {
+function generateClientFile(sourceFile: SourceFile, routeModule: RouteModule) {
   const imports: string[] = [];
   const clientCode: string[] = [];
 
@@ -526,7 +526,7 @@ function generateClientFile(sourceFile: SourceFile, routeModule: RouteModule): s
 }
 
 /** Transform a single React import statement to Preact */
-function transformReactImportToPreact(importStatement: string, source: string): string {
+function transformReactImportToPreact(importStatement: string, source: string) {
   if (source === "react") {
     return importStatement.replace(/from ['"]react['"]/, "from 'preact'");
   }
@@ -539,7 +539,7 @@ function transformReactImportToPreact(importStatement: string, source: string): 
 }
 
 /** Transform React Router/Remix imports to Solarflare equivalents */
-function transformReactRouterImports(importStatement: string): string {
+function transformReactRouterImports(importStatement: string) {
   if (importStatement.includes("useNavigate") || importStatement.includes("Link")) {
     return `import { navigate } from '@chr33s/solarflare/client';`;
   }
@@ -570,7 +570,7 @@ function transformReactRouterImports(importStatement: string): string {
 }
 
 /** Transform routes.ts config to Solarflare file structure */
-function transformRoutesConfig(sourceFile: SourceFile): string {
+function transformRoutesConfig(sourceFile: SourceFile) {
   const output: string[] = [];
 
   output.push(`// Solarflare uses file-based routing`);
@@ -615,7 +615,7 @@ function transformRoutesConfig(sourceFile: SourceFile): string {
 }
 
 /** Extract route structure from React Router config */
-function extractRouteStructure(node: Node, output: string[], indent: string): void {
+function extractRouteStructure(node: Node, output: string[], indent: string) {
   if (Node.isArrayLiteralExpression(node)) {
     for (const element of node.getElements()) {
       if (Node.isCallExpression(element)) {
@@ -648,7 +648,7 @@ function extractRouteStructure(node: Node, output: string[], indent: string): vo
 }
 
 /** Recursively collect files from a path (file or directory) */
-function collectFiles(inputPath: string): string[] {
+function collectFiles(inputPath: string) {
   const stat = fs.statSync(inputPath);
   if (stat.isFile()) {
     return [inputPath];
@@ -670,7 +670,7 @@ function collectFiles(inputPath: string): string[] {
 }
 
 /** CLI entry point */
-export function codemod(paths: string[], options: TransformOptions = {}): void {
+export function codemod(paths: string[], options: TransformOptions = {}) {
   const files = paths.flatMap(collectFiles);
   for (const filePath of files) {
     try {

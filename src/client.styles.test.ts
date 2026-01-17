@@ -5,10 +5,10 @@ import { applyStyles, cleanupStyles, loadComponentStyles } from "./client.styles
 
 class MockCSSStyleSheet {
   cssRules: unknown[] = [];
-  replaceSync(_css: string): void {}
+  replaceSync(_css: string) {}
 }
 
-function installMockDom(options: { supported: boolean }): () => void {
+function installMockDom(options: { supported: boolean }) {
   const prevWindow = (globalThis as any).window;
   const prevDocument = (globalThis as any).document;
   const prevCSSStyleSheet = (globalThis as any).CSSStyleSheet;

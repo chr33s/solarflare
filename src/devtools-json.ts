@@ -14,24 +14,24 @@ export interface DevToolsOptions {
 
 let cachedUuid: string | null = null;
 
-export function setDevToolsUuid(uuid: string): void {
+export function setDevToolsUuid(uuid: string) {
   cachedUuid = uuid;
 }
 
-function getOrCreateUuid(providedUuid?: string): string {
+function getOrCreateUuid(providedUuid?: string) {
   if (providedUuid) return providedUuid;
   if (cachedUuid) return cachedUuid;
   cachedUuid = crypto.randomUUID();
   return cachedUuid;
 }
 
-export function isDevToolsRequest(request: Request): boolean {
+export function isDevToolsRequest(request: Request) {
   const url = new URL(request.url);
   return url.pathname === ENDPOINT && request.method === "GET";
 }
 
 /** Handles devtools.json request. Returns the project settings JSON. */
-export function handleDevToolsRequest(options: DevToolsOptions = {}): Response {
+export function handleDevToolsRequest(options: DevToolsOptions = {}) {
   const root = options.projectRoot ?? (typeof process !== "undefined" ? process.cwd() : "/");
   const uuid = getOrCreateUuid(options.uuid);
 

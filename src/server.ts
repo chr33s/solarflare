@@ -23,7 +23,7 @@ import {
 export const BODY_MARKER = "<!--SOLARFLARE_BODY-->";
 
 /** Body placeholder component for layout injection. */
-export function Body(): VNode<any> {
+export function Body() {
   return h("solarflare-body", {
     dangerouslySetInnerHTML: { __html: BODY_MARKER },
   });
@@ -60,7 +60,7 @@ export interface Route {
 }
 
 /** Converts file path to URLPattern with parsed metadata. */
-export function parsePattern(filePath: string): ParsedPattern {
+export function parsePattern(filePath: string) {
   const parsed = parsePath(filePath);
 
   // Transform params from string[] to RouteParamDef[]
@@ -88,7 +88,7 @@ export interface ModuleMap {
 }
 
 /** Creates router from module map, returning sorted routes array. */
-export function createRouter(modules: ModuleMap): Route[] {
+export function createRouter(modules: ModuleMap) {
   const routeModules = { ...modules.server, ...modules.client };
 
   const routes = Object.entries(routeModules)
@@ -169,7 +169,7 @@ export function findLayoutHierarchy(
 }
 
 /** Finds ancestor layouts for a route using structured module map. */
-export function findLayouts(routePath: string, modules: ModuleMap): Layout[] {
+export function findLayouts(routePath: string, modules: ModuleMap) {
   return findLayoutHierarchy(routePath, modules.layout).layouts;
 }
 
@@ -182,7 +182,7 @@ export interface RouteMatch {
 }
 
 /** Matches URL against routes using URLPattern. */
-export function matchRoute(routes: Route[], url: URL): RouteMatch | null {
+export function matchRoute(routes: Route[], url: URL) {
   for (const route of routes) {
     const result = route.pattern.exec(url);
     if (result) {
@@ -210,7 +210,7 @@ export interface LayoutProps {
 }
 
 /** Wraps content in nested layouts (root to leaf order). */
-export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): Promise<VNode<any>> {
+export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]) {
   let wrapped: VNode<any> = content;
 
   for (let i = layouts.length - 1; i >= 0; i--) {
@@ -224,11 +224,7 @@ export async function wrapWithLayouts(content: VNode<any>, layouts: Layout[]): P
 }
 
 /** Generates asset HTML tags for injection. */
-export function generateAssetTags(
-  script?: string,
-  styles?: string[],
-  devScripts?: string[],
-): string {
+export function generateAssetTags(script?: string, styles?: string[], devScripts?: string[]) {
   let html = "";
 
   // Add stylesheet links
@@ -258,7 +254,7 @@ export function renderComponent(
   Component: FunctionComponent<any>,
   tag: string,
   props: Record<string, unknown>,
-): VNode<any> {
+) {
   const attrs: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
     const type = typeof value;
@@ -283,7 +279,7 @@ export async function renderErrorPage(
   url: URL,
   modules: ModuleMap,
   statusCode = 500,
-): Promise<VNode<any>> {
+) {
   let ErrorComponent: FunctionComponent<ErrorPageProps>;
   if (modules.error) {
     const mod = await modules.error();
@@ -343,7 +339,7 @@ export interface StreamRenderOptions {
 }
 
 /** Initializes server-side store with request context. */
-export function initServerContext(options: StreamRenderOptions): void {
+export function initServerContext(options: StreamRenderOptions) {
   resetStore();
   resetHeadContext();
   resetHeadElementTracking();
@@ -467,10 +463,7 @@ export interface SolarflareStream extends ReadableStream<Uint8Array> {
 }
 
 /** Renders a VNode to a streaming response with asset injection. */
-export async function renderToStream(
-  vnode: VNode<any>,
-  options: StreamRenderOptions = {},
-): Promise<SolarflareStream> {
+export async function renderToStream(vnode: VNode<any>, options: StreamRenderOptions = {}) {
   initServerContext(options);
 
   const storeScript = await serializeStoreForHydration();
@@ -503,10 +496,7 @@ export async function renderToStream(
 }
 
 /** Creates stream that flushes HTML immediately, then appends deferred data. */
-function createDeferredStream(
-  inputStream: ReadableStream<Uint8Array>,
-  deferred: DeferredData,
-): ReadableStream<Uint8Array> {
+function createDeferredStream(inputStream: ReadableStream<Uint8Array>, deferred: DeferredData) {
   const encoder = new TextEncoder();
 
   let controller: ReadableStreamDefaultController<Uint8Array>;
@@ -520,7 +510,7 @@ function createDeferredStream(
   const pendingChunks: Uint8Array[] = [];
   const emittedDeferred = new Set<string>();
 
-  function maybeClose(): void {
+  function maybeClose() {
     if (closed) return;
     if (!inputDone) return;
     if (pendingDeferred !== 0) return;
@@ -529,7 +519,7 @@ function createDeferredStream(
     controller.close();
   }
 
-  function flushPendingChunks(): void {
+  function flushPendingChunks() {
     if (!allowDeferredFlush) return;
 
     while (pendingChunks.length > 0) {
@@ -539,7 +529,7 @@ function createDeferredStream(
     maybeClose();
   }
 
-  function enqueueDeferredChunk(html: string): void {
+  function enqueueDeferredChunk(html: string) {
     const chunk = encoder.encode(html);
     if (allowDeferredFlush) {
       controller.enqueue(chunk);

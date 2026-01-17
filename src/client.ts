@@ -12,7 +12,7 @@ export { installHeadHoisting, createHeadContext, setHeadContext };
 export { getRuntime, peekRuntime, clearRuntime };
 
 /** Initializes client-side store from SSR hydration data. */
-export async function initClient(): Promise<void> {
+export async function initClient() {
   const runtime = getRuntime();
   runtime.headContext ??= createHeadContext();
   setHeadContext(runtime.headContext);
@@ -29,7 +29,7 @@ export interface InlineStyleEntry {
 }
 
 /** Registers inline stylesheets for a component (dev HMR). */
-export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]): void {
+export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]) {
   if (!styles.length) return;
   if (!supportsConstructableStylesheets() || typeof document === "undefined") return;
 
@@ -66,7 +66,7 @@ export interface TagValidation {
 }
 
 /** Parses file path into structured tag metadata. */
-export function parseTagMeta(path: string): TagMeta {
+export function parseTagMeta(path: string) {
   const parsed = parsePath(path);
 
   const type: TagMeta["type"] =
@@ -83,7 +83,7 @@ export function parseTagMeta(path: string): TagMeta {
 }
 
 /** Validates a tag against web component naming rules. */
-export function validateTag(meta: TagMeta): TagValidation {
+export function validateTag(meta: TagMeta) {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -148,7 +148,7 @@ export interface DefineOptions {
 export function define<P extends Record<string, any>>(
   Component: FunctionComponent<P>,
   options?: DefineOptions,
-): FunctionComponent<P> {
+) {
   // Only register custom elements in the browser
   if (typeof window !== "undefined" && typeof HTMLElement !== "undefined") {
     const propNames = options?.observedAttributes ?? [];
@@ -200,16 +200,9 @@ export {
   setServerData,
   setPathname,
   resetStore,
-  // Re-exports from signals-core
-  signal,
-  computed,
-  effect,
-  batch,
   // Types
   type ServerData,
   type StoreConfig,
-  type ReadonlySignal,
-  type Signal,
 } from "./store.ts";
 
 export {

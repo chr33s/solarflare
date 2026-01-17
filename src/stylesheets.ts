@@ -1,5 +1,5 @@
 /** Feature detection for Constructable Stylesheets. */
-export const supportsConstructableStylesheets = (): boolean => {
+export const supportsConstructableStylesheets = () => {
   if (typeof window === "undefined") return false;
   try {
     new CSSStyleSheet();
@@ -24,11 +24,7 @@ class StylesheetManager {
   #documentSheets: CSSStyleSheet[] = [];
 
   /** Registers a stylesheet with the manager. */
-  register(
-    id: string,
-    css: string,
-    options: { isGlobal?: boolean; consumer?: string } = {},
-  ): CSSStyleSheet | null {
+  register(id: string, css: string, options: { isGlobal?: boolean; consumer?: string } = {}) {
     if (!this.#isSupported()) {
       this.#injectStyleElement(id, css);
       return null;
@@ -70,12 +66,12 @@ class StylesheetManager {
   }
 
   /** Gets a registered stylesheet. */
-  get(id: string): CSSStyleSheet | null {
+  get(id: string) {
     return this.#sheets.get(id)?.sheet ?? null;
   }
 
   /** Gets all stylesheets for a route/consumer. */
-  getForConsumer(consumer: string): CSSStyleSheet[] {
+  getForConsumer(consumer: string) {
     const sheets: CSSStyleSheet[] = [];
 
     for (const entry of this.#sheets.values()) {
@@ -88,7 +84,7 @@ class StylesheetManager {
   }
 
   /** Updates a stylesheet with new CSS (for HMR). */
-  update(id: string, css: string): boolean {
+  update(id: string, css: string) {
     const entry = this.#sheets.get(id);
     if (!entry) return false;
 
@@ -110,7 +106,7 @@ class StylesheetManager {
   }
 
   /** Inserts a single rule into a stylesheet. */
-  insertRule(id: string, rule: string, index?: number): number {
+  insertRule(id: string, rule: string, index?: number) {
     const entry = this.#sheets.get(id);
     if (!entry) return -1;
 
@@ -124,7 +120,7 @@ class StylesheetManager {
   }
 
   /** Deletes a rule from a stylesheet. */
-  deleteRule(id: string, index: number): boolean {
+  deleteRule(id: string, index: number) {
     const entry = this.#sheets.get(id);
     if (!entry) return false;
 
@@ -137,7 +133,7 @@ class StylesheetManager {
   }
 
   /** Adopts stylesheets to a Shadow Root. */
-  adoptToShadowRoot(shadowRoot: ShadowRoot, stylesheetIds: string[]): void {
+  adoptToShadowRoot(shadowRoot: ShadowRoot, stylesheetIds: string[]) {
     if (!this.#isSupported()) return;
 
     const sheets = stylesheetIds
@@ -151,7 +147,7 @@ class StylesheetManager {
   }
 
   /** Removes a consumer from all its stylesheets. */
-  removeConsumer(consumer: string): void {
+  removeConsumer(consumer: string) {
     for (const [id, entry] of this.#sheets.entries()) {
       entry.consumers.delete(consumer);
 
@@ -163,7 +159,7 @@ class StylesheetManager {
   }
 
   /** Clears all stylesheets. */
-  clear(): void {
+  clear() {
     this.#sheets.clear();
     if (this.#isSupported()) {
       document.adoptedStyleSheets = [];
@@ -172,18 +168,18 @@ class StylesheetManager {
 
   // ========== Private Methods ==========
 
-  #adoptToDocument(sheet: CSSStyleSheet): void {
+  #adoptToDocument(sheet: CSSStyleSheet) {
     if (!this.#documentSheets.includes(sheet)) {
       this.#documentSheets.push(sheet);
       document.adoptedStyleSheets = [...this.#documentSheets];
     }
   }
 
-  #isSupported(): boolean {
+  #isSupported() {
     return supportsConstructableStylesheets();
   }
 
-  #hash(css: string): string {
+  #hash(css: string) {
     let hash = 0;
     for (let i = 0; i < css.length; i++) {
       const char = css.charCodeAt(i);
@@ -192,20 +188,20 @@ class StylesheetManager {
     return hash.toString(36);
   }
 
-  #canIncrementalUpdate(oldCss: string, newCss: string): boolean {
+  #canIncrementalUpdate(oldCss: string, newCss: string) {
     // Only do incremental updates for small changes
     const sizeDiff = Math.abs(newCss.length - oldCss.length);
     return sizeDiff < 500;
   }
 
-  #incrementalUpdate(sheet: CSSStyleSheet, _oldCss: string, newCss: string): void {
+  #incrementalUpdate(sheet: CSSStyleSheet, _oldCss: string, newCss: string) {
     // Simple diff:  find changed rules
     // In practice, you'd use a proper CSS parser for this
     // For now, fall back to replaceSync
     sheet.replaceSync(newCss);
   }
 
-  #injectStyleElement(id: string, css: string): void {
+  #injectStyleElement(id: string, css: string) {
     // Fallback for browsers without Constructable Stylesheets
     let style = document.getElementById(`sf-style-${id}`) as HTMLStyleElement;
 

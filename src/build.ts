@@ -8,8 +8,8 @@ import { parseArgs } from "node:util";
 import { buildClient } from "./build.bundle-client.ts";
 import { buildServer } from "./build.bundle-server.ts";
 
-// Node.js file system helpers
-export async function exists(path: string): Promise<boolean> {
+/** Node.js file system helpers. */
+export async function exists(path: string) {
   try {
     await access(path);
     return true;
@@ -18,15 +18,15 @@ export async function exists(path: string): Promise<boolean> {
   }
 }
 
-export async function readText(path: string): Promise<string> {
+export async function readText(path: string) {
   return readFile(path, "utf-8");
 }
 
-export async function write(path: string, content: string): Promise<void> {
+export async function write(path: string, content: string) {
   await writeFile(path, content);
 }
 
-// Resolve paths relative to current working directory (where solarflare is invoked)
+/** Resolve paths relative to the current working directory. */
 const ROOT_DIR = process.cwd();
 const APP_DIR = join(ROOT_DIR, "src");
 const DIST_DIR = join(ROOT_DIR, "dist");
@@ -34,12 +34,12 @@ const DIST_CLIENT = join(DIST_DIR, "client");
 const DIST_SERVER = join(DIST_DIR, "server");
 const PUBLIC_DIR = join(ROOT_DIR, "public");
 
-// Generated file paths
+/** Generated file paths. */
 const MODULES_PATH = join(DIST_DIR, ".modules.generated.ts");
 const CHUNKS_PATH = join(DIST_DIR, ".chunks.generated.json");
 const ROUTES_TYPE_PATH = join(DIST_DIR, "routes.d.ts");
 
-// CLI entry point - parse args early so they're available
+/** CLI entry point: parse args early so they're available. */
 const { values: args, positionals } = parseArgs({
   allowPositionals: true,
   args: argv.slice(2),
@@ -60,7 +60,7 @@ const { values: args, positionals } = parseArgs({
 });
 
 /** Auto-scaffolds missing template files. */
-async function scaffoldTemplates(): Promise<void> {
+async function scaffoldTemplates() {
   const templates: Record<string, string> = {
     "index.ts": /* tsx */ `import worker from "@chr33s/solarflare";
 export default { fetch: worker };
@@ -112,9 +112,7 @@ async function clean() {
   try {
     await rm(DIST_DIR, { recursive: true, force: true });
     console.log("🧹 Cleaned dist directory");
-  } catch {
-    // Ignore errors if directory doesn't exist
-  }
+  } catch {}
 }
 
 /** Main build function. */

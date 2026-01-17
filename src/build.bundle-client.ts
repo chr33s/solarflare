@@ -24,7 +24,7 @@ export interface BuildClientOptions {
   chunksPath: string;
 }
 
-async function remove(path: string): Promise<void> {
+async function remove(path: string) {
   try {
     await unlink(path);
   } catch (err) {
@@ -34,15 +34,15 @@ async function remove(path: string): Promise<void> {
   }
 }
 
-export function hash(content: string): string {
+export function hash(content: string) {
   return createHash("sha256").update(content).digest("hex").slice(0, 8);
 }
 
-export function normalizeAssetPath(path: string): string {
+export function normalizeAssetPath(path: string) {
   return path.replace(/\//g, ".");
 }
 
-export function getChunkName(file: string, contentHash?: string): string {
+export function getChunkName(file: string, contentHash?: string) {
   const base = file
     .replace(/\.client\.tsx?$/, "")
     .replace(/\//g, ".")
@@ -52,7 +52,7 @@ export function getChunkName(file: string, contentHash?: string): string {
   return contentHash ? `${base}-${contentHash}.js` : `${base}.js`;
 }
 
-function extractPropsFromProgram(program: ts.Program, filePath: string): string[] {
+function extractPropsFromProgram(program: ts.Program, filePath: string) {
   const checker = program.getTypeChecker();
   const sourceFile = program.getSourceFile(filePath);
   if (!sourceFile) return [];
@@ -69,11 +69,7 @@ function extractPropsFromProgram(program: ts.Program, filePath: string): string[
   return properties.map((p) => p.getName());
 }
 
-async function getComponentMeta(
-  program: ts.Program,
-  appDir: string,
-  file: string,
-): Promise<ComponentMeta & { parsed: ReturnType<typeof parsePath>; hash?: string }> {
+async function getComponentMeta(program: ts.Program, appDir: string, file: string) {
   const filePath = join(appDir, file);
   const props = extractPropsFromProgram(program, filePath);
   const parsed = parsePath(file);
@@ -85,7 +81,7 @@ async function getComponentMeta(
   return { file, tag: parsed.tag, props, parsed, chunk, hash: contentHash };
 }
 
-export async function buildClient(options: BuildClientOptions): Promise<void> {
+export async function buildClient(options: BuildClientOptions) {
   const { args, rootDir, appDir, distDir, distClient, publicDir, chunksPath } = options;
   const distClientAssets = join(distClient, "assets");
   const scanner = createScanner({ rootDir, appDir });
@@ -93,7 +89,7 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
   const cssAssetCache = new Map<string, string>();
   const cssOutputsByBase = new Map<string, string>();
 
-  async function emitCssAsset(cssSourcePath: string): Promise<string | null> {
+  async function emitCssAsset(cssSourcePath: string) {
     if (!(await exists(cssSourcePath))) return null;
 
     const cached = cssAssetCache.get(cssSourcePath);
@@ -121,7 +117,7 @@ export async function buildClient(options: BuildClientOptions): Promise<void> {
     return outputPath;
   }
 
-  async function resolveCssOutputs(cssImports: string[], baseDir: string): Promise<string[]> {
+  async function resolveCssOutputs(cssImports: string[], baseDir: string) {
     if (cssImports.length === 0) return [];
 
     const cssOutputPaths: string[] = [];

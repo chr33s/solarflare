@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { chromium, type Browser, type ConsoleMessage, type Page } from "playwright";
 
-async function waitForHydration(page: Page, tag = "sf-root"): Promise<void> {
+async function waitForHydration(page: Page, tag = "sf-root") {
   // 1) Ensure the custom element class is registered
   await page.waitForFunction((t) => !!customElements.get(String(t)), tag);
 
@@ -19,10 +19,7 @@ async function waitForHydration(page: Page, tag = "sf-root"): Promise<void> {
   }, tag);
 }
 
-async function clickCountButtonAndWait(
-  page: Page,
-  tag = "sf-root",
-): Promise<{ before: string; after: string }> {
+async function clickCountButtonAndWait(page: Page, tag = "sf-root") {
   const container = page.locator(tag);
   const countButton = container.getByRole("button", { name: /count is/i });
   await countButton.waitFor({ state: "visible" });
@@ -48,11 +45,20 @@ async function clickCountButtonAndWait(
   return { before, after };
 }
 
+function readStream(stream: NodeJS.ReadableStream | null): Promise<string> {
+  if (!stream) return Promise.resolve("");
+  return new Promise((resolve, reject) => {
+    let output = "";
+    stream.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    stream.on("end", () => resolve(output));
+    stream.on("error", reject);
+  });
+}
+
 // Helper to spawn a process and wait for it
-function spawnAsync(
-  command: string[],
-  options: { cwd: string },
-): { process: ChildProcess; exited: Promise<number | null> } {
+function spawnAsync(command: string[], options: { cwd: string }) {
   const proc = spawn(command[0], command.slice(1), {
     cwd: options.cwd,
     env: { ...process.env, WRANGLER_LOG: "error" },
@@ -82,12 +88,7 @@ describe("integration", () => {
 
     const buildExitCode = await buildExited;
     if (buildExitCode !== 0) {
-      let stderr = "";
-      if (buildProcess.stderr) {
-        for await (const chunk of buildProcess.stderr) {
-          stderr += chunk.toString();
-        }
-      }
+      const stderr = await readStream(buildProcess.stderr ?? null);
       throw new Error(`Build failed with exit code ${buildExitCode}: ${stderr}`);
     }
 
@@ -228,12 +229,7 @@ describe("e2e", () => {
 
     const buildExitCode = await buildExited;
     if (buildExitCode !== 0) {
-      let stderr = "";
-      if (buildProcess.stderr) {
-        for await (const chunk of buildProcess.stderr) {
-          stderr += chunk.toString();
-        }
-      }
+      const stderr = await readStream(buildProcess.stderr ?? null);
       throw new Error(`Build failed with exit code ${buildExitCode}: ${stderr}`);
     }
 
@@ -745,7 +741,7 @@ describe("e2e", () => {
   });
 
   describe("console logs asynchronously", () => {
-    function collectPropsLogs(page: Page): Promise<Record<string, unknown>>[] {
+    function collectPropsLogs(page: Page) {
       const logs: Promise<Record<string, unknown>>[] = [];
       page.on("console", (msg: ConsoleMessage) => {
         if (msg.type() === "log") {
@@ -760,7 +756,7 @@ describe("e2e", () => {
       return logs;
     }
 
-    function filterPropsLogs(logs: (Record<string, unknown> | null)[]): Record<string, unknown>[] {
+    function filterPropsLogs(logs: (Record<string, unknown> | null)[]) {
       return logs.filter(
         (log): log is Record<string, unknown> =>
           log !== null && typeof log === "object" && "async" in log && "string" in log,

@@ -40,7 +40,7 @@ export interface RouterConfig {
 export type RouteSubscriber = (match: RouteMatch | null) => void;
 
 /** Checks if View Transitions API is supported. */
-export function supportsViewTransitions(): boolean {
+export function supportsViewTransitions() {
   return typeof document !== "undefined" && "startViewTransition" in document;
 }
 
@@ -59,7 +59,7 @@ export async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
   options: FetchRetryOptions = {},
-): Promise<Response> {
+) {
   const { maxRetries = 3, baseDelay = 1000, retryOnStatus = (status) => status >= 500 } = options;
 
   let lastError: Error | null = null;
@@ -106,7 +106,7 @@ export class Router {
   readonly pathname: ReadonlySignal<string>;
 
   constructor(manifest: RoutesManifest, config: RouterConfig = {}) {
-    const getMeta = <T extends string>(name: string): T | null => {
+    const getMeta = <T extends string>(name: string) => {
       if (typeof document === "undefined") return null;
       const meta = document.querySelector(`meta[name="sf:${name}"]`);
       return (meta?.getAttribute("content") as T) ?? null;
@@ -135,7 +135,7 @@ export class Router {
   }
 
   /** Loads routes from build-time manifest. */
-  #loadManifest(manifest: RoutesManifest): void {
+  #loadManifest(manifest: RoutesManifest) {
     for (const entry of manifest.routes) {
       if (entry.type !== "client") continue;
 
@@ -154,7 +154,7 @@ export class Router {
   }
 
   /** Handles navigation errors. */
-  #handleError(error: Error, url: URL): void {
+  #handleError(error: Error, url: URL) {
     this.#config.onError(error, url);
 
     const app = document.querySelector("#app");
@@ -177,7 +177,7 @@ export class Router {
   }
 
   /** Matches a URL against routes. */
-  match(url: URL): RouteMatch | null {
+  match(url: URL) {
     for (const { pattern, entry } of this.#routes) {
       const result = pattern.exec(url);
       if (result) {
@@ -192,7 +192,7 @@ export class Router {
   }
 
   /** Navigates to a URL. */
-  async navigate(to: string | URL, options: NavigateOptions = {}): Promise<void> {
+  async navigate(to: string | URL, options: NavigateOptions = {}) {
     const url = typeof to === "string" ? new URL(to, location.origin) : to;
 
     const nav = (window as any).navigation;
@@ -205,7 +205,7 @@ export class Router {
   }
 
   /** Executes navigation with optional view transition. */
-  async #executeNavigation(url: URL, match: RouteMatch | null): Promise<void> {
+  async #executeNavigation(url: URL, match: RouteMatch | null) {
     try {
       if (match) {
         await this.#loadRoute(match, url);
@@ -223,7 +223,7 @@ export class Router {
   }
 
   /** Loads route assets and swaps page content. */
-  async #loadRoute(match: RouteMatch, url: URL): Promise<void> {
+  async #loadRoute(match: RouteMatch, url: URL) {
     const { entry } = match;
 
     // Preload the route chunk *before* DOM diffing so any custom elements for the
@@ -382,7 +382,7 @@ export class Router {
   }
 
   /** Handles scroll restoration. */
-  #handleScroll(url: URL): void {
+  #handleScroll(url: URL) {
     const behavior = this.#config.scrollBehavior;
     if (behavior === false) return;
 
@@ -400,7 +400,7 @@ export class Router {
   }
 
   /** Starts intercepting navigation. */
-  start(): this {
+  start() {
     if (this.#started) return this;
 
     this.#setupNavigationAPI();
@@ -416,7 +416,7 @@ export class Router {
   }
 
   /** Stops the router and cleans up listeners. */
-  stop(): this {
+  stop() {
     for (const cleanup of this.#cleanupFns) {
       cleanup();
     }
@@ -426,7 +426,7 @@ export class Router {
   }
 
   /** Sets up Navigation API interception. */
-  #setupNavigationAPI(): void {
+  #setupNavigationAPI() {
     const nav = (window as any).navigation;
     if (!nav) return; // Navigation API not supported (e.g., Safari)
 
@@ -450,26 +450,26 @@ export class Router {
   }
 
   /** Subscribes to route changes. Returns unsubscribe function. */
-  subscribe(callback: RouteSubscriber): () => void {
+  subscribe(callback: RouteSubscriber) {
     return effect(() => {
       callback(this.current.value);
     });
   }
 
-  back(): void {
+  back() {
     history.back();
   }
 
-  forward(): void {
+  forward() {
     history.forward();
   }
 
-  go(delta: number): void {
+  go(delta: number) {
     history.go(delta);
   }
 
   /** Checks if a path matches the current route. */
-  isActive(path: string, exact = false): boolean {
+  isActive(path: string, exact = false) {
     const match = this.current.value;
     if (!match) {
       if (typeof location === "undefined") return false;
@@ -482,7 +482,7 @@ export class Router {
   }
 
   /** Returns a computed signal for reactive isActive check. */
-  isActiveSignal(path: string, exact = false): ReadonlySignal<boolean> {
+  isActiveSignal(path: string, exact = false) {
     return computed(() => {
       const match = this.current.value;
       if (!match) return false;
@@ -493,14 +493,14 @@ export class Router {
 }
 
 /** Creates a router from a build-time routes manifest. */
-export function createRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
+export function createRouter(manifest: RoutesManifest, config?: RouterConfig) {
   return new Router(manifest, config);
 }
 
 let globalRouter: Router | null = null;
 
 /** Gets the global router instance (throws if not initialized). */
-export function getRouter(): Router {
+export function getRouter() {
   if (!globalRouter) {
     throw new Error("[solarflare] Router not initialized. Call initRouter() first.");
   }
@@ -508,17 +508,17 @@ export function getRouter(): Router {
 }
 
 /** Initializes the global router instance. */
-export function initRouter(manifest: RoutesManifest, config?: RouterConfig): Router {
+export function initRouter(manifest: RoutesManifest, config?: RouterConfig) {
   globalRouter = createRouter(manifest, config);
   return globalRouter;
 }
 
 /** Navigates using the global router. */
-export function navigate(to: string | URL, options?: NavigateOptions): Promise<void> {
+export function navigate(to: string | URL, options?: NavigateOptions) {
   return getRouter().navigate(to, options);
 }
 
 /** Checks if path is active using global router. */
-export function isActive(path: string, exact = false): boolean {
+export function isActive(path: string, exact = false) {
   return getRouter().isActive(path, exact);
 }

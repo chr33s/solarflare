@@ -11,7 +11,7 @@ export function generateStaticShell(options: {
   lang?: string;
   charset?: string;
   viewport?: string;
-}): StreamingShell {
+}) {
   const {
     lang = "en",
     charset = "UTF-8",
@@ -45,7 +45,7 @@ export function createEarlyFlushStream(
     headTags: string;
     bodyTags: string;
   },
-): ReadableStream<Uint8Array> {
+) {
   const encoder = new TextEncoder();
   let contentReader: ReadableStreamDefaultReader<Uint8Array>;
   let phase: "shell" | "content" | "done" = "shell";
@@ -102,7 +102,7 @@ export function generateResourceHints(options: {
   stylesheets?: string[];
   preconnect?: string[];
   dnsPrefetch?: string[];
-}): string {
+}) {
   const hints: string[] = [];
 
   for (const origin of options.preconnect ?? []) {

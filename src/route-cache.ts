@@ -24,7 +24,7 @@ export const DEFAULT_CACHE_CONFIGS: Record<string, RouteCacheConfig> = {
 };
 
 /** Generates cache control header value. */
-export function generateCacheControl(config: RouteCacheConfig, isPrivate: boolean): string {
+export function generateCacheControl(config: RouteCacheConfig, isPrivate: boolean) {
   const directives: string[] = [];
 
   if (isPrivate || !config.cacheAuthenticated) {
@@ -59,7 +59,7 @@ export class ResponseCache {
     }
   }
 
-  async get(key: string): Promise<Response | null> {
+  async get(key: string) {
     if (this.#cache) {
       const res = await this.#cache.match(this.#toRequest(key));
       return res ?? null;
@@ -73,7 +73,7 @@ export class ResponseCache {
     return entry.response.clone();
   }
 
-  async set(key: string, response: Response, maxAge: number): Promise<void> {
+  async set(key: string, response: Response, maxAge: number) {
     if (this.#cache) {
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", `public, max-age=${maxAge}`);
@@ -97,11 +97,11 @@ export class ResponseCache {
     });
   }
 
-  #toRequest(key: string): Request {
+  #toRequest(key: string) {
     return new Request(`https://cache.local/${encodeURIComponent(key)}`);
   }
 
-  static generateKey(request: Request, params: Record<string, string>): string {
+  static generateKey(request: Request, params: Record<string, string>) {
     const url = new URL(request.url);
     const sortedParams = Object.entries(params)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -118,7 +118,7 @@ export async function withCache(
   config: RouteCacheConfig,
   handler: () => Promise<Response>,
   cache: ResponseCache,
-): Promise<Response> {
+) {
   const hasAuth = request.headers.has("Authorization") || request.headers.has("Cookie");
   if (hasAuth && !config.cacheAuthenticated) {
     return handler();

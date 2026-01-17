@@ -141,7 +141,7 @@ describe("fetchWithRetry", () => {
 });
 
 describe("Router", () => {
-  const createManifest = (routes: RouteManifestEntry[] = []): RoutesManifest => ({
+  const createManifest = (routes: RouteManifestEntry[] = []) => ({
     routes,
     base: "",
   });

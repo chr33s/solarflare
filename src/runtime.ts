@@ -2,7 +2,7 @@ import type { HeadContext } from "./head.ts";
 
 const NAMESPACE = "__solarflare__" as const;
 
-export interface SolarflareRuntime {
+interface SolarflareRuntime {
   /** Preloaded stylesheets from SSR. */
   preloadedStyles?: Map<string, CSSStyleSheet>;
   /** Head context for deduplication. */
@@ -16,17 +16,17 @@ type GlobalWithSolarflare = typeof globalThis & {
 };
 
 /** Gets the runtime context, creating it if needed. */
-export function getRuntime(): SolarflareRuntime {
+export function getRuntime() {
   const g = globalThis as GlobalWithSolarflare;
   return (g[NAMESPACE] ??= {});
 }
 
 /** Gets the runtime if it exists (no creation). */
-export function peekRuntime(): SolarflareRuntime | undefined {
+export function peekRuntime() {
   return (globalThis as GlobalWithSolarflare)[NAMESPACE];
 }
 
 /** Clears the runtime (useful for testing). */
-export function clearRuntime(): void {
+export function clearRuntime() {
   delete (globalThis as GlobalWithSolarflare)[NAMESPACE];
 }

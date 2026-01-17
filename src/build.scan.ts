@@ -8,24 +8,11 @@ export interface BuildScanContext {
   appDir: string;
 }
 
-export interface BuildScanner {
-  scanFiles: (pattern: string, cwd: string) => Promise<string[]>;
-  getPackageImports: () => Promise<Record<string, string>>;
-  findRouteModules: () => Promise<string[]>;
-  findLayouts: () => Promise<string[]>;
-  findErrorFile: () => Promise<string | null>;
-  findClientComponents: () => Promise<string[]>;
-  extractCssImports: (filePath: string) => Promise<string[]>;
-  extractComponentImports: (filePath: string) => Promise<string[]>;
-  resolveImportPath: (importPath: string, fromFile: string) => Promise<string | null>;
-  extractAllCssImports: (filePath: string, visited?: Set<string>) => Promise<string[]>;
-}
-
-export function createScanner(ctx: BuildScanContext): BuildScanner {
+export function createScanner(ctx: BuildScanContext) {
   const { rootDir, appDir } = ctx;
   let packageImportsCache: Record<string, string> | null = null;
 
-  async function scanFiles(pattern: string, cwd: string): Promise<string[]> {
+  async function scanFiles(pattern: string, cwd: string) {
     const files: string[] = [];
     for await (const file of glob(pattern, { cwd, withFileTypes: false })) {
       files.push(file as string);
@@ -33,7 +20,7 @@ export function createScanner(ctx: BuildScanContext): BuildScanner {
     return files.sort();
   }
 
-  async function getPackageImports(): Promise<Record<string, string>> {
+  async function getPackageImports() {
     if (packageImportsCache) return packageImportsCache;
 
     const pkgPath = join(rootDir, "package.json");
@@ -57,24 +44,24 @@ export function createScanner(ctx: BuildScanContext): BuildScanner {
     }
   }
 
-  async function findRouteModules(): Promise<string[]> {
+  async function findRouteModules() {
     return scanFiles("**/*.{client,server}.{ts,tsx}", appDir);
   }
 
-  async function findLayouts(): Promise<string[]> {
+  async function findLayouts() {
     return scanFiles("**/_layout.tsx", appDir);
   }
 
-  async function findErrorFile(): Promise<string | null> {
+  async function findErrorFile() {
     const files = await scanFiles("_error.tsx", appDir);
     return files.length > 0 ? files[0] : null;
   }
 
-  async function findClientComponents(): Promise<string[]> {
+  async function findClientComponents() {
     return scanFiles("**/*.client.tsx", appDir);
   }
 
-  async function extractCssImports(filePath: string): Promise<string[]> {
+  async function extractCssImports(filePath: string) {
     const content = await readText(filePath);
     const cssImports: string[] = [];
 
@@ -90,7 +77,7 @@ export function createScanner(ctx: BuildScanContext): BuildScanner {
     return cssImports;
   }
 
-  async function extractComponentImports(filePath: string): Promise<string[]> {
+  async function extractComponentImports(filePath: string) {
     const content = await readText(filePath);
     const imports: string[] = [];
 
@@ -110,7 +97,7 @@ export function createScanner(ctx: BuildScanContext): BuildScanner {
     return imports;
   }
 
-  async function resolveImportPath(importPath: string, fromFile: string): Promise<string | null> {
+  async function resolveImportPath(importPath: string, fromFile: string) {
     const fromDir = fromFile.split("/").slice(0, -1).join("/");
 
     if (importPath.startsWith("#")) {
@@ -149,10 +136,7 @@ export function createScanner(ctx: BuildScanContext): BuildScanner {
     return null;
   }
 
-  async function extractAllCssImports(
-    filePath: string,
-    visited: Set<string> = new Set(),
-  ): Promise<string[]> {
+  async function extractAllCssImports(filePath: string, visited: Set<string> = new Set()) {
     if (visited.has(filePath)) {
       return [];
     }

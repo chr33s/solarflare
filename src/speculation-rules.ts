@@ -1,13 +1,10 @@
 /** Speculation Rules API types and utilities for prefetch/prerender. */
 
-/** Speculation rule source types. */
-export type SpeculationSource = "document" | "list";
-
 /** Eagerness levels for speculation. */
 export type SpeculationEagerness = "immediate" | "eager" | "moderate" | "conservative";
 
 /** Referrer policy for speculative requests. */
-export type SpeculationReferrerPolicy =
+type SpeculationReferrerPolicy =
   | "no-referrer"
   | "no-referrer-when-downgrade"
   | "origin"
@@ -51,7 +48,7 @@ export interface SpeculationRules {
 }
 
 /** Checks if Speculation Rules API is supported. */
-export function supportsSpeculationRules(): boolean {
+export function supportsSpeculationRules() {
   return (
     typeof HTMLScriptElement !== "undefined" &&
     HTMLScriptElement.supports?.("speculationrules") === true
@@ -59,7 +56,7 @@ export function supportsSpeculationRules(): boolean {
 }
 
 /** Injects speculation rules into the document head. */
-export function injectSpeculationRules(rules: SpeculationRules): HTMLScriptElement | null {
+export function injectSpeculationRules(rules: SpeculationRules) {
   if (typeof document === "undefined") return null;
 
   const script = document.createElement("script");
@@ -70,7 +67,7 @@ export function injectSpeculationRules(rules: SpeculationRules): HTMLScriptEleme
 }
 
 /** Removes all speculation rules scripts from the document. */
-export function clearSpeculationRules(): void {
+export function clearSpeculationRules() {
   if (typeof document === "undefined") return;
 
   const scripts = document.querySelectorAll('script[type="speculationrules"]');
@@ -153,6 +150,6 @@ export function buildRouteSpeculationRules(
 }
 
 /** Generates inline script tag HTML for SSR. */
-export function renderSpeculationRulesTag(rules: SpeculationRules): string {
+export function renderSpeculationRulesTag(rules: SpeculationRules) {
   return `<script type="speculationrules">${JSON.stringify(rules)}</script>`;
 }

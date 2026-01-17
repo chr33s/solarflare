@@ -42,7 +42,7 @@ const DEFAULTS: WorkerMetaConfig = {
 };
 
 /** Parses worker configuration from HTML meta tags. */
-export function parseMetaConfig(html: string): WorkerMetaConfig {
+export function parseMetaConfig(html: string) {
   const config: WorkerMetaConfig = { ...DEFAULTS };
 
   const langMatch = html.match(/<html[^>]*\slang=["']([^"']+)["']/i);
@@ -50,7 +50,7 @@ export function parseMetaConfig(html: string): WorkerMetaConfig {
     config.lang = langMatch[1];
   }
 
-  const matchMeta = (name: string): string | null => {
+  const matchMeta = (name: string) => {
     const pattern1 = new RegExp(`<meta[^>]*name=["']${name}["'][^>]*content=["']([^"']+)["']`, "i");
     const pattern2 = new RegExp(`<meta[^>]*content=["']([^"']+)["'][^>]*name=["']${name}["']`, "i");
     const match = html.match(pattern1) ?? html.match(pattern2);
@@ -143,7 +143,7 @@ export function workerConfigMeta(config: {
   prerender?: string[];
   prefetchSelector?: string;
   speculationEagerness?: SpeculationEagerness;
-}): Array<{ name: string; content: string }> {
+}) {
   const meta: Array<{ name: string; content: string }> = [];
 
   if (config.preconnect?.length) {
@@ -194,7 +194,7 @@ export function workerConfigMeta(config: {
 }
 
 /** Builds SpeculationRules from parsed meta config. Returns null if no rules configured. */
-export function buildSpeculationRulesFromConfig(config: WorkerMetaConfig): SpeculationRules | null {
+export function buildSpeculationRulesFromConfig(config: WorkerMetaConfig) {
   const hasPrefetch = config.prefetch.length > 0 || config.prefetchSelector;
   const hasPrerender = config.prerender.length > 0;
 

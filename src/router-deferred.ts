@@ -5,7 +5,7 @@ export function handleDeferredHydrationNode(
   entryTag: string,
   processedScripts: Set<string>,
   node: Element,
-): void {
+) {
   const processHydrationScript = (script: HTMLScriptElement) => {
     const scriptId = script.id;
     if (!scriptId || !scriptId.includes("-hydrate-")) return;
@@ -57,7 +57,7 @@ export function handleDeferredHydrationNode(
   }
 }
 
-export function dedupeDeferredScripts(entryTag: string): void {
+export function dedupeDeferredScripts(entryTag: string) {
   const scripts = document.querySelectorAll(
     `script[data-island^="${entryTag}-deferred-"], script[id^="${entryTag}-hydrate-"]`,
   );

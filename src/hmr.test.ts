@@ -17,23 +17,23 @@ class MockCSSStyleRule {
 class MockCSSStyleSheet {
   cssRules: MockCSSStyleRule[] = [];
 
-  replaceSync(css: string): void {
+  replaceSync(css: string) {
     this.cssRules = parseCssRules(css);
   }
 
-  insertRule(rule: string, index?: number): number {
+  insertRule(rule: string, index?: number) {
     const selector = (rule.match(/^([^{}]+)\s*\{/u)?.[1] ?? "").trim();
     const insertIndex = index ?? this.cssRules.length;
     this.cssRules.splice(insertIndex, 0, new MockCSSStyleRule(selector, rule));
     return insertIndex;
   }
 
-  deleteRule(index: number): void {
+  deleteRule(index: number) {
     this.cssRules.splice(index, 1);
   }
 }
 
-function parseCssRules(css: string): MockCSSStyleRule[] {
+function parseCssRules(css: string) {
   const rules: MockCSSStyleRule[] = [];
   const ruleRegex = /([^{}]+)\s*\{([^}]*)\}/gu;
   let match: RegExpExecArray | null;
@@ -46,7 +46,7 @@ function parseCssRules(css: string): MockCSSStyleRule[] {
   return rules;
 }
 
-function installMockDom(): () => void {
+function installMockDom() {
   const prevWindow = (globalThis as any).window;
   const prevDocument = (globalThis as any).document;
   const prevCSSStyleSheet = (globalThis as any).CSSStyleSheet;

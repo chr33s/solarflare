@@ -1,6 +1,6 @@
 # Simplification Plan
 
-## Status (Jan 16, 2026)
+## Status
 
 Completed:
 
@@ -14,12 +14,9 @@ Completed:
 - ✅ Store vs hydration separation: moved hydration queue + data island hydration to `src/hydration.ts` (store holds signals + setters only).
 - ✅ Entry generation clarity: reduced template logic in `src/build.hmr-entry.ts` (CSS registration + router init helpers).
 - ✅ Architecture doc alignment: updated file names/paths and removed stale references.
-
-Remaining tasks:
-
-- Remove unnessary typescript return types, when they can be inferred
-- cleanup comments, ensure concise and in jsdoc format
-- update readme.md (list all ./examples)
+- ✅ Remove unnessary typescript return types, when they can be inferred
+- ✅ cleanup comments, ensure concise and in jsdoc format
+- ✅ update readme.md (list all ./examples)
 
 ## Goals
 

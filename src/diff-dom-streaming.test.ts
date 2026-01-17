@@ -37,7 +37,7 @@ async function testDiff({
   ignoreId = false,
   registerWC = false,
   onNextNode,
-}: TestDiffOptions): Promise<[string, any[], any[], boolean, string]> {
+}: TestDiffOptions) {
   await page.setContent(normalize(oldHTMLString));
   const [mutations, streamNodes, transitionApplied, logs] = await page.evaluate(
     async ([
@@ -337,7 +337,7 @@ describe("chromium", () => {
     );
     assert.ok(mutations.length > 0);
     // Verify characterData mutation for text change
-    const charDataMutation = mutations.find((m) => m.type === "characterData");
+    const charDataMutation = mutations.find((m: MutationRecord) => m.type === "characterData");
     assert.ok(charDataMutation);
   });
 
@@ -813,7 +813,7 @@ describe("chromium", () => {
       `),
     );
     // Should have characterData mutations for the text changes
-    const charDataMutations = mutations.filter((m) => m.type === "characterData");
+    const charDataMutations = mutations.filter((m: MutationRecord) => m.type === "characterData");
     assert.strictEqual(charDataMutations.length, 3);
   });
 

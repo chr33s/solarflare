@@ -22,7 +22,7 @@ const noopHmr: HmrApi = {
 };
 
 /** Creates the development HMR client with SSE connection. */
-function createDevHmr(): HmrApi {
+function createDevHmr() {
   const listeners = new Map<string, Set<HmrCallback>>();
   const disposeCallbacks: Array<() => void> = [];
   const data: Record<string, unknown> = {};
@@ -65,7 +65,7 @@ function createDevHmr(): HmrApi {
     off<T = unknown>(event: string, cb: HmrCallback<T>) {
       listeners.get(event)?.delete(cb as HmrCallback);
     },
-    dispose(cb) {
+    dispose(cb: () => void) {
       disposeCallbacks.push(cb);
     },
     data,

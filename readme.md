@@ -158,9 +158,12 @@ export default define(MyComponent, { shadow: true });
 
 ## Examples
 
-- [Minimal](examples/minimal/readme.md) — Single route
 - [Basic](examples/basic/readme.md) — Layouts, dynamic routes, API, components
+- [Bun](examples/bun/readme.md) — Bun runtime example
+- [Deno](examples/deno/readme.md) — Deno runtime example
+- [Minimal](examples/minimal/readme.md) — Single route
 - [Node](examples/node/readme.md) — Using `srvx` instead of Workers
+- [Shopify App](examples/shopify-app/readme.md) — Shopify app starter
 
 ## Development
 

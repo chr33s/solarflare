@@ -1,7 +1,7 @@
 import { encode, decode } from "turbo-stream";
 
 /** Serialize data to a string. */
-export async function serializeToString(data: unknown): Promise<string> {
+export async function serializeToString(data: unknown) {
   const stream = encode(data);
   const reader = stream.getReader();
   const chunks: string[] = [];
@@ -16,7 +16,7 @@ export async function serializeToString(data: unknown): Promise<string> {
 }
 
 /** Parse serialized data from a string. */
-export async function parseFromString<T>(serialized: string): Promise<T> {
+export async function parseFromString<T>(serialized: string) {
   const stream = new ReadableStream<string>({
     start(controller) {
       controller.enqueue(serialized);
@@ -29,10 +29,10 @@ export async function parseFromString<T>(serialized: string): Promise<T> {
 /**
  * Safely stringify JSON for embedding in HTML script tags.
  * Escapes <, >, and & to prevent XSS.
+ * Returns "undefined" when JSON.stringify returns undefined.
  */
-export function escapeJsonForHtml(obj: unknown): string {
+export function escapeJsonForHtml(obj: unknown) {
   const json = JSON.stringify(obj);
-  // Handle undefined (which JSON.stringify returns for functions/undefined)
   if (json === undefined) return "undefined";
   return json.replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
 }

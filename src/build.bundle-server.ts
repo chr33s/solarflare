@@ -19,7 +19,7 @@ export interface BuildServerOptions {
   routesTypePath: string;
 }
 
-export async function buildServer(options: BuildServerOptions): Promise<void> {
+export async function buildServer(options: BuildServerOptions) {
   const { args, rootDir, appDir, distServer, modulesPath, chunksPath, routesTypePath } = options;
   const scanner = createScanner({ rootDir, appDir });
 

@@ -2,11 +2,7 @@ import { join } from "node:path";
 import { createProgram, validateModule, type ValidationResult } from "./ast.ts";
 import { parsePath } from "./paths.ts";
 
-export async function validateRoutes(
-  routeFiles: string[],
-  layoutFiles: string[],
-  appDir: string,
-): Promise<boolean> {
+export async function validateRoutes(routeFiles: string[], layoutFiles: string[], appDir: string) {
   const allFiles = [
     ...routeFiles.map((f) => join(appDir, f)),
     ...layoutFiles.map((f) => join(appDir, f)),
@@ -36,7 +32,7 @@ export async function validateRoutes(
   return !hasErrors;
 }
 
-export function generateRoutesTypeFile(routeFiles: string[]): string {
+export function generateRoutesTypeFile(routeFiles: string[]) {
   const clientRoutes = routeFiles.filter((f) => f.includes(".client."));
 
   const routeTypes = clientRoutes

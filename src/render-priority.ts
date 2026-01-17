@@ -3,13 +3,6 @@ import { type VNode, h, Fragment } from "preact";
 /** Priority levels for content rendering. */
 export type RenderPriority = "critical" | "high" | "normal" | "low" | "idle";
 
-/** Suspense-like boundary for deferred content. */
-export interface DeferredBoundary {
-  priority: RenderPriority;
-  fallback?: VNode;
-  children: VNode;
-}
-
 /** Creates a deferred rendering boundary. */
 export function Deferred(props: {
   priority?: RenderPriority;

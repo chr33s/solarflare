@@ -10,13 +10,13 @@ interface SseClient {
 const hmrClients = new Set<SseClient>();
 
 /** Checks if request is an HMR SSE request. */
-export function isHmrRequest(request: Request): boolean {
+export function isHmrRequest(request: Request) {
   const url = new URL(request.url);
   return url.pathname === "/_hmr" && request.method === "GET";
 }
 
 /** Handles HMR SSE request. */
-export function handleHmrRequest(): Response {
+export function handleHmrRequest() {
   const encoder = new TextEncoder();
   let client: SseClient;
   let heartbeatInterval: ReturnType<typeof setInterval>;
@@ -55,7 +55,7 @@ export function handleHmrRequest(): Response {
 }
 
 /** Broadcasts an HMR update to all connected clients. */
-export function broadcastHmrUpdate(type: HmrEventType, path?: string): void {
+export function broadcastHmrUpdate(type: HmrEventType, path?: string) {
   const message = JSON.stringify({ type, path, timestamp: Date.now() });
   for (const client of hmrClients) {
     try {

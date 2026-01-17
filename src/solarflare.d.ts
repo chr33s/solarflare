@@ -222,14 +222,6 @@ declare module "@chr33s/solarflare/client" {
   export function hydrateComponent(tag: string, dataIslandId?: string): Promise<void>;
   export function initHydrationCoordinator(): void;
 
-  // Re-exports from signals
-  export function signal<T>(value: T): Signal<T>;
-  export function computed<T>(fn: () => T): ReadonlySignal<T>;
-  export function effect(fn: () => void | (() => void)): () => void;
-  export function batch(fn: () => void): void;
-
-  export type { ReadonlySignal, Signal };
-
   // Router re-exports
   export interface RouteManifestEntry {
     pattern: SolarflareRouteManifestEntry["pattern"];

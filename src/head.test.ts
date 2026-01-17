@@ -464,7 +464,7 @@ describe("Head (SSR marker)", () => {
   it("should render head marker", () => {
     const vnode = Head();
     assert.strictEqual(vnode.type, "solarflare-head");
-    assert.strictEqual(vnode.props.dangerouslySetInnerHTML.__html, HEAD_MARKER);
+    assert.strictEqual(vnode.props.dangerouslySetInnerHTML?.__html, HEAD_MARKER);
   });
 });
 

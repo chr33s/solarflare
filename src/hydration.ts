@@ -8,15 +8,17 @@ const STORE_ISLAND_ID = "sf-store";
 /** Head island ID. */
 const HEAD_ISLAND_ID = "sf-head";
 
-/** Serializes data to a script tag for progressive hydration. */
-export async function serializeDataIsland(id: string, data: unknown): Promise<string> {
+/**
+ * Serializes data to a script tag for progressive hydration.
+ * Includes a stable id attribute for diff-dom-streaming replacements.
+ */
+export async function serializeDataIsland(id: string, data: unknown) {
   const serialized = await serializeToString(data);
-  // Include id attribute for diff-dom-streaming to properly match/replace during SPA navigation
   return /* html */ `<script type="application/json" id="${id}" data-island="${id}">${serialized}</script>`;
 }
 
 /** Extracts and parses data from a data island script tag. */
-export async function extractDataIsland<T = unknown>(id: string): Promise<T | null> {
+export async function extractDataIsland<T = unknown>(id: string) {
   if (typeof document === "undefined") return null;
 
   const script = document.querySelector(`script[data-island="${CSS.escape(id)}"]`);
@@ -31,7 +33,7 @@ export async function extractDataIsland<T = unknown>(id: string): Promise<T | nu
 }
 
 /** Serializes store state for client hydration. */
-export async function serializeStoreForHydration(): Promise<string> {
+export async function serializeStoreForHydration() {
   const state = {
     params: params.value,
     serverData: serverData.value.data,
@@ -42,12 +44,12 @@ export async function serializeStoreForHydration(): Promise<string> {
 }
 
 /** Serializes head state for client hydration. */
-export async function serializeHeadForHydration(): Promise<string> {
+export async function serializeHeadForHydration() {
   return /* html */ `<script type="application/json" data-island="${HEAD_ISLAND_ID}">${serializeHeadState()}</script>`;
 }
 
 /** Hydrates store from serialized state (client-side). */
-export async function hydrateStore(): Promise<void> {
+export async function hydrateStore() {
   if (typeof document === "undefined") return;
 
   const state = await extractDataIsland<{
@@ -65,13 +67,12 @@ export async function hydrateStore(): Promise<void> {
 
   setPathname(state.pathname);
 
-  // Clean up the data island after extraction
   const script = document.querySelector(`script[data-island="${CSS.escape(STORE_ISLAND_ID)}"]`);
   script?.remove();
 }
 
 /** Hydrates head state from serialized data island (client-side). */
-export async function hydrateHead(): Promise<void> {
+export async function hydrateHead() {
   if (typeof document === "undefined") return;
 
   const script = document.querySelector(`script[data-island="${CSS.escape(HEAD_ISLAND_ID)}"]`);
@@ -79,7 +80,6 @@ export async function hydrateHead(): Promise<void> {
 
   hydrateHeadState(script.textContent);
 
-  // Clean up the data island after extraction
   script.remove();
 }
 
@@ -87,17 +87,15 @@ export async function hydrateHead(): Promise<void> {
 let navigationMode = false;
 
 /** Sets navigation mode (called by router during client-side navigation). */
-export function setNavigationMode(active: boolean): void {
+export function setNavigationMode(active: boolean) {
   navigationMode = active;
 }
 
-/** Checks if in navigation mode. */
-export function isNavigationMode(): boolean {
-  return navigationMode;
-}
-
-/** Hydrates a component when its data island arrives. */
-export async function hydrateComponent(tag: string, dataIslandId?: string): Promise<void> {
+/**
+ * Hydrates a component when its data island arrives.
+ * Removes island scripts unless navigation mode is active.
+ */
+export async function hydrateComponent(tag: string, dataIslandId?: string) {
   if (typeof document === "undefined") return;
 
   const element = document.querySelector(tag) as HTMLElement & {
@@ -113,9 +111,6 @@ export async function hydrateComponent(tag: string, dataIslandId?: string): Prom
     element.removeAttribute("data-loading");
     element._sfDeferred = { ...element._sfDeferred, ...data };
 
-    // Prevent duplicate hydration on SPA navigations where multiple triggers may fire
-    // for the same deferred island (inline scripts + router scanning).
-    // During navigation mode, DON'T remove scripts - they'll be needed after the clone.
     if (!navigationMode) {
       const scripts = document.querySelectorAll(`script[data-island="${CSS.escape(islandId)}"]`);
       scripts.forEach((script) => script.remove());
@@ -139,13 +134,13 @@ const MAX_HYDRATION_RETRIES = 50;
 const HYDRATION_RETRY_DELAY_MS = 50;
 
 /** Handles hydration queue events. */
-function handleQueueHydrateEvent(e: Event): void {
+function handleQueueHydrateEvent(e: Event) {
   const { tag, id } = (e as CustomEvent<{ tag: string; id: string }>).detail;
   queueHydration(tag, id);
 }
 
 /** Processes the hydration queue sequentially. */
-async function processHydrationQueue(): Promise<void> {
+async function processHydrationQueue() {
   if (processingQueue) return;
   processingQueue = true;
 
@@ -175,7 +170,7 @@ async function processHydrationQueue(): Promise<void> {
 }
 
 /** Queues a hydration call. */
-export function queueHydration(tag: string, dataIslandId: string): void {
+export function queueHydration(tag: string, dataIslandId: string) {
   hydrationQueue.push({ tag, id: dataIslandId, attempts: 0 });
   if (hydrationReady) {
     void processHydrationQueue();
@@ -183,12 +178,12 @@ export function queueHydration(tag: string, dataIslandId: string): void {
 }
 
 /** Checks if hydration coordinator is initialized. */
-export function isHydrationReady(): boolean {
+export function isHydrationReady() {
   return hydrationReady;
 }
 
 /** Initializes the hydration coordinator. */
-export function initHydrationCoordinator(): void {
+export function initHydrationCoordinator() {
   if (typeof document === "undefined") return;
 
   // Attach event listener for streaming SSR hydration triggers (only once)
@@ -204,7 +199,7 @@ export function initHydrationCoordinator(): void {
 }
 
 /** Cleans up the hydration coordinator (call on app unmount/navigation). */
-export function cleanupHydrationCoordinator(): void {
+export function cleanupHydrationCoordinator() {
   if (typeof document === "undefined") return;
 
   if (eventListenerAttached) {

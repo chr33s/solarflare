@@ -1,7 +1,7 @@
 import { it, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
 
-function importWithFreshCache(relPath: string): Promise<any> {
+function importWithFreshCache(relPath: string) {
   const href = new URL(relPath, import.meta.url).href;
   return import(`${href}?t=${Math.random()}`);
 }

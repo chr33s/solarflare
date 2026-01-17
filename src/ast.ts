@@ -5,7 +5,7 @@ import { parsePath, type ParsedPath, type ModuleKind } from "./paths.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function readCompilerOptions(): ts.CompilerOptions {
+function readCompilerOptions() {
   const configPath = join(__dirname, "..", "tsconfig.json");
   const configFile = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
 
@@ -26,7 +26,7 @@ function readCompilerOptions(): ts.CompilerOptions {
 
 const COMPILER_OPTIONS: ts.CompilerOptions = readCompilerOptions();
 
-export function createProgram(files: string[]): ts.Program {
+export function createProgram(files: string[]) {
   return ts.createProgram(files, COMPILER_OPTIONS);
 }
 
@@ -47,10 +47,7 @@ export interface ParameterInfo {
 }
 
 /** Gets detailed information about a module's default export. */
-export function getDefaultExportInfo(
-  checker: ts.TypeChecker,
-  sourceFile: ts.SourceFile,
-): ExportInfo | null {
+export function getDefaultExportInfo(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
   const symbol = checker.getSymbolAtLocation(sourceFile);
   if (!symbol) return null;
 
@@ -102,11 +99,7 @@ export interface ValidationResult {
   exportInfo: ExportInfo | null;
 }
 
-export function validateModule(
-  program: ts.Program,
-  filePath: string,
-  baseDir: string = "./src",
-): ValidationResult {
+export function validateModule(program: ts.Program, filePath: string, baseDir: string = "./src") {
   const fullPath = join(baseDir, filePath);
   const sourceFile = program.getSourceFile(fullPath);
   const checker = program.getTypeChecker();
@@ -152,7 +145,7 @@ export function validateModule(
   return result;
 }
 
-function validateServerModule(result: ValidationResult, exportInfo: ExportInfo): void {
+function validateServerModule(result: ValidationResult, exportInfo: ExportInfo) {
   if (!exportInfo.isFunction) {
     result.valid = false;
     result.errors.push("Default export must be a function");
@@ -170,7 +163,7 @@ function validateServerModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-function validateClientModule(result: ValidationResult, exportInfo: ExportInfo): void {
+function validateClientModule(result: ValidationResult, exportInfo: ExportInfo) {
   if (!exportInfo.isFunction) {
     result.valid = false;
     result.errors.push("Default export must be a function component");
@@ -190,7 +183,7 @@ function validateClientModule(result: ValidationResult, exportInfo: ExportInfo):
   }
 }
 
-function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo): void {
+function validateLayoutModule(result: ValidationResult, exportInfo: ExportInfo) {
   if (!exportInfo.isFunction) {
     result.valid = false;
     result.errors.push("Default export must be a function component");
@@ -215,7 +208,7 @@ export interface ModuleEntry {
   validation: ValidationResult | null;
 }
 
-export function getTypeDeclaration(kind: ModuleKind): string {
+export function getTypeDeclaration(kind: ModuleKind) {
   switch (kind) {
     case "server":
       return "(request: Request, params: Record<string, string>, env: Env) => Response | Promise<Response> | Record<string, unknown> | Promise<Record<string, unknown>>";
@@ -230,10 +223,7 @@ export function getTypeDeclaration(kind: ModuleKind): string {
   }
 }
 
-export function generateTypedModulesFile(entries: ModuleEntry[]): {
-  content: string;
-  errors: string[];
-} {
+export function generateTypedModulesFile(entries: ModuleEntry[]) {
   const errors: string[] = [];
 
   // Group by kind

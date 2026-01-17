@@ -11,7 +11,7 @@ const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
 };
 
 /** Checks if a log level should be shown given the threshold. */
-function shouldLog(level: string, threshold: LogLevel): boolean {
+function shouldLog(level: string, threshold: LogLevel) {
   const levelPriority = LOG_LEVEL_PRIORITY[level as LogLevel] ?? LOG_LEVEL_PRIORITY.log;
   const thresholdPriority = LOG_LEVEL_PRIORITY[threshold];
   return levelPriority >= thresholdPriority;
@@ -59,7 +59,7 @@ const colors = {
 };
 
 /** Gets ANSI color code for log level. */
-function getLevelColor(level: string): string {
+function getLevelColor(level: string) {
   switch (level) {
     case "error":
       return colors.red;
@@ -75,7 +75,7 @@ function getLevelColor(level: string): string {
 }
 
 /** Formats log message for terminal output. */
-function formatLogMessage(log: LogEntry): string {
+function formatLogMessage(log: LogEntry) {
   const color = getLevelColor(log.level);
   const prefix = `${color}[browser:${log.level}]${colors.reset}`;
   let message = `${prefix} ${log.message}`;
@@ -107,10 +107,7 @@ function formatLogMessage(log: LogEntry): string {
 }
 
 /** Processes console logs from the client. */
-export async function processConsoleLogs(
-  request: Request,
-  logLevel: LogLevel = "log",
-): Promise<Response> {
+export async function processConsoleLogs(request: Request, logLevel: LogLevel = "log") {
   try {
     const { logs }: ClientLogRequest = await request.json();
 
@@ -135,14 +132,14 @@ export async function processConsoleLogs(
 }
 
 /** Checks if request is a console forward request. */
-export function isConsoleRequest(request: Request, options: ConsoleForwardOptions = {}): boolean {
+export function isConsoleRequest(request: Request, options: ConsoleForwardOptions = {}) {
   const { endpoint } = { ...DEFAULT_OPTIONS, ...options };
   const url = new URL(request.url);
   return url.pathname === endpoint && request.method === "POST";
 }
 
 /** Generates client-side script that patches console methods. */
-export function generateClientScript(options: ConsoleForwardOptions = {}): string {
+export function generateClientScript(options: ConsoleForwardOptions = {}) {
   const { endpoint, levels, includeStacks } = {
     ...DEFAULT_OPTIONS,
     ...options,

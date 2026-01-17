@@ -62,7 +62,7 @@ describe("generateStylePreloadScript", () => {
 });
 
 describe("CSS escaping logic", () => {
-  const escapeCss = (css: string): string => {
+  const escapeCss = (css: string) => {
     return css.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
   };
 
@@ -89,7 +89,7 @@ describe("CSS escaping logic", () => {
 
 describe("getPreloadedStylesheet logic", () => {
   it("should return null in server environment", () => {
-    const getPreloadedStylesheet = (_id: string, windowExists: boolean): null => {
+    const getPreloadedStylesheet = (_id: string, windowExists: boolean) => {
       if (!windowExists) return null;
       return null;
     };
@@ -103,7 +103,7 @@ describe("getPreloadedStylesheet logic", () => {
       __sfPreloadedStyles: undefined,
     };
 
-    const getPreloadedStylesheet = (id: string): null => {
+    const getPreloadedStylesheet = (id: string) => {
       const preloaded = mockWindow.__sfPreloadedStyles as Map<string, any> | undefined;
       return preloaded?.get(id) ?? null;
     };
@@ -118,7 +118,7 @@ describe("getPreloadedStylesheet logic", () => {
       __sfPreloadedStyles: new Map([["test.css", mockSheet]]),
     };
 
-    const getPreloadedStylesheet = (id: string): any => {
+    const getPreloadedStylesheet = (id: string) => {
       const preloaded = mockWindow.__sfPreloadedStyles;
       return preloaded?.get(id) ?? null;
     };
@@ -132,7 +132,7 @@ describe("getPreloadedStylesheet logic", () => {
       __sfPreloadedStyles: new Map([["other.css", {}]]),
     };
 
-    const getPreloadedStylesheet = (id: string): any => {
+    const getPreloadedStylesheet = (id: string) => {
       return mockWindow.__sfPreloadedStyles.get(id) ?? null;
     };
 
@@ -145,7 +145,7 @@ describe("hydratePreloadedStyles logic", () => {
   it("should skip in server environment", () => {
     let hydrated = false;
 
-    const hydratePreloadedStyles = (_manager: any, windowExists: boolean): void => {
+    const hydratePreloadedStyles = (_manager: any, windowExists: boolean) => {
       if (!windowExists) return;
       hydrated = true;
     };
@@ -158,10 +158,7 @@ describe("hydratePreloadedStyles logic", () => {
     let hydrated = false;
     const mockWindow = { __sfPreloadedStyles: undefined };
 
-    const hydratePreloadedStyles = (
-      _manager: any,
-      preloaded: Map<string, any> | undefined,
-    ): void => {
+    const hydratePreloadedStyles = (_manager: any, preloaded: Map<string, any> | undefined) => {
       if (!preloaded) return;
       hydrated = true;
     };
@@ -178,7 +175,7 @@ describe("hydratePreloadedStyles logic", () => {
       ["c.css", {}],
     ]);
 
-    const hydratePreloadedStyles = (_manager: any, preloaded: Map<string, any>): void => {
+    const hydratePreloadedStyles = (_manager: any, preloaded: Map<string, any>) => {
       logs.push(`[styles] Hydrated ${preloaded.size} preloaded stylesheets`);
     };
 
@@ -190,7 +187,7 @@ describe("hydratePreloadedStyles logic", () => {
 });
 
 describe("script generation security", () => {
-  const generateStylePreloadScript = (stylesheets: Array<{ id: string; css: string }>): string => {
+  const generateStylePreloadScript = (stylesheets: Array<{ id: string; css: string }>) => {
     if (stylesheets.length === 0) return "";
 
     const data = stylesheets.map(({ id, css }) => ({

@@ -8,7 +8,7 @@ export interface EarlyHint {
 }
 
 /** Generates Link header value for 103 Early Hints. */
-export function generateEarlyHintsHeader(hints: EarlyHint[]): string {
+export function generateEarlyHintsHeader(hints: EarlyHint[]) {
   return hints
     .map((hint) => {
       const parts = [`<${hint.href}>`, `rel=${hint.rel}`];
@@ -28,7 +28,7 @@ export function collectEarlyHints(options: {
   stylesheets?: string[];
   fonts?: string[];
   preconnectOrigins?: string[];
-}): EarlyHint[] {
+}) {
   const hints: EarlyHint[] = [];
 
   for (const origin of options.preconnectOrigins ?? []) {
@@ -61,7 +61,7 @@ export async function handleWithEarlyHints(
   request: Request,
   handler: (request: Request) => Promise<Response>,
   getHints: (url: URL) => EarlyHint[],
-): Promise<Response> {
+) {
   const url = new URL(request.url);
   const hints = getHints(url);
 

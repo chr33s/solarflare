@@ -17,23 +17,23 @@ const hookStateMap = new Map<string, unknown[]>();
 const refStateMap = new Map<string, Map<number, unknown>>();
 
 /** Saves hook state for a component. */
-export function saveHookState(componentId: string, hookState: unknown[]): void {
+export function saveHookState(componentId: string, hookState: unknown[]) {
   hookStateMap.set(componentId, [...hookState]);
 }
 
 /** Restores hook state for a component. */
-export function restoreHookState(componentId: string): unknown[] | undefined {
+export function restoreHookState(componentId: string) {
   return hookStateMap.get(componentId);
 }
 
 /** Clears hook state for a component. */
-export function clearHookState(componentId: string): void {
+export function clearHookState(componentId: string) {
   hookStateMap.delete(componentId);
   refStateMap.delete(componentId);
 }
 
 /** Gets or creates the ref storage for a component. */
-export function getRefStorage(componentId: string): Map<number, unknown> {
+export function getRefStorage(componentId: string) {
   let storage = refStateMap.get(componentId);
   if (!storage) {
     storage = new Map();
@@ -46,7 +46,7 @@ export function getRefStorage(componentId: string): Map<number, unknown> {
 const scrollPositions = new Map<string, { x: number; y: number }>();
 
 /** Saves current scroll position. */
-export function saveScrollPosition(tag?: string): void {
+export function saveScrollPosition(tag?: string) {
   const key = tag ?? "__global__";
   scrollPositions.set(key, {
     x: globalThis.scrollX ?? 0,
@@ -55,7 +55,7 @@ export function saveScrollPosition(tag?: string): void {
 }
 
 /** Restores scroll position. */
-export function restoreScrollPosition(tag?: string): void {
+export function restoreScrollPosition(tag?: string) {
   const key = tag ?? "__global__";
   const pos = scrollPositions.get(key);
   if (pos) {
@@ -66,24 +66,20 @@ export function restoreScrollPosition(tag?: string): void {
 }
 
 /** Clears stored scroll position. */
-export function clearScrollPosition(tag?: string): void {
+export function clearScrollPosition(tag?: string) {
   const key = tag ?? "__global__";
   scrollPositions.delete(key);
 }
 
 /** Clears all HMR state maps (call periodically or on app reset to prevent memory growth). */
-export function clearAllHMRState(): void {
+export function clearAllHMRState() {
   hookStateMap.clear();
   refStateMap.clear();
   scrollPositions.clear();
 }
 
 /** Gets the current size of HMR state maps. */
-export function getHMRStateSize(): {
-  hookStates: number;
-  refStates: number;
-  scrollPositions: number;
-} {
+export function getHMRStateSize() {
   return {
     hookStates: hookStateMap.size,
     refStates: refStateMap.size,
@@ -119,7 +115,7 @@ export class HMRErrorBoundary extends PreactComponent<
   private lastHmrVersion = -1;
   private unsubscribe?: () => void;
 
-  componentDidMount(): void {
+  componentDidMount() {
     this.lastHmrVersion = this.props.hmrVersion.value;
     this.unsubscribe = this.props.hmrVersion.subscribe((version) => {
       if (version !== this.lastHmrVersion && this.state.error) {
@@ -130,7 +126,7 @@ export class HMRErrorBoundary extends PreactComponent<
     });
   }
 
-  componentWillUnmount(): void {
+  componentWillUnmount() {
     this.unsubscribe?.();
   }
 
@@ -138,7 +134,7 @@ export class HMRErrorBoundary extends PreactComponent<
     return { error };
   }
 
-  componentDidCatch(error: Error, errorInfo: { componentStack?: string }): void {
+  componentDidCatch(error: Error, errorInfo: { componentStack?: string }) {
     this.setState({ errorInfo });
     console.error(`[HMR] Error in <${this.props.tag}>:`, error);
     if (errorInfo.componentStack) {
@@ -146,12 +142,11 @@ export class HMRErrorBoundary extends PreactComponent<
     }
   }
 
-  retry = (): void => {
+  retry = () => {
     this.setState({ error: null, errorInfo: null });
   };
 
-  // biome-ignore lint/suspicious/noExplicitAny: VNode types are complex
-  render(): VNode<any> {
+  render() {
     const { error, errorInfo } = this.state;
     const { children, tag, fallback } = this.props;
 
@@ -257,7 +252,7 @@ export interface CssHmrUpdate {
 }
 
 /** Handles CSS HMR updates. */
-export function handleCssHmrUpdate(update: CssHmrUpdate): void {
+export function handleCssHmrUpdate(update: CssHmrUpdate) {
   const { id, css, changedRules } = update;
 
   // Try granular update first
@@ -277,7 +272,7 @@ export function handleCssHmrUpdate(update: CssHmrUpdate): void {
 }
 
 /** Applies granular rule updates using insertRule/deleteRule. */
-function applyGranularUpdates(id: string, changes: CssHmrUpdate["changedRules"]): boolean {
+function applyGranularUpdates(id: string, changes: CssHmrUpdate["changedRules"]) {
   if (!changes) return false;
 
   const sheet = stylesheets.get(id);
@@ -332,9 +327,7 @@ function applyGranularUpdates(id: string, changes: CssHmrUpdate["changedRules"])
 }
 
 /** Registers HMR handlers for CSS files. */
-export function setupCssHmr(hmr: {
-  on: (event: string, cb: (data: unknown) => void) => void;
-}): void {
+export function setupCssHmr(hmr: { on: (event: string, cb: (data: unknown) => void) => void }) {
   hmr.on("sf:css-update", (data) => {
     handleCssHmrUpdate(data as CssHmrUpdate);
   });
@@ -348,7 +341,7 @@ export function setupCssHmr(hmr: {
 }
 
 /** Reloads a CSS file by updating its href with a cache-busting query. */
-export function reloadStylesheet(href: string): void {
+export function reloadStylesheet(href: string) {
   const existing =
     loadedStylesheets.get(href) ?? document.querySelector<HTMLLinkElement>(`link[href^="${href}"]`);
 
@@ -368,7 +361,7 @@ export function reloadStylesheet(href: string): void {
 }
 
 /** Reloads all linked stylesheets on the page. */
-export function reloadAllStylesheets(): void {
+export function reloadAllStylesheets() {
   if (typeof document === "undefined") return;
   const links = document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]');
 
@@ -386,7 +379,7 @@ export function reloadAllStylesheets(): void {
 }
 
 /** Removes a stylesheet from the document. */
-export function removeStylesheet(href: string): void {
+export function removeStylesheet(href: string) {
   const existing =
     loadedStylesheets.get(href) ?? document.querySelector<HTMLLinkElement>(`link[href^="${href}"]`);
 
@@ -398,7 +391,7 @@ export function removeStylesheet(href: string): void {
 }
 
 /** Accepts CSS HMR updates. */
-export function acceptCssHMR(cssFiles: string[]): () => void {
+export function acceptCssHMR(cssFiles: string[]) {
   for (const file of cssFiles) {
     reloadStylesheet(file);
   }
@@ -456,7 +449,7 @@ export function createHMRWrapper<P extends Record<string, unknown>>(
 export function dispatchHMREvent(
   type: "update" | "error" | "recover",
   detail: { tag: string; error?: Error },
-): void {
+) {
   if (typeof document === "undefined") return;
 
   document.dispatchEvent(
@@ -471,7 +464,7 @@ export function dispatchHMREvent(
 export function onHMREvent(
   type: "update" | "error" | "recover",
   handler: (detail: { tag: string; error?: Error }) => void,
-): () => void {
+) {
   if (typeof document === "undefined") return () => {};
 
   const listener = (e: Event) => {
@@ -482,7 +475,7 @@ export function onHMREvent(
   return () => document.removeEventListener(`sf:hmr:${type}`, listener);
 }
 
-export interface HmrEntryOptions {
+interface HmrEntryOptions {
   tag: string;
   props: string[];
   routesManifest: RoutesManifest;
@@ -492,7 +485,7 @@ export interface HmrEntryOptions {
   onCssUpdate?: () => void;
 }
 
-function initClientRuntime(): void {
+function initClientRuntime() {
   if (typeof document !== "undefined") {
     const runtime = getRuntime();
     runtime.headContext ??= createHeadContext();
@@ -502,7 +495,7 @@ function initClientRuntime(): void {
   initHydrationCoordinator();
 }
 
-export function createHmrEntryComponent(options: HmrEntryOptions): FunctionComponent<any> {
+function createHmrEntryComponent(options: HmrEntryOptions) {
   const { tag, routesManifest, BaseComponent, hmr, cssFiles = [], onCssUpdate } = options;
 
   initClientRuntime();
@@ -586,7 +579,7 @@ export function createHmrEntryComponent(options: HmrEntryOptions): FunctionCompo
     return initRouter(routesManifest).start();
   }
 
-  return function Component(props) {
+  return function Component(props: Record<string, unknown>) {
     const deferredSignals = useMemo(() => new Map<string, Signal<unknown>>(), []);
     const deferredVersion = useSignal(0);
     void hmrVersion.value;
@@ -687,11 +680,9 @@ export function createHmrEntryComponent(options: HmrEntryOptions): FunctionCompo
   };
 }
 
-export function initHmrEntry(options: HmrEntryOptions): void {
+export function initHmrEntry(options: HmrEntryOptions) {
   const Component = createHmrEntryComponent(options);
   if (!customElements.get(options.tag)) {
     register(Component, options.tag, options.props, { shadow: false });
   }
 }
-
-export { signal };

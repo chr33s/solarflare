@@ -10,10 +10,7 @@ interface StyleState {
 const componentStyles = new Map<string, StyleState>();
 
 /** Loads and applies styles for a component. */
-export async function loadComponentStyles(
-  tag: string,
-  cssUrls: string[],
-): Promise<CSSStyleSheet[]> {
+export async function loadComponentStyles(tag: string, cssUrls: string[]) {
   const existing = componentStyles.get(tag);
   if (existing?.loaded) {
     return existing.sheets;
@@ -45,7 +42,7 @@ export async function loadComponentStyles(
 }
 
 /** Applies stylesheets to a custom element. */
-export function applyStyles(element: HTMLElement, sheets: CSSStyleSheet[]): void {
+export function applyStyles(element: HTMLElement, sheets: CSSStyleSheet[]) {
   if (!supportsConstructableStylesheets()) {
     // Fallback handled by StylesheetManager
     return;
@@ -65,7 +62,7 @@ export function applyStyles(element: HTMLElement, sheets: CSSStyleSheet[]): void
 }
 
 /** Cleans up styles when a component is disconnected. */
-export function cleanupStyles(tag: string): void {
+export function cleanupStyles(tag: string) {
   stylesheets.removeConsumer(tag);
   componentStyles.delete(tag);
 }

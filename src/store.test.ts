@@ -1,9 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import * as assert from "node:assert/strict";
+import { signal, computed, batch } from "@preact/signals";
 import {
-  signal,
-  computed,
-  batch,
   initStore,
   resetStore,
   setParams,

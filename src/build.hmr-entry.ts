@@ -12,7 +12,7 @@ export interface ComponentMeta {
   chunk: string;
 }
 
-function buildDebugImports(args: HmrEntryArgs): string {
+function buildDebugImports(args: HmrEntryArgs) {
   if (!args.debug) return "";
   return /* tsx */ `
       import 'preact/debug'
@@ -20,15 +20,11 @@ function buildDebugImports(args: HmrEntryArgs): string {
     `;
 }
 
-function buildRouterInit(routesManifest: RoutesManifest): string {
+function buildRouterInit(routesManifest: RoutesManifest) {
   return `const routesManifest = ${JSON.stringify(routesManifest)};`;
 }
 
-function buildStylesheetRegistration(
-  meta: ComponentMeta,
-  cssFiles: string[],
-  args: HmrEntryArgs,
-): { imports: string; setup: string } {
+function buildStylesheetRegistration(meta: ComponentMeta, cssFiles: string[], args: HmrEntryArgs) {
   if (!cssFiles.length || args.production) {
     return { imports: "", setup: "" };
   }
@@ -47,7 +43,7 @@ function buildStylesheetRegistration(
   };
 }
 
-function buildEntryInit(meta: ComponentMeta, cssFiles: string[]): string {
+function buildEntryInit(meta: ComponentMeta, cssFiles: string[]) {
   return /* tsx */ `
     initHmrEntry({
       tag: '${meta.tag}',
@@ -66,7 +62,7 @@ export function generateChunkedClientEntry(
   routesManifest: RoutesManifest,
   cssFiles: string[] = [],
   args: HmrEntryArgs,
-): string {
+) {
   const debugImports = buildDebugImports(args);
   const { imports: stylesheetImports, setup: stylesheetSetup } = buildStylesheetRegistration(
     meta,

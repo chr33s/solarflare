@@ -124,7 +124,7 @@ describe("generateRoutesTypeFile logic", () => {
 });
 
 describe("extractCssImports logic", () => {
-  const extractCssImports = (content: string): string[] => {
+  const extractCssImports = (content: string) => {
     const cssImports: string[] = [];
     const importRegex = /import\s+['"](.+\.css)['"]|import\s+['"](.+\.css)['"]\s*;/g;
     let match;
@@ -189,7 +189,7 @@ describe("extractAllCssImports recursive logic", () => {
     files: Map<string, FileEntry>,
     startFile: string,
     visited: Set<string> = new Set(),
-  ): string[] => {
+  ) => {
     if (visited.has(startFile)) return [];
     visited.add(startFile);
 
@@ -263,11 +263,11 @@ describe("extractAllCssImports recursive logic", () => {
 
 describe("generateChunkedClientEntry CSS integration", () => {
   // Simplified version of generateChunkedClientEntry for CSS handling
-  const generateCssImports = (cssFiles: string[]): string => {
+  const generateCssImports = (cssFiles: string[]) => {
     return cssFiles.map((file, i) => `import css${i} from '${file}?raw';`).join("\n");
   };
 
-  const generateCssRegistrations = (cssFiles: string[], tag: string): string => {
+  const generateCssRegistrations = (cssFiles: string[], tag: string) => {
     return cssFiles
       .map((file, i) => `stylesheets.register('${file}', css${i}, { consumer: '${tag}' });`)
       .join("\n");
@@ -308,7 +308,7 @@ describe("generateChunkedClientEntry CSS integration", () => {
 });
 
 describe("CSS HMR code generation", () => {
-  const generateCssHmr = (cssFiles: string[]): string => {
+  const generateCssHmr = (cssFiles: string[]) => {
     return cssFiles
       .map(
         (file) => `hmr.on('sf:css:${file}', (newCss) => {
@@ -374,15 +374,15 @@ describe("template scaffolding logic", () => {
 });
 
 describe("route file pattern matching", () => {
-  const isRouteFile = (file: string): boolean => {
+  const isRouteFile = (file: string) => {
     return /\.(client|server)\.(ts|tsx)$/.test(file);
   };
 
-  const isLayoutFile = (file: string): boolean => {
+  const isLayoutFile = (file: string) => {
     return file.endsWith("_layout.tsx");
   };
 
-  const isErrorFile = (file: string): boolean => {
+  const isErrorFile = (file: string) => {
     return file.endsWith("_error.tsx");
   };
 

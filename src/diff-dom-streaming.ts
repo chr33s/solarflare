@@ -224,7 +224,7 @@ function getKey(node: Node) {
 /**
  * Utility that will walk a html stream and call a callback for each node.
  */
-async function htmlStreamWalker(stream: ReadableStream, options: Options = {}): Promise<Walker> {
+async function htmlStreamWalker(stream: ReadableStream, options: Options = {}) {
   const doc = document.implementation.createHTMLDocument();
 
   doc.open();
@@ -325,7 +325,7 @@ async function htmlStreamWalker(stream: ReadableStream, options: Options = {}): 
     root: doc.documentElement,
     [FIRST_CHILD]: next("firstChild"),
     [NEXT_SIBLING]: next("nextSibling"),
-    [APPLY_TRANSITION]: (v) => {
+    [APPLY_TRANSITION]: (v: () => void) => {
       if (options.transition && document.startViewTransition) {
         // Collect all view transitions so the caller can await them all.
         // Previously we only stored the last transition, causing earlier

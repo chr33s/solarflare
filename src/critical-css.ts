@@ -23,7 +23,7 @@ export async function extractCriticalCss(
     maxSize?: number;
     cache?: boolean;
   },
-): Promise<string> {
+) {
   const cacheKey = routePattern;
   const maxSize = options.maxSize ?? 14 * 1024;
 
@@ -66,7 +66,7 @@ export async function extractCriticalCss(
 }
 
 /** Simple CSS minification for critical CSS */
-function minifyCss(css: string): string {
+function minifyCss(css: string) {
   return css
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\s+/g, " ")
@@ -75,7 +75,7 @@ function minifyCss(css: string): string {
 }
 
 /** Generates a noscript fallback for CSS loading. */
-export function generateCssFallback(stylesheets: string[]): string {
+export function generateCssFallback(stylesheets: string[]) {
   const links = stylesheets
     .map((href) => /* html */ `<link rel="stylesheet" href="${href}">`)
     .join("");
@@ -83,7 +83,7 @@ export function generateCssFallback(stylesheets: string[]): string {
 }
 
 /** Generates async CSS loading script without blocking render on non-critical CSS */
-export function generateAsyncCssLoader(stylesheets: string[]): string {
+export function generateAsyncCssLoader(stylesheets: string[]) {
   if (stylesheets.length === 0) return "";
 
   const hrefs = escapeJsonForHtml(stylesheets);

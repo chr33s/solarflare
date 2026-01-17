@@ -1,4 +1,4 @@
-import { signal, computed, effect, batch, type ReadonlySignal, type Signal } from "@preact/signals";
+import { signal, batch, type ReadonlySignal } from "@preact/signals";
 
 export interface ServerData<T = unknown> {
   data: T;
@@ -34,12 +34,12 @@ export const serverData: ReadonlySignal<ServerData<unknown>> = _serverData;
 export const pathname: ReadonlySignal<string> = _pathname;
 
 /** Sets route parameters. */
-export function setParams(newParams: Record<string, string>): void {
+export function setParams(newParams: Record<string, string>) {
   _params.value = Object.assign({}, newParams);
 }
 
 /** Sets server data. */
-export function setServerData<T>(data: T): void {
+export function setServerData<T>(data: T) {
   _serverData.value = {
     data,
     loading: false,
@@ -48,12 +48,12 @@ export function setServerData<T>(data: T): void {
 }
 
 /** Sets current pathname. */
-export function setPathname(path: string): void {
+export function setPathname(path: string) {
   _pathname.value = path;
 }
 
 /** Initializes store with config. */
-export function initStore(config: StoreConfig = {}): void {
+export function initStore(config: StoreConfig = {}) {
   batch(() => {
     if (config.params) {
       _params.value = Object.assign({}, config.params);
@@ -69,13 +69,10 @@ export function initStore(config: StoreConfig = {}): void {
 }
 
 /** Resets store to initial state. */
-export function resetStore(): void {
+export function resetStore() {
   batch(() => {
     _params.value = {};
     _serverData.value = { data: null, loading: false, error: null };
     _pathname.value = "";
   });
 }
-
-export { signal, computed, effect, batch };
-export type { ReadonlySignal, Signal };

@@ -42,7 +42,7 @@ const responseCache = new ResponseCache(100);
 const staticShellCache = new Map<string, StreamingShell>();
 
 /** Gets or creates a static shell. */
-function getStaticShell(lang: string): StreamingShell {
+function getStaticShell(lang: string) {
   let shell = staticShellCache.get(lang);
   if (!shell) {
     shell = generateStaticShell({ lang });
@@ -59,17 +59,17 @@ export interface WorkerOptimizations {
 }
 
 /** Gets the script path for a route from the chunk manifest. */
-function getScriptPath(tag: string): string | undefined {
+function getScriptPath(tag: string) {
   return manifest.tags[tag];
 }
 
 /** Gets stylesheets for a route pattern from the chunk manifest. */
-function getStylesheets(pattern: string): string[] {
+function getStylesheets(pattern: string) {
   return manifest.styles[pattern] ?? [];
 }
 
 /** Gets dev mode scripts from the chunk manifest. */
-function getDevScripts(): string[] | undefined {
+function getDevScripts() {
   return manifest.devScripts;
 }
 
@@ -82,7 +82,7 @@ type ServerLoader = (
 const router = createRouter(typedModules);
 
 /** Finds paired module (server for client, or client for server). */
-function findPairedModule(path: string): string | null {
+function findPairedModule(path: string) {
   if (path.includes(".client.")) {
     const serverPath = path.replace(".client.", ".server.");
     return serverPath in typedModules.server ? serverPath : null;
@@ -135,7 +135,7 @@ type MatchAndLoadResult =
   | { kind: "api"; response: Response }
   | { kind: "ssr"; context: SsrContext };
 
-function getDefaultHeaders(): Record<string, string> {
+function getDefaultHeaders() {
   return {
     "Content-Type": "text/html; charset=utf-8",
     "Content-Encoding": "identity",
@@ -146,7 +146,7 @@ function getDefaultHeaders(): Record<string, string> {
   };
 }
 
-async function handleDevEndpoints(request: Request, env?: WorkerEnv): Promise<Response | null> {
+async function handleDevEndpoints(request: Request, env?: WorkerEnv) {
   if (isHmrRequest(request)) {
     return handleHmrRequest();
   }
@@ -168,7 +168,7 @@ async function renderErrorResponse(
   url: URL,
   status: number,
   headers: Record<string, string>,
-): Promise<Response> {
+) {
   const errorContent = await renderErrorPage(error, url, typedModules, status);
   const stylesheets = getStylesheets("/");
   const devScripts = getDevScripts();
@@ -294,7 +294,7 @@ async function renderStream(
   context: SsrContext,
   headers: Record<string, string>,
   envOptimizations: WorkerOptimizations,
-): Promise<RenderPlan> {
+) {
   const { url, route, params, content, shellData, deferredData, metaConfig } = context;
   const { scriptPath, stylesheets, devScripts } = context;
 
@@ -350,10 +350,7 @@ async function renderStream(
   };
 }
 
-async function applyPerfFeatures(
-  plan: RenderPlan,
-  envOptimizations: WorkerOptimizations,
-): Promise<Response> {
+async function applyPerfFeatures(plan: RenderPlan, envOptimizations: WorkerOptimizations) {
   const {
     ssrStream,
     finalHeaders,
@@ -401,7 +398,7 @@ async function applyPerfFeatures(
 }
 
 /** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
-async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
+async function worker(request: Request, env?: WorkerEnv) {
   const url = new URL(request.url);
   const devResponse = await handleDevEndpoints(request, env);
   if (devResponse) return devResponse;
@@ -423,7 +420,7 @@ async function worker(request: Request, env?: WorkerEnv): Promise<Response> {
     const { context } = result;
     const envOptimizations = env?.SF_OPTIMIZATIONS ?? {};
 
-    const render = async (): Promise<Response> => {
+    const render = async () => {
       const plan = await renderStream(context, headers, envOptimizations);
       return applyPerfFeatures(plan, envOptimizations);
     };

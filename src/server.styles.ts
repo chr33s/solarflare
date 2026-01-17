@@ -2,9 +2,7 @@ import { peekRuntime } from "./runtime.ts";
 import { escapeJsonForHtml } from "./serialize.ts";
 
 /** Generates inline script to preload stylesheets. */
-export function generateStylePreloadScript(
-  stylesheets: Array<{ id: string; css: string }>,
-): string {
+export function generateStylePreloadScript(stylesheets: Array<{ id: string; css: string }>) {
   if (stylesheets.length === 0) return "";
 
   return /* tsx */ `
@@ -28,7 +26,7 @@ export function generateStylePreloadScript(
 }
 
 /** Retrieves preloaded stylesheets. */
-export function getPreloadedStylesheet(id: string): CSSStyleSheet | null {
+export function getPreloadedStylesheet(id: string) {
   const runtime = peekRuntime();
   return runtime?.preloadedStyles?.get(id) ?? null;
 }
@@ -36,7 +34,7 @@ export function getPreloadedStylesheet(id: string): CSSStyleSheet | null {
 /** Hydrates preloaded stylesheets into the manager. */
 export function hydratePreloadedStyles(_manager: {
   register: (id: string, css: string, opts?: any) => CSSStyleSheet | null;
-}): void {
+}) {
   const preloaded = peekRuntime()?.preloadedStyles;
   if (!preloaded) return;
 
