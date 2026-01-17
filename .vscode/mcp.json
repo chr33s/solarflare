@@ -3,7 +3,7 @@
   "servers": {
     "chrome-devtools": {
       "command": "npx",
-      "args": ["chrome-devtools-mcp@latest"]
+      "args": ["chrome-devtools-mcp@latest", "--autoConnect"]
     },
     "cloudflare": {
       "type": "sse",
@@ -15,7 +15,7 @@
     },
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@latest"]
+      "args": ["@playwright/mcp@latest", "--browser=chrome", "--extension"]
     },
     "preact": {
       "type": "sse",

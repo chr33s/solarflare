@@ -26,7 +26,7 @@ import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
 import { ResponseCache, withCache } from "./route-cache.ts";
 import { parseMetaConfig, workerConfigMeta } from "./worker-config.ts";
 export { workerConfigMeta };
-import { getHeadContext } from "./head.ts";
+import { getHeadContext, type HeadTag } from "./head.ts";
 import type { ChunkManifest } from "./manifest.ts";
 // @ts-ignore - Generated at build time, aliased by bundler
 import modules from ".modules.generated";
@@ -40,6 +40,8 @@ const manifest = chunkManifest as ChunkManifest;
 const responseCache = new ResponseCache(100);
 
 const staticShellCache = new Map<string, StreamingShell>();
+
+const PATCH_ENDPOINT = "/_sf/patch";
 
 /** Gets or creates a static shell. */
 function getStaticShell(lang: string) {
@@ -182,6 +184,115 @@ async function renderErrorResponse(
   return new Response(stream, {
     headers,
     status,
+  });
+}
+
+type PatchMetaChunk = {
+  type: "meta";
+  outlet: string;
+  head: HeadTag[];
+  htmlAttrs: Record<string, string>;
+  bodyAttrs: Record<string, string>;
+};
+
+function createPatchStream(
+  htmlStream: ReadableStream<Uint8Array>,
+  outlet: string,
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const reader = htmlStream.getReader();
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        const first = await reader.read();
+
+        const headCtx = getHeadContext();
+        const meta: PatchMetaChunk = {
+          type: "meta",
+          outlet,
+          head: headCtx.resolveTags(),
+          htmlAttrs: headCtx.htmlAttrs,
+          bodyAttrs: headCtx.bodyAttrs,
+        };
+
+        controller.enqueue(encoder.encode(`${JSON.stringify(meta)}\n`));
+
+        if (!first.done) {
+          const firstChunk = decoder.decode(first.value, { stream: true });
+          if (firstChunk) {
+            controller.enqueue(
+              encoder.encode(`${JSON.stringify({ type: "html", chunk: firstChunk })}\n`),
+            );
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          if (chunk) {
+            controller.enqueue(encoder.encode(`${JSON.stringify({ type: "html", chunk })}\n`));
+          }
+        }
+
+        const tail = decoder.decode();
+        if (tail) {
+          controller.enqueue(encoder.encode(`${JSON.stringify({ type: "html", chunk: tail })}\n`));
+        }
+
+        controller.enqueue(encoder.encode(`${JSON.stringify({ type: "done" })}\n`));
+        controller.close();
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+  });
+}
+
+function getPatchHeaders(
+  baseHeaders: Record<string, string>,
+  responseHeaders?: Record<string, string>,
+) {
+  return {
+    ...baseHeaders,
+    ...responseHeaders,
+    "Cache-Control": "private, no-store",
+    "Content-Encoding": "identity",
+    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+  };
+}
+
+async function renderPatchResponse(
+  context: SsrContext,
+  headers: Record<string, string>,
+  outlet: string,
+) {
+  const { url, route, params, content, shellData, deferredData } = context;
+  const { scriptPath, stylesheets, devScripts } = context;
+
+  const ssrStream = await renderToStream(content, {
+    params,
+    serverData: shellData,
+    pathname: url.pathname,
+    script: scriptPath,
+    styles: stylesheets,
+    devScripts,
+    deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
+    _headers: context.responseHeaders,
+    _status: context.responseStatus,
+    _statusText: context.responseStatusText,
+  });
+
+  const patchStream = createPatchStream(ssrStream, outlet);
+  const finalHeaders = getPatchHeaders(headers, ssrStream.headers);
+
+  return new Response(patchStream, {
+    headers: finalHeaders,
+    status: ssrStream.status ?? 200,
+    statusText: ssrStream.statusText,
   });
 }
 
@@ -397,11 +508,54 @@ async function applyPerfFeatures(plan: RenderPlan, envOptimizations: WorkerOptim
   });
 }
 
+async function handlePatchRequest(request: Request) {
+  const url = new URL(request.url);
+  if (!(request.method === "POST" && url.pathname === PATCH_ENDPOINT)) return;
+
+  const headers = getDefaultHeaders();
+  try {
+    const body = (await request.json()) as { url?: string; outlet?: string };
+    if (!body?.url) {
+      return new Response("Missing url", { status: 400, headers });
+    }
+
+    const targetUrl = new URL(body.url, url.origin);
+    if (targetUrl.origin !== url.origin) {
+      return new Response("Invalid url", { status: 400, headers });
+    }
+
+    const targetRequest = new Request(targetUrl, {
+      method: "GET",
+      headers: request.headers,
+    });
+
+    const result = await matchAndLoad(targetRequest, targetUrl);
+
+    if (result.kind === "not-found") {
+      return new Response("Not Found", { status: 404, headers });
+    }
+
+    if (result.kind === "api") {
+      return new Response("Invalid patch target", { status: 400, headers });
+    }
+
+    const outlet = body.outlet ?? "#app";
+    return renderPatchResponse(result.context, headers, outlet);
+  } catch (error) {
+    const serverError = error instanceof Error ? error : new Error(String(error));
+    console.error("[solarflare] Patch error:", serverError);
+    return new Response("Patch error", { status: 500, headers });
+  }
+}
+
 /** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
 async function worker(request: Request, env?: WorkerEnv) {
   const url = new URL(request.url);
   const devResponse = await handleDevEndpoints(request, env);
   if (devResponse) return devResponse;
+
+  const patchResponse = await handlePatchRequest(request);
+  if (patchResponse) return patchResponse;
 
   const headers = getDefaultHeaders();
 

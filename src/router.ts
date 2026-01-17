@@ -1,6 +1,6 @@
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
 import diff from "./diff-dom-streaming.ts";
-import { resetHeadContext } from "./head.ts";
+import { resetHeadContext, applyHeadTags, type HeadTag } from "./head.ts";
 import { setNavigationMode } from "./hydration.ts";
 import type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
 export type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
@@ -95,6 +95,7 @@ export class Router {
   #config: Required<RouterConfig>;
   #started = false;
   #cleanupFns: (() => void)[] = [];
+  #inflightAbort: AbortController | null = null;
 
   /** Current route match signal. */
   readonly current = signal<RouteMatch | null>(null);
@@ -235,22 +236,40 @@ export class Router {
       await import(absoluteChunk);
     }
 
+    if (this.#inflightAbort) {
+      this.#inflightAbort.abort();
+    }
+    const abortController = new AbortController();
+    this.#inflightAbort = abortController;
+
+    const patchUrl = new URL("/_sf/patch", location.origin);
+
     const response = await fetchWithRetry(
-      url.href,
-      { headers: { Accept: "text/html" } },
-      { maxRetries: 2, baseDelay: 500 },
+      patchUrl.href,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/x-ndjson",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url: url.pathname + url.search + url.hash, outlet: "#app" }),
+        signal: abortController.signal,
+      },
+      { maxRetries: 0 },
     );
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ${url.href}: ${response.status}`);
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to fetch patch for ${url.href}: ${response.status}`);
     }
 
     // During client-side navigation we apply streamed HTML via diff-dom-streaming.
     // Track processed hydration scripts and trigger hydration as they're inserted.
     const processedScripts = new Set<string>();
 
-    // Capture the current route tag before diffing so we can detect tag changes.
-    const previousTag = document.querySelector("#app > *")?.tagName?.toLowerCase();
+    // Capture the current route host before diffing so we can detect tag changes
+    // and whether the host element was actually replaced.
+    const previousHost = document.querySelector("#app > *") as HTMLElement | null;
+    const previousTag = previousHost?.tagName?.toLowerCase();
 
     // Use MutationObserver to detect when deferred hydration scripts are inserted
     // into the real DOM and trigger hydration immediately for progressive streaming.
@@ -289,8 +308,117 @@ export class Router {
     const useTransition = this.#config.viewTransitions && supportsViewTransitions();
     let didScroll = false;
 
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    let htmlController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const htmlStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        htmlController = controller;
+      },
+      cancel() {
+        htmlController = null;
+      },
+    });
+
+    const applyAttrs = (el: HTMLElement, attrs?: Record<string, string>) => {
+      if (!attrs) return;
+      for (const [key, value] of Object.entries(attrs)) {
+        if (value === "") {
+          el.setAttribute(key, "");
+        } else {
+          el.setAttribute(key, value);
+        }
+      }
+    };
+
+    const applyMeta = (meta: {
+      head?: HeadTag[];
+      htmlAttrs?: Record<string, string>;
+      bodyAttrs?: Record<string, string>;
+    }) => {
+      if (meta.head?.length) {
+        applyHeadTags(meta.head);
+      }
+      if (typeof document !== "undefined") {
+        applyAttrs(document.documentElement, meta.htmlAttrs);
+        applyAttrs(document.body, meta.bodyAttrs);
+      }
+    };
+
+    const consumeNdjson = async () => {
+      const reader = response.body!.getReader();
+      let buffer = "";
+      let streamClosed = false;
+
+      const closeStream = () => {
+        if (streamClosed) return;
+        streamClosed = true;
+        htmlController?.close();
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex = buffer.indexOf("\n");
+          while (newlineIndex !== -1) {
+            const line = buffer.slice(0, newlineIndex).trim();
+            buffer = buffer.slice(newlineIndex + 1);
+            if (line) {
+              const msg = JSON.parse(line) as
+                | {
+                    type: "meta";
+                    head?: HeadTag[];
+                    htmlAttrs?: Record<string, string>;
+                    bodyAttrs?: Record<string, string>;
+                  }
+                | { type: "html"; chunk: string }
+                | { type: "done" };
+
+              if (msg.type === "meta") {
+                applyMeta(msg);
+              } else if (msg.type === "html") {
+                htmlController?.enqueue(encoder.encode(msg.chunk));
+              } else if (msg.type === "done") {
+                closeStream();
+                return;
+              }
+            }
+            newlineIndex = buffer.indexOf("\n");
+          }
+        }
+
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+          const msg = JSON.parse(buffer) as
+            | {
+                type: "meta";
+                head?: HeadTag[];
+                htmlAttrs?: Record<string, string>;
+                bodyAttrs?: Record<string, string>;
+              }
+            | { type: "html"; chunk: string }
+            | { type: "done" };
+
+          if (msg.type === "meta") {
+            applyMeta(msg);
+          } else if (msg.type === "html") {
+            htmlController?.enqueue(encoder.encode(msg.chunk));
+          }
+        }
+        closeStream();
+      } catch (error) {
+        htmlController?.error(error);
+        throw error;
+      }
+    };
+
+    const ndjsonPromise = consumeNdjson();
+
     try {
-      await diff(document, response.body!, {
+      await diff(document, htmlStream, {
         transition: useTransition,
         syncMutations: !useTransition, // Apply mutations synchronously when not using view transitions
         onChunkProcessed: () => {
@@ -303,7 +431,9 @@ export class Router {
           });
         },
       });
+      await ndjsonPromise;
     } catch (diffError) {
+      abortController.abort();
       // diff-dom-streaming can fail with "insertBefore" errors when the DOM was mutated
       // by external factors (Preact custom elements, HMR, extensions). Fallback to a
       // full navigation which lets the browser handle parsing.
@@ -314,16 +444,19 @@ export class Router {
       return;
     } finally {
       observer?.disconnect();
+      if (this.#inflightAbort === abortController) {
+        this.#inflightAbort = null;
+      }
     }
 
     // Fix for broken interactivity + flicker:
     // If navigating to a different component tag, replace the host immediately
     // to ensure a fresh hydration without stale properties from previous component.
     // Doing this BEFORE the settlement delay prevents visual flicker (replacement happens in same frame).
-    const host = document.querySelector(entry.tag) as HTMLElement;
+    const host = document.querySelector(entry.tag) as HTMLElement | null;
     const sameTag = previousTag && previousTag === entry.tag;
 
-    if (host && previousTag && !sameTag) {
+    if (host && previousTag && !sameTag && previousHost && host === previousHost) {
       const replacement = host.cloneNode(true) as HTMLElement;
       host.replaceWith(replacement);
     }
@@ -509,6 +642,7 @@ export function getRouter() {
 
 /** Initializes the global router instance. */
 export function initRouter(manifest: RoutesManifest, config?: RouterConfig) {
+  if (globalRouter) return globalRouter;
   globalRouter = createRouter(manifest, config);
   return globalRouter;
 }

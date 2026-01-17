@@ -214,6 +214,83 @@ describe("integration", () => {
     assert.ok(html.includes('<meta name="viewport"'));
     assert.ok(html.includes('content="width=device-width, initial-scale=1.0"'));
   });
+
+  it("should return NDJSON patch stream for valid route", async () => {
+    const response = await fetch(`${BASE_URL}/_sf/patch`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/x-ndjson",
+      },
+      body: JSON.stringify({ url: "/", outlet: "#app" }),
+    });
+
+    assert.strictEqual(response.status, 200);
+    assert.ok(response.headers.get("Content-Type")?.includes("application/x-ndjson"));
+    assert.strictEqual(response.headers.get("Cache-Control"), "private, no-store");
+    assert.strictEqual(response.headers.get("X-Content-Type-Options"), "nosniff");
+
+    const text = await response.text();
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    assert.ok(lines.length >= 2);
+
+    const messages = lines.map((line) => JSON.parse(line)) as Array<
+      | { type: "meta"; outlet?: string; head?: unknown[] }
+      | { type: "html"; chunk?: string }
+      | { type: "done" }
+    >;
+
+    assert.strictEqual(messages[0]?.type, "meta");
+    assert.strictEqual(messages[0]?.outlet, "#app");
+    assert.ok(Array.isArray(messages[0]?.head));
+
+    assert.strictEqual(messages[messages.length - 1]?.type, "done");
+    assert.ok(messages.some((msg) => msg.type === "html"));
+  });
+
+  it("should return 400 for patch request missing url", async () => {
+    const response = await fetch(`${BASE_URL}/_sf/patch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    assert.strictEqual(response.status, 400);
+  });
+
+  it("should return 400 for patch request with cross-origin url", async () => {
+    const response = await fetch(`${BASE_URL}/_sf/patch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+
+    assert.strictEqual(response.status, 400);
+  });
+
+  it("should return 404 for patch request to unknown route", async () => {
+    const response = await fetch(`${BASE_URL}/_sf/patch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "/unknown-route-xyz" }),
+    });
+
+    assert.strictEqual(response.status, 404);
+  });
+
+  it("should return 400 for patch request to API route", async () => {
+    const response = await fetch(`${BASE_URL}/_sf/patch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "/api" }),
+    });
+
+    assert.strictEqual(response.status, 400);
+  });
 });
 
 describe("e2e", () => {

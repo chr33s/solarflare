@@ -709,6 +709,11 @@ function applyHeadToDOM(tags: HeadTag[]) {
   managedTags.value = newManagedTags;
 }
 
+/** Applies a resolved list of head tags to the DOM. */
+export function applyHeadTags(tags: HeadTag[]) {
+  applyHeadToDOM(tags);
+}
+
 /** Finds an SSR-rendered element that matches the given tag for adoption. */
 function findMatchingSSRElement(head: HTMLHeadElement, tag: HeadTag) {
   // Don't try to match elements that are already managed
