@@ -24,7 +24,7 @@ import {
 import { extractCriticalCss, generateAsyncCssLoader } from "./critical-css.ts";
 import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
 import { ResponseCache, withCache } from "./route-cache.ts";
-import { parseMetaConfig, workerConfigMeta } from "./worker-config.ts";
+import { parseMetaConfig, workerConfigMeta } from "./worker.config.ts";
 export { workerConfigMeta };
 import { getHeadContext, type HeadTag } from "./head.ts";
 import type { ChunkManifest } from "./manifest.ts";

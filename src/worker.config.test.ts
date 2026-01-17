@@ -4,7 +4,7 @@ import {
   parseMetaConfig,
   workerConfigMeta,
   buildSpeculationRulesFromConfig,
-} from "./worker-config.ts";
+} from "./worker.config.ts";
 
 describe("parseMetaConfig", () => {
   it("should return defaults for empty HTML", () => {
