@@ -17,6 +17,7 @@ import { parseMetaConfig } from "./worker.config.ts";
 import { getHeadContext, type HeadTag } from "./head.ts";
 import { typedModules, getScriptPath, getStylesheets, getDevScripts } from "./manifest.runtime.ts";
 import { findPairedModulePath } from "./paths.ts";
+import { encode } from "turbo-stream";
 
 const responseCache = new ResponseCache(100);
 
@@ -140,68 +141,56 @@ async function renderErrorResponse(
   });
 }
 
-type PatchMetaChunk = {
-  type: "meta";
-  outlet: string;
-  head: HeadTag[];
-  htmlAttrs: Record<string, string>;
-  bodyAttrs: Record<string, string>;
-};
+/** Patch stream payload: meta plus an async iterable of HTML chunks. */
+interface PatchPayload {
+  meta: {
+    outlet: string;
+    head: HeadTag[];
+    htmlAttrs: Record<string, string>;
+    bodyAttrs: Record<string, string>;
+  };
+  html: AsyncIterable<string>;
+}
 
+/** @yields HTML string chunks decoded from the byte stream. */
+async function* htmlChunkGenerator(htmlStream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+  const decoder = new TextDecoder();
+  const reader = htmlStream.getReader();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk) yield chunk;
+    }
+    const tail = decoder.decode();
+    if (tail) yield tail;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/** Creates a turbo-stream encoded patch response. */
 function createPatchStream(
   htmlStream: ReadableStream<Uint8Array>,
   outlet: string,
 ): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  const reader = htmlStream.getReader();
+  const headCtx = getHeadContext();
 
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        const first = await reader.read();
-
-        const headCtx = getHeadContext();
-        const meta: PatchMetaChunk = {
-          type: "meta",
-          outlet,
-          head: headCtx.resolveTags(),
-          htmlAttrs: headCtx.htmlAttrs,
-          bodyAttrs: headCtx.bodyAttrs,
-        };
-
-        controller.enqueue(encoder.encode(`${JSON.stringify(meta)}\n`));
-
-        if (!first.done) {
-          const firstChunk = decoder.decode(first.value, { stream: true });
-          if (firstChunk) {
-            controller.enqueue(
-              encoder.encode(`${JSON.stringify({ type: "html", chunk: firstChunk })}\n`),
-            );
-          }
-        }
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          if (chunk) {
-            controller.enqueue(encoder.encode(`${JSON.stringify({ type: "html", chunk })}\n`));
-          }
-        }
-
-        const tail = decoder.decode();
-        if (tail) {
-          controller.enqueue(encoder.encode(`${JSON.stringify({ type: "html", chunk: tail })}\n`));
-        }
-
-        controller.enqueue(encoder.encode(`${JSON.stringify({ type: "done" })}\n`));
-        controller.close();
-      } catch (error) {
-        controller.error(error);
-      }
+  const payload: PatchPayload = {
+    meta: {
+      outlet,
+      head: headCtx.resolveTags(),
+      htmlAttrs: headCtx.htmlAttrs,
+      bodyAttrs: headCtx.bodyAttrs,
     },
-  });
+    html: htmlChunkGenerator(htmlStream),
+  };
+
+  // encode() returns ReadableStream<string>, convert to Uint8Array
+  const turboStream = encode(payload);
+  return turboStream.pipeThrough(new TextEncoderStream());
 }
 
 function getPatchHeaders(
@@ -213,7 +202,7 @@ function getPatchHeaders(
     ...responseHeaders,
     "Cache-Control": "private, no-store",
     "Content-Encoding": "identity",
-    "Content-Type": "application/x-ndjson; charset=utf-8",
+    "Content-Type": "application/x-turbo-stream; charset=utf-8",
     "X-Content-Type-Options": "nosniff",
   };
 }

@@ -3,6 +3,7 @@ import * as assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { decode } from "turbo-stream";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { chromium, type Browser, type ConsoleMessage, type Page } from "playwright";
@@ -215,41 +216,50 @@ describe("integration", () => {
     assert.ok(html.includes('content="width=device-width, initial-scale=1.0"'));
   });
 
-  it("should return NDJSON patch stream for valid route", async () => {
+  it("should return turbo-stream patch for valid route", async () => {
     const response = await fetch(`${BASE_URL}/_sf/patch`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/x-ndjson",
+        Accept: "application/x-turbo-stream",
       },
       body: JSON.stringify({ url: "/", outlet: "#app" }),
     });
 
     assert.strictEqual(response.status, 200);
-    assert.ok(response.headers.get("Content-Type")?.includes("application/x-ndjson"));
+    assert.ok(response.headers.get("Content-Type")?.includes("application/x-turbo-stream"));
     assert.strictEqual(response.headers.get("Cache-Control"), "private, no-store");
     assert.strictEqual(response.headers.get("X-Content-Type-Options"), "nosniff");
 
-    const text = await response.text();
-    const lines = text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+    // Decode turbo-stream payload
+    const stringStream = new ReadableStream<string>({
+      async start(controller) {
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(decoder.decode(value, { stream: true }));
+        }
+        controller.enqueue(decoder.decode());
+        controller.close();
+      },
+    });
 
-    assert.ok(lines.length >= 2);
+    const payload = (await decode(stringStream)) as {
+      meta: { outlet: string; head: unknown[] };
+      html: AsyncIterable<string>;
+    };
 
-    const messages = lines.map((line) => JSON.parse(line)) as Array<
-      | { type: "meta"; outlet?: string; head?: unknown[] }
-      | { type: "html"; chunk?: string }
-      | { type: "done" }
-    >;
+    assert.strictEqual(payload.meta.outlet, "#app");
+    assert.ok(Array.isArray(payload.meta.head));
 
-    assert.strictEqual(messages[0]?.type, "meta");
-    assert.strictEqual(messages[0]?.outlet, "#app");
-    assert.ok(Array.isArray(messages[0]?.head));
-
-    assert.strictEqual(messages[messages.length - 1]?.type, "done");
-    assert.ok(messages.some((msg) => msg.type === "html"));
+    // Consume html async iterable
+    const htmlChunks: string[] = [];
+    for await (const chunk of payload.html) {
+      htmlChunks.push(chunk);
+    }
+    assert.ok(htmlChunks.length > 0);
   });
 
   it("should return 400 for patch request missing url", async () => {

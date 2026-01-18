@@ -1,18 +1,23 @@
 import diff from "./diff-dom-streaming.ts";
 import type { HeadTag } from "./head.ts";
+import { decode } from "turbo-stream";
 
-export interface PatchMetaMessage {
-  type: "meta";
+export interface PatchMeta {
+  outlet?: string;
   head?: HeadTag[];
   htmlAttrs?: Record<string, string>;
   bodyAttrs?: Record<string, string>;
 }
 
-type PatchMessage = PatchMetaMessage | { type: "html"; chunk: string } | { type: "done" };
+/** Decoded patch payload from turbo-stream. */
+interface PatchPayload {
+  meta: PatchMeta;
+  html: AsyncIterable<string>;
+}
 
 export interface ApplyPatchStreamOptions {
   useTransition: boolean;
-  applyMeta: (meta: PatchMetaMessage) => void;
+  applyMeta: (meta: PatchMeta) => void;
   onChunkProcessed?: () => void;
 }
 
@@ -22,77 +27,39 @@ export async function applyPatchStream(response: Response, options: ApplyPatchSt
   }
 
   const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  let htmlController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
 
   const htmlStream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      htmlController = controller;
-    },
-    cancel() {
-      htmlController = null;
+    start(c) {
+      controller = c;
     },
   });
 
-  const consumeNdjson = async () => {
-    const reader = response.body!.getReader();
-    let buffer = "";
-    let streamClosed = false;
+  // Decode turbo-stream payload: { meta, html: AsyncIterable<string> }
+  const stringStream = response.body.pipeThrough(new TextDecoderStream());
+  const payload = (await decode(stringStream)) as PatchPayload;
 
-    const closeStream = () => {
-      if (streamClosed) return;
-      streamClosed = true;
-      htmlController?.close();
-    };
+  // Apply meta immediately
+  options.applyMeta(payload.meta);
 
+  // Consume html async iterable, forwarding chunks to diff-dom-streaming
+  const consumeHtml = (async () => {
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex = buffer.indexOf("\n");
-        while (newlineIndex !== -1) {
-          const line = buffer.slice(0, newlineIndex).trim();
-          buffer = buffer.slice(newlineIndex + 1);
-          if (line) {
-            const msg = JSON.parse(line) as PatchMessage;
-
-            if (msg.type === "meta") {
-              options.applyMeta(msg);
-            } else if (msg.type === "html") {
-              htmlController?.enqueue(encoder.encode(msg.chunk));
-            } else if (msg.type === "done") {
-              closeStream();
-              return;
-            }
-          }
-          newlineIndex = buffer.indexOf("\n");
-        }
+      for await (const chunk of payload.html) {
+        controller?.enqueue(encoder.encode(chunk));
       }
-
-      buffer += decoder.decode();
-      if (buffer.trim()) {
-        const msg = JSON.parse(buffer) as PatchMessage;
-        if (msg.type === "meta") {
-          options.applyMeta(msg);
-        } else if (msg.type === "html") {
-          htmlController?.enqueue(encoder.encode(msg.chunk));
-        }
-      }
-      closeStream();
-    } catch (error) {
-      htmlController?.error(error);
-      throw error;
+    } catch (err) {
+      controller?.error(err as Error);
+      throw err;
+    } finally {
+      controller?.close();
     }
-  };
-
-  const ndjsonPromise = consumeNdjson();
+  })();
 
   await diff(document, htmlStream, {
     transition: options.useTransition,
     syncMutations: !options.useTransition,
     onChunkProcessed: options.onChunkProcessed,
   });
-  await ndjsonPromise;
+  await consumeHtml;
 }

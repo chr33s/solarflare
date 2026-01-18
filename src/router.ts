@@ -205,7 +205,7 @@ export class Router {
       {
         method: "POST",
         headers: {
-          Accept: "application/x-ndjson",
+          Accept: "application/x-turbo-stream",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ url: url.pathname + url.search + url.hash, outlet: "#app" }),
