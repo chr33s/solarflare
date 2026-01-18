@@ -135,6 +135,41 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
   let oldNode = oldParent.firstChild;
   let newNode = await walker[FIRST_CHILD](newParent);
   let extra = 0;
+  let pendingFragment: DocumentFragment | null = null;
+  let pendingBefore: ChildNode | null = null;
+
+  const createFragment = () =>
+    oldParent.ownerDocument?.createDocumentFragment?.() ?? document.createDocumentFragment();
+
+  const flushPendingInsertions = () => {
+    if (!pendingFragment) return;
+    const fragment = pendingFragment;
+    const before = pendingBefore;
+    pendingFragment = null;
+    pendingBefore = null;
+    walker[APPLY_TRANSITION](() => {
+      if (before && before.parentNode === oldParent) {
+        oldParent.insertBefore(fragment, before);
+      } else {
+        oldParent.appendChild(fragment);
+      }
+    });
+  };
+
+  const queueInsertion = (node: Node, before: ChildNode | null) => {
+    if (!pendingFragment || pendingBefore !== before) {
+      flushPendingInsertions();
+      pendingFragment = createFragment();
+      pendingBefore = before;
+    }
+    pendingFragment.appendChild(node);
+  };
+
+  const shouldInsertImmediately = (node: Node) => {
+    if (node.nodeType !== ELEMENT_TYPE) return false;
+    const el = node as Element;
+    return el.tagName === "SCRIPT";
+  };
 
   // Extract keyed nodes from previous children and keep track of total count.
   while (oldNode) {
@@ -156,6 +191,7 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
     let insertedNode;
 
     if (keyedNodes && (newKey = getKey(newNode)) && (foundNode = keyedNodes[newKey])) {
+      flushPendingInsertions();
       delete keyedNodes[newKey];
       if (foundNode !== oldNode) {
         walker[APPLY_TRANSITION](() => {
@@ -178,20 +214,33 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
       oldNode = oldNode.nextSibling;
       if (getKey(checkOld)) {
         insertedNode = newNode.cloneNode(true);
-        walker[APPLY_TRANSITION](() => {
-          // checkOld may have been moved/removed by a previous batched mutation
-          if (checkOld!.parentNode === oldParent) {
-            oldParent.insertBefore(insertedNode!, checkOld!);
-          } else {
-            oldParent.appendChild(insertedNode!);
-          }
-        });
+        if (shouldInsertImmediately(insertedNode!)) {
+          flushPendingInsertions();
+          walker[APPLY_TRANSITION](() => {
+            if (checkOld!.parentNode === oldParent) {
+              oldParent.insertBefore(insertedNode!, checkOld!);
+            } else {
+              oldParent.appendChild(insertedNode!);
+            }
+          });
+        } else {
+          queueInsertion(
+            insertedNode!,
+            checkOld!.parentNode === oldParent ? (checkOld as ChildNode) : null,
+          );
+        }
       } else {
+        flushPendingInsertions();
         await updateNode(checkOld, newNode, walker);
       }
     } else {
       insertedNode = newNode.cloneNode(true);
-      walker[APPLY_TRANSITION](() => oldParent.appendChild(insertedNode!));
+      if (shouldInsertImmediately(insertedNode!)) {
+        flushPendingInsertions();
+        walker[APPLY_TRANSITION](() => oldParent.appendChild(insertedNode!));
+      } else {
+        queueInsertion(insertedNode!, null);
+      }
     }
 
     newNode = (await walker[NEXT_SIBLING](newNode)) as ChildNode;
@@ -200,6 +249,8 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
     // need to decrement the extra counter, so we can skip removing the old node.
     if (!insertedNode) extra--;
   }
+
+  flushPendingInsertions();
 
   walker[APPLY_TRANSITION](() => {
     // Remove old keyed nodes.

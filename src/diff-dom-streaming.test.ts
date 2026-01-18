@@ -399,6 +399,27 @@ describe("chromium", () => {
     );
   });
 
+  it("should preserve order for appended nodes", async () => {
+    const [newHTML] = await testDiff({
+      oldHTMLString: `
+        <div id="root"></div>
+      `,
+      newHTMLStringChunks: ['<div id="root">', "<span>one</span><span>two</span>", "</div>"],
+    });
+
+    assert.strictEqual(
+      newHTML,
+      normalize(`
+        <html>
+          <head></head>
+          <body>
+            <div id="root"><span>one</span><span>two</span></div>
+          </body>
+        </html>
+      `),
+    );
+  });
+
   it("should diff children (key) move by shuffling", async () => {
     const [newHTML] = await testDiff({
       oldHTMLString: `

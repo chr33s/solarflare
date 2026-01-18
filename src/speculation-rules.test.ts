@@ -48,16 +48,71 @@ describe("supportsSpeculationRules", () => {
 });
 
 describe("injectSpeculationRules", () => {
-  let mockHead: { appendChild: ReturnType<typeof mock.fn> };
-  let mockScript: { type: string; textContent: string };
+  let headChildren: any[];
 
   beforeEach(() => {
-    mockScript = { type: "", textContent: "" };
-    mockHead = { appendChild: mock.fn() };
+    headChildren = [];
+    const mockHead = {
+      appendChild: mock.fn((el: any) => {
+        headChildren.push(el);
+        return el;
+      }),
+      querySelector: (selector: string) => {
+        if (selector === 'script[type="speculationrules"]') {
+          return headChildren.find((el) => el.type === "speculationrules") ?? null;
+        }
+        if (selector === "[data-sf-head]") {
+          return (
+            headChildren.find(
+              (el) => typeof el.getAttribute === "function" && el.getAttribute("data-sf-head"),
+            ) ?? null
+          );
+        }
+        return null;
+      },
+    };
 
     Object.defineProperty(globalThis, "document", {
       value: {
-        createElement: () => mockScript,
+        createElement: () => {
+          const el = {
+            type: "",
+            textContent: "",
+            attributes: new Map<string, string>(),
+            setAttribute(name: string, value: string) {
+              this.attributes.set(name, value);
+            },
+            getAttribute(name: string) {
+              return this.attributes.get(name) ?? null;
+            },
+            replaceWith(newNode: any) {
+              const index = headChildren.indexOf(el);
+              if (index >= 0) headChildren[index] = newNode;
+            },
+          };
+          return el;
+        },
+        createRange: () => {
+          let insertIndex: number | null = null;
+          return {
+            setStartBefore(node: any) {
+              insertIndex = headChildren.indexOf(node);
+            },
+            selectNodeContents() {
+              insertIndex = headChildren.length;
+            },
+            collapse() {},
+            insertNode(node: any) {
+              if (insertIndex == null || insertIndex < 0) {
+                headChildren.push(node);
+                insertIndex = headChildren.length;
+                return;
+              }
+              headChildren.splice(insertIndex, 0, node);
+              insertIndex += 1;
+            },
+          };
+        },
         head: mockHead,
       },
       writable: true,
@@ -80,9 +135,9 @@ describe("injectSpeculationRules", () => {
 
     injectSpeculationRules(rules);
 
-    assert.strictEqual(mockScript.type, "speculationrules");
-    assert.strictEqual(mockScript.textContent, JSON.stringify(rules));
-    assert.strictEqual(mockHead.appendChild.mock.calls.length, 1);
+    assert.strictEqual(headChildren.length, 1);
+    assert.strictEqual(headChildren[0].type, "speculationrules");
+    assert.strictEqual(headChildren[0].textContent, JSON.stringify(rules));
   });
 
   it("should handle complex rules object", () => {
@@ -96,7 +151,24 @@ describe("injectSpeculationRules", () => {
 
     injectSpeculationRules(rules);
 
-    assert.strictEqual(mockScript.textContent, JSON.stringify(rules));
+    assert.strictEqual(headChildren[0].textContent, JSON.stringify(rules));
+  });
+
+  it("should replace existing speculation rules script", () => {
+    const firstRules: SpeculationRules = {
+      prefetch: [{ source: "list", urls: ["/page1"] }],
+    };
+
+    const secondRules: SpeculationRules = {
+      prerender: [{ source: "list", urls: ["/page2"] }],
+    };
+
+    injectSpeculationRules(firstRules);
+    injectSpeculationRules(secondRules);
+
+    assert.strictEqual(headChildren.length, 1);
+    assert.strictEqual(headChildren[0].type, "speculationrules");
+    assert.strictEqual(headChildren[0].textContent, JSON.stringify(secondRules));
   });
 });
 

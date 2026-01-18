@@ -502,14 +502,20 @@ export class Router {
     resetHeadContext();
 
     if (entry.styles?.length) {
+      const fragment = document.createDocumentFragment();
+      let hasNew = false;
       for (const href of entry.styles) {
         const absoluteHref = new URL(href, location.origin).href;
         if (!document.querySelector(`link[href="${absoluteHref}"], link[href="${href}"]`)) {
           const link = document.createElement("link");
           link.rel = "stylesheet";
           link.href = absoluteHref;
-          document.head.appendChild(link);
+          fragment.appendChild(link);
+          hasNew = true;
         }
+      }
+      if (hasNew) {
+        document.head.appendChild(fragment);
       }
     }
   }

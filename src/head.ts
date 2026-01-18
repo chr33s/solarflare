@@ -653,6 +653,22 @@ function applyHeadToDOM(tags: HeadTag[]) {
 
   const head = document.head;
   const newManagedTags = new Set<Element>();
+  let insertionRange: Range | null = null;
+
+  const getInsertionRange = () => {
+    if (insertionRange) return insertionRange;
+    const range = document.createRange();
+    const firstManaged = head.querySelector("[data-sf-head]");
+    if (firstManaged) {
+      range.setStartBefore(firstManaged);
+      range.collapse(true);
+    } else {
+      range.selectNodeContents(head);
+      range.collapse(false);
+    }
+    insertionRange = range;
+    return range;
+  };
 
   // Track existing managed elements
   const existingByKey = new Map<string, Element>();
@@ -690,7 +706,10 @@ function applyHeadToDOM(tags: HeadTag[]) {
       // Create new element
       const el = createElementFromTag(tag);
       el.setAttribute("data-sf-head", key);
-      head.appendChild(el);
+      const range = getInsertionRange();
+      range.insertNode(el);
+      range.setStartAfter(el);
+      range.collapse(true);
       newManagedTags.add(el);
     }
   }

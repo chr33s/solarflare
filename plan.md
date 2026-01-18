@@ -1,80 +1,115 @@
-# Router Protocol Update
+# Plan: HTML Web Apis (Range, DocumentFragment)
 
-Using **POST** for patch/Flight updates is the best fit for an **auth’d, app-like** Solarflare app where responses are **per-user / `no-store`**—and it neatly avoids the Cloudflare `Vary: Accept` concern.
+## Goal
 
-To support **Deferred Streaming**, the response uses **NDJSON** (Newline Delimited JSON) to stream metadata immediately and then pipe HTML chunks as they are rendered.
+After reviewing the source code and structure of the `chr33s/solarflare` repository, here are specific examples of where the HTML Web APIs, `Range` and `DocumentFragment`, can be implemented:
 
-### Implementation Protocol
+### 1. **Inserting Routes Dynamically:**
 
-1. **Endpoints**
+In `src/codemod.ts`, there is a function `extractRouteStructure` for handling route structures in the application. Enhance it using the `Range` API to enable precise dynamic template rendering or modification at specified portions of the route-based template:
 
-- `GET /some/route` → normal HTML document (can be `private, no-store` or cached depending on auth model)
-- `POST /_sf/patch` → returns the navigation update payload for the client router
+Original example:
 
-2. **Request**
-
-- `Content-Type: application/json`
-- `Accept: application/x-ndjson`
-
-```json
-{
-  "url": "/some/route?tab=teams",
-  "outlet": "#app",
-  "state": "opaque-client-state"
+```typescript
+if (calleeName === "route" && args.length >= 2) {
+  const routePath = Node.isStringLiteral(pathArg) ? pathArg.getLiteralValue() : "?";
 }
 ```
 
-3. **Response Stream (NDJSON)**
-   - `Content-Type: application/x-ndjson`
-   - `Cache-Control: private, no-store`
+Improved with `Range`:
 
-- `X-Content-Type-Options: nosniff`
+```typescript
+const range = document.createRange();
+const parentElement = document.querySelector("#my-routes-section");
 
-**Chunk 1 (Metadata):**
+range.selectNode(parentElement);
 
-```json
-{
-  "type": "meta",
-  "outlet": "#app",
-  "requestId": "req_123",
-  "head": [{ "tag": "title", "textContent": "Teams" }],
-  "scripts": ["<script>window.store=...</script>"]
-}
+const routeElement = document.createElement("div");
+routeElement.setAttribute("data-route", routePath);
+
+range.insertNode(routeElement);
 ```
 
-**Chunk N (HTML Stream):**
+---
 
-```json
-{ "type": "html", "chunk": "<div>...</div>" }
+### 2. **Deferred Rendering with Priority:**
+
+In the `readme.md`, the section describing the `Deferred` component mentions deferred rendering with fallback content:
+
+```tsx
+<Deferred priority="high" fallback={<div>Loading additional content...</div>}>
+  ...
+</Deferred>
 ```
 
-**Chunk M (Deferred Data):**
+This could utilize a `DocumentFragment` to preload the high-priority content into the DOM before final rendering. This ensures smooth user experience by reducing blocking during deferred loading.
 
-````json
-{ "type": "html", "chunk": "<script>...hydrate...</script>" }
+```javascript
+const fragment = document.createDocumentFragment();
+const fallback = document.createElement("div");
+fallback.textContent = "Loading additional content...";
+fragment.append(fallback);
 
-**Final Chunk (EOF):**
+// Later, replace fallback with the content
+const content = document.createElement("div");
+content.textContent = "Actual content";
+fragment.replaceChild(content, fallback);
 
-```json
-{ "type": "done" }
-````
-
+document.getElementById("deferred-container").appendChild(fragment);
 ```
 
-### Implementation notes
+---
 
-- **Server**: `renderToPatchStream` wraps the HTML stream.
-- Sends a `meta` chunk first (head tags, critical scripts, request id).
-- Transforms HTML chunks into `html` messages, one JSON object per line.
-- Pipes deferred hydration scripts (data islands) as they resolve.
-- Ends with a `done` chunk and closes the stream.
-- **Client**: `src/router.ts` consumes the stream.
-- Parses NDJSON line-by-line using `TextDecoder` and newline delimiters.
-- Applies `meta` updates (Head, scripts) immediately.
-- Reconstructs a `ReadableStream` from `html` chunks and feeds it to `diff-dom-streaming`.
-- Aborts on route change using `AbortController`.
-- **Error handling**:
-- Use HTTP status for fatal errors (4xx/5xx) and a JSON error line when possible.
-- Client treats non-200 or missing `meta` as a failed patch and falls back to full navigation.
-- **Ordering**: maintain `meta → html* → done` and never interleave unrelated requests.
+### 3. **Speculation Rules Preloading:**
+
+In `src/speculation-rules.ts`, speculation rules manage prefetch and prerendering. To align with this feature, `Range` could help to dynamically inject meta tags for better SEO or performance optimizations:
+
+```javascript
+const range = document.createRange();
+const headElement = document.getElementsByTagName("head")[0];
+
+range.selectNode(headElement);
+
+const prefetchMeta = document.createElement("meta");
+prefetchMeta.setAttribute("name", "rel");
+prefetchMeta.setAttribute("content", "prefetch");
+prefetchMeta.setAttribute("href", "/api/data");
+
+range.insertNode(prefetchMeta);
 ```
+
+---
+
+Integrating these features into Solarflare will optimize rendering and dynamic content handling, improving user experience. Let me know if you'd like help implementing these enhancements in specific files or modules!
+
+---
+
+## Implementation Plan (src directory)
+
+### 1. Confirm integration points in core runtime
+
+- Use the streamed navigation path in `src/router.ts` (`#loadRoute`) as the primary DOM update entry point. This is where streamed HTML is diffed and applied and where new styles are appended.
+- Use `src/diff-dom-streaming.ts` as the core DOM mutation engine to introduce `DocumentFragment`-based batching for insertions.
+- Use `src/head.ts` (`applyHeadToDOM`) and `src/speculation-rules.ts` (`injectSpeculationRules`) as the centralized head mutation APIs to introduce `Range`-based insertion control.
+
+### 2. DocumentFragment batching for DOM insertions
+
+- **`src/diff-dom-streaming.ts`**: In `setChildNodes`, batch multiple appended/inserted nodes into a `DocumentFragment` before a single DOM insertion when `insertedNode` is used. This keeps the diffing algorithm intact while minimizing reflow during streaming.
+- **`src/router.ts`**: In `#loadRoute`, when adding `entry.styles`, create a `DocumentFragment` for new `<link>` tags and append once to `document.head`.
+
+### 3. Range-based insertion for head mutations
+
+- **`src/head.ts`**: In `applyHeadToDOM`, use a `Range` anchored to `document.head` to insert newly created head tags before the first managed head node (or at the end if none exist). This preserves resolved tag order and avoids reliance on `appendChild` ordering when existing nodes are present.
+- **`src/speculation-rules.ts`**: Update `injectSpeculationRules` to use a `Range` to replace any existing speculation rules script in place (if present), otherwise insert before the first managed head node for stable ordering.
+
+### 4. Tests and validation
+
+- **`src/diff-dom-streaming.test.ts`**: Add a case validating that batched fragment insertion produces identical DOM results and mutation ordering for streamed chunks.
+- **`src/head.test.ts`**: Add coverage ensuring `applyHeadToDOM` preserves order when existing managed nodes are present and new nodes are inserted via `Range`.
+- **`src/speculation-rules.test.ts`**: Add coverage for replacing existing speculation rules scripts without duplicating tags.
+- Run `npm run check && npm run test` after implementation.
+
+### 5. Rollout and verification
+
+- Verify streamed navigation updates still trigger `handleDeferredHydrationNode` and that deferred hydration remains functional with batched DOM insertions.
+- Confirm head tag deduplication and ordering remain consistent across SSR and client navigation flows.

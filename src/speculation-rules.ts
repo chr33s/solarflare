@@ -62,7 +62,23 @@ export function injectSpeculationRules(rules: SpeculationRules) {
   const script = document.createElement("script");
   script.type = "speculationrules";
   script.textContent = JSON.stringify(rules);
-  document.head.appendChild(script);
+  const head = document.head;
+  const existing = head.querySelector('script[type="speculationrules"]');
+  if (existing) {
+    existing.replaceWith(script);
+    return script;
+  }
+
+  const range = document.createRange();
+  const firstManaged = head.querySelector("[data-sf-head]");
+  if (firstManaged) {
+    range.setStartBefore(firstManaged);
+    range.collapse(true);
+  } else {
+    range.selectNodeContents(head);
+    range.collapse(false);
+  }
+  range.insertNode(script);
   return script;
 }
 

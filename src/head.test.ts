@@ -10,6 +10,7 @@ import {
   tagWeight,
   normalizeInputToTags,
   tagToHtml,
+  applyHeadTags,
   Head,
   HEAD_MARKER,
   serializeHeadState,
@@ -427,6 +428,119 @@ describe("useHead", () => {
 
     entry.dispose();
     assert.strictEqual(ctx.entries.length, 0);
+  });
+});
+
+describe("applyHeadTags (DOM insertion)", () => {
+  const installMockHeadDom = () => {
+    const prevDocument = (globalThis as any).document;
+    const headChildren: any[] = [];
+
+    const mockHead = {
+      appendChild(el: any) {
+        headChildren.push(el);
+        return el;
+      },
+      insertBefore(el: any, ref: any) {
+        const index = headChildren.indexOf(ref);
+        if (index >= 0) {
+          headChildren.splice(index, 0, el);
+        } else {
+          headChildren.push(el);
+        }
+        return el;
+      },
+      querySelector(selector: string) {
+        if (selector === "[data-sf-head]") {
+          return (
+            headChildren.find(
+              (el) => typeof el.getAttribute === "function" && el.getAttribute("data-sf-head"),
+            ) ?? null
+          );
+        }
+        return null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+    };
+
+    (globalThis as any).document = {
+      head: mockHead,
+      title: "",
+      createElement(tag: string) {
+        const attributes = new Map<string, string>();
+        const el = {
+          tagName: tag.toUpperCase(),
+          textContent: "",
+          setAttribute(name: string, value: string) {
+            attributes.set(name, value);
+          },
+          getAttribute(name: string) {
+            return attributes.get(name) ?? null;
+          },
+          removeAttribute(name: string) {
+            attributes.delete(name);
+          },
+          remove() {
+            const index = headChildren.indexOf(el);
+            if (index >= 0) headChildren.splice(index, 1);
+          },
+        };
+        return el;
+      },
+      createRange() {
+        let insertIndex: number | null = null;
+        return {
+          setStartBefore(node: any) {
+            insertIndex = headChildren.indexOf(node);
+          },
+          selectNodeContents() {
+            insertIndex = headChildren.length;
+          },
+          collapse() {},
+          setStartAfter(node: any) {
+            insertIndex = headChildren.indexOf(node) + 1;
+          },
+          insertNode(node: any) {
+            if (insertIndex == null || insertIndex < 0) {
+              headChildren.push(node);
+              insertIndex = headChildren.length;
+              return;
+            }
+            headChildren.splice(insertIndex, 0, node);
+            insertIndex += 1;
+          },
+        };
+      },
+    };
+
+    return {
+      headChildren,
+      restore() {
+        (globalThis as any).document = prevDocument;
+      },
+    };
+  };
+
+  it("inserts new tags before first managed element in order", () => {
+    const dom = installMockHeadDom();
+    const { headChildren } = dom;
+
+    const managed = (globalThis as any).document.createElement("script");
+    managed.setAttribute("data-sf-head", "managed");
+    headChildren.push(managed);
+
+    applyHeadTags([
+      { tag: "meta", props: { name: "description", content: "Test" } },
+      { tag: "link", props: { rel: "stylesheet", href: "/styles.css" } },
+    ]);
+
+    assert.strictEqual(headChildren[0].tagName, "META");
+    assert.strictEqual(headChildren[1].tagName, "LINK");
+    assert.strictEqual(headChildren[2], managed);
+
+    dom.restore();
   });
 });
 
