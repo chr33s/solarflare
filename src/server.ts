@@ -374,7 +374,30 @@ function createAssetInjectionTransformer(
   let doctypeInjected = false;
   let headInjected = false;
   const bodyMarker = /* html */ `<solarflare-body>${BODY_MARKER}</solarflare-body>`;
-  const headMarker = /* html */ `<solarflare-head>${HEAD_MARKER}</solarflare-head>`;
+  const headMarker = HEAD_MARKER;
+
+  function replaceHeadMarker(html: string) {
+    const markerIndex = html.indexOf(headMarker);
+    if (markerIndex === -1) return { html, replaced: false };
+
+    const templateStart = html.lastIndexOf("<template", markerIndex);
+    if (templateStart !== -1) {
+      const tagEnd = html.indexOf(">", templateStart);
+      if (tagEnd !== -1) {
+        const openTag = html.slice(templateStart, tagEnd + 1);
+        const templateEnd = html.indexOf("</template>", markerIndex);
+        if (openTag.includes("data-sf-head") && templateEnd !== -1) {
+          const replaced =
+            html.slice(0, templateStart) +
+            getHeadContext().renderToString() +
+            html.slice(templateEnd + "</template>".length);
+          return { html: replaced, replaced: true };
+        }
+      }
+    }
+
+    return { html: html.replace(headMarker, getHeadContext().renderToString()), replaced: true };
+  }
 
   return new TransformStream({
     transform(chunk, controller) {
@@ -391,13 +414,9 @@ function createAssetInjectionTransformer(
 
       // Inject head tags at Head marker (only once)
       if (!headInjected) {
-        const headMarkerIndex = buffer.indexOf(headMarker);
-        if (headMarkerIndex !== -1) {
-          const headCtx = getHeadContext();
-          const headHtml = headCtx.renderToString();
-          buffer = buffer.replace(headMarker, headHtml);
-          headInjected = true;
-        }
+        const result = replaceHeadMarker(buffer);
+        buffer = result.html;
+        headInjected = result.replaced;
       }
 
       // Check if we have the complete body marker
@@ -431,12 +450,9 @@ function createAssetInjectionTransformer(
         }
         // Final check for head marker in remaining content
         if (!headInjected) {
-          const headMarkerIndex = buffer.indexOf(headMarker);
-          if (headMarkerIndex !== -1) {
-            const headCtx = getHeadContext();
-            const headHtml = headCtx.renderToString();
-            buffer = buffer.replace(headMarker, headHtml);
-          }
+          const result = replaceHeadMarker(buffer);
+          buffer = result.html;
+          headInjected = result.replaced;
         }
         // Final check for body marker in remaining content
         const markerIndex = buffer.indexOf(bodyMarker);

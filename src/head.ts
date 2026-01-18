@@ -831,7 +831,8 @@ export const HEAD_MARKER = "<!--SOLARFLARE_HEAD-->";
  * </head>
  */
 export function Head() {
-  return h("solarflare-head", {
+  return h("template", {
+    "data-sf-head": "",
     dangerouslySetInnerHTML: { __html: HEAD_MARKER },
   });
 }
