@@ -3,13 +3,14 @@ import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
-import { getRuntime, peekRuntime, clearRuntime } from "./runtime.ts";
+import { getRuntime } from "./runtime.ts";
 import { stylesheets, supportsConstructableStylesheets } from "./stylesheets.ts";
 import { getPreloadedStylesheet } from "./server.styles.ts";
 
+export { initHmrEntry, reloadAllStylesheets } from "./hmr.ts";
+export { hmr } from "./client.hmr.ts";
 export { Deferred } from "./render-priority.ts";
-export { installHeadHoisting, createHeadContext, setHeadContext };
-export { getRuntime, peekRuntime, clearRuntime };
+export { navigate } from "./router.ts";
 
 /** Initializes client-side store from SSR hydration data. */
 export async function initClient() {
@@ -187,93 +188,3 @@ export function define<P extends Record<string, any>>(
 
   return Component;
 }
-
-// Store re-exports
-export {
-  // Signals
-  params,
-  serverData,
-  pathname,
-  // Actions
-  initStore,
-  setParams,
-  setServerData,
-  setPathname,
-  resetStore,
-  // Types
-  type ServerData,
-  type StoreConfig,
-} from "./store.ts";
-
-export {
-  // Data islands
-  serializeDataIsland,
-  extractDataIsland,
-  // Store hydration
-  hydrateStore,
-  // Component hydration
-  hydrateComponent,
-  initHydrationCoordinator,
-  cleanupHydrationCoordinator,
-  queueHydration,
-  isHydrationReady,
-} from "./hydration.ts";
-
-// Router re-exports
-export {
-  createRouter,
-  initRouter,
-  getRouter,
-  supportsViewTransitions,
-  Router,
-  navigate,
-  isActive,
-  type RouteManifestEntry,
-  type RoutesManifest,
-  type RouteMatch,
-  type NavigateOptions,
-  type RouterConfig,
-  type RouteSubscriber,
-} from "./router.ts";
-
-// HMR utilities re-exports
-export {
-  // Hook state preservation
-  saveHookState,
-  restoreHookState,
-  clearHookState,
-  getRefStorage,
-  // Scroll position preservation
-  saveScrollPosition,
-  restoreScrollPosition,
-  clearScrollPosition,
-  // State cleanup
-  clearAllHMRState,
-  getHMRStateSize,
-  // Error boundary
-  HMRErrorBoundary,
-  // CSS HMR
-  reloadStylesheet,
-  reloadAllStylesheets,
-  removeStylesheet,
-  acceptCssHMR,
-  // HMR wrapper
-  createHMRWrapper,
-  initHmrEntry,
-  type HMRWrapperOptions,
-  // HMR events
-  dispatchHMREvent,
-  onHMREvent,
-} from "./hmr.ts";
-
-// Re-export stylesheet utilities for Constructable Stylesheets support
-export { stylesheets, supportsConstructableStylesheets, StylesheetManager } from "./stylesheets.ts";
-
-export {
-  generateStylePreloadScript,
-  getPreloadedStylesheet,
-  hydratePreloadedStyles,
-} from "./server.styles.ts";
-
-export { hmr } from "./client.hmr.ts";
-export type { HmrApi, HmrCallback } from "./client.hmr.ts";

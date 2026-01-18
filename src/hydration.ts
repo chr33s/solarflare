@@ -8,6 +8,31 @@ const STORE_ISLAND_ID = "sf-store";
 /** Head island ID. */
 const HEAD_ISLAND_ID = "sf-head";
 
+/** Gets the default data island ID for a component tag. */
+export function getComponentDataIslandId(tag: string) {
+  return `${tag}-data`;
+}
+
+/** Gets the deferred data island ID for a component tag and key. */
+export function getDeferredIslandId(tag: string, key: string) {
+  return `${tag}-deferred-${key}`;
+}
+
+/** Gets the deferred hydration script ID for a component tag and key. */
+export function getHydrateScriptId(tag: string, key: string) {
+  return `${tag}-hydrate-${key}`;
+}
+
+/** Gets the deferred data island prefix for a component tag. */
+export function getDeferredIslandPrefix(tag: string) {
+  return `${tag}-deferred-`;
+}
+
+/** Gets the hydration script prefix for a component tag. */
+export function getHydrateScriptPrefix(tag: string) {
+  return `${tag}-hydrate-`;
+}
+
 /**
  * Serializes data to a script tag for progressive hydration.
  * Includes a stable id attribute for diff-dom-streaming replacements.
@@ -104,7 +129,7 @@ export async function hydrateComponent(tag: string, dataIslandId?: string) {
   };
   if (!element) return;
 
-  const islandId = dataIslandId ?? `${tag}-data`;
+  const islandId = dataIslandId ?? getComponentDataIslandId(tag);
   const data = await extractDataIsland<Record<string, unknown>>(islandId);
 
   if (data && typeof data === "object") {

@@ -1,7 +1,7 @@
-import { glob } from "node:fs/promises";
+import { glob, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { exists, readText } from "./build.ts";
+import { exists } from "./fs.ts";
 
 export interface BuildScanContext {
   rootDir: string;
@@ -25,7 +25,7 @@ export function createScanner(ctx: BuildScanContext) {
 
     const pkgPath = join(rootDir, "package.json");
     try {
-      const content = await readText(pkgPath);
+      const content = await readFile(pkgPath, "utf-8");
       const pkg = JSON.parse(content) as { imports?: Record<string, string> };
       const imports = pkg.imports ?? {};
 
@@ -62,7 +62,7 @@ export function createScanner(ctx: BuildScanContext) {
   }
 
   async function extractCssImports(filePath: string) {
-    const content = await readText(filePath);
+    const content = await readFile(filePath, "utf-8");
     const cssImports: string[] = [];
 
     const importRegex = /import\s+['"](.+\.css)['"]|import\s+['"](.+\.css)['"]\s*;/g;
@@ -78,7 +78,7 @@ export function createScanner(ctx: BuildScanContext) {
   }
 
   async function extractComponentImports(filePath: string) {
-    const content = await readText(filePath);
+    const content = await readFile(filePath, "utf-8");
     const imports: string[] = [];
 
     const importRegex = /import\s+(?:{[^}]+}|\w+)\s+from\s+['"]([^'"]+)['"]/g;

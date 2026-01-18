@@ -63,7 +63,11 @@ solarflare [options]
 
 ```tsx
 export default async function server(request: Request, params: Record<string, string>) {
-  return { title: "Hello" };
+  return {
+    _status: 200,
+    _headers: { "Cache-Control": "max-age=3600" },
+    title: "Hello",
+  };
 }
 ```
 
@@ -78,18 +82,6 @@ export default async function server() {
 }
 ```
 
-Response metadata via `_*` prefixed props:
-
-```tsx
-export default async function server() {
-  return {
-    _status: 201,
-    _headers: { "Cache-Control": "max-age=3600" },
-    title: "Created",
-  };
-}
-```
-
 ### Client Component
 
 ```tsx
@@ -101,10 +93,19 @@ export default function Client({ title }: { title: string }) {
 ### Layout
 
 ```tsx
-export default function Layout({ children }: { children: ComponentChildren }) {
+import type { VNode } from "preact";
+import { Body, Head } from "@chr33s/solarflare/server";
+
+export default function Layout({ children }: { children: VNode }) {
   return (
     <html>
-      <body>{children}</body>
+      <head>
+        <Head />
+      </html>
+      <body>
+        {children}
+        <Body />
+      </body>
     </html>
   );
 }
@@ -120,17 +121,15 @@ import { Deferred } from "@chr33s/solarflare/client";
 </Deferred>;
 ```
 
-### Configuration Meta Tags
+### Configuration using meta tags
 
 ```html
+<!-- router -->
 <meta name="sf:base" content="/" />
 <meta name="sf:scroll-behavior" content="auto" />
 <meta name="sf:view-transitions" content="false" />
-```
 
-### Performance Meta Tags
-
-```html
+<!-- performance -->
 <meta name="sf:preconnect" content="https://cdn.example.com" />
 <meta name="sf:early-flush" content="true" />
 <meta name="sf:critical-css" content="true" />
@@ -168,7 +167,8 @@ export default define(MyComponent, { shadow: true });
 ## Development
 
 ```sh
-npm install && npm run dev
+npm install
+npm run dev
 ```
 
 ## Codemod

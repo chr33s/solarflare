@@ -1,9 +1,8 @@
-import { mkdir, unlink } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { glob } from "node:fs/promises";
 import { rolldown } from "rolldown";
 import { createProgram } from "./ast.ts";
-import { write } from "./build.ts";
 import { assetUrlPrefixPlugin, type BuildArgs, moduleTypes } from "./build.bundle.ts";
 import { createScanner } from "./build.scan.ts";
 import { validateRoutes, generateRoutesTypeFile } from "./build.validate.ts";
@@ -39,7 +38,7 @@ export async function buildServer(options: BuildServerOptions) {
   }
 
   const routesTypeContent = generateRoutesTypeFile(routeFiles);
-  await write(routesTypePath, routesTypeContent);
+  await writeFile(routesTypePath, routesTypeContent);
   console.log("   Generated route types");
 
   const allModuleFiles = [
@@ -66,7 +65,7 @@ export async function buildServer(options: BuildServerOptions) {
     process.exit(1);
   }
 
-  await write(modulesPath, modulesContent);
+  await writeFile(modulesPath, modulesContent);
 
   console.log("📦 Building server bundle...");
 

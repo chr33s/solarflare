@@ -78,3 +78,19 @@ export function parsePath(filePath: string): ParsedPath {
     specificity,
   };
 }
+
+/** Finds a paired module path given a client or server path. */
+export function findPairedModulePath(
+  path: string,
+  modules: { client: Record<string, unknown>; server: Record<string, unknown> },
+) {
+  if (path.includes(".client.")) {
+    const serverPath = path.replace(".client.", ".server.");
+    return serverPath in modules.server ? serverPath : null;
+  }
+  if (path.includes(".server.")) {
+    const clientPath = path.replace(".server.", ".client.");
+    return clientPath in modules.client ? clientPath : null;
+  }
+  return null;
+}

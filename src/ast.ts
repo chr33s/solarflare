@@ -5,16 +5,18 @@ import { parsePath, type ParsedPath, type ModuleKind } from "./paths.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function readCompilerOptions() {
-  const configPath = join(__dirname, "..", "tsconfig.json");
-  const configFile = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
+export function readCompilerOptions(
+  configPath = join(__dirname, "..", "tsconfig.json"),
+  sys: ts.ParseConfigHost = ts.sys,
+) {
+  const configFile = ts.readConfigFile(configPath, (path) => sys.readFile(path));
 
   if (configFile.error) {
     console.warn("Failed to read tsconfig.json, using defaults");
     return {};
   }
 
-  const parsed = ts.parseJsonConfigFileContent(configFile.config, ts.sys, dirname(configPath));
+  const parsed = ts.parseJsonConfigFileContent(configFile.config, sys, dirname(configPath));
 
   if (parsed.errors.length > 0) {
     console.warn("Errors parsing tsconfig.json, using defaults");
@@ -46,6 +48,36 @@ export interface ParameterInfo {
   properties: string[];
 }
 
+function getFirstCallSignature(type: ts.Type) {
+  const signatures = type.getCallSignatures();
+  return signatures.length > 0 ? signatures[0] : null;
+}
+
+function getSignatureParameterInfo(
+  checker: ts.TypeChecker,
+  signature: ts.Signature,
+  sourceFile: ts.SourceFile,
+) {
+  const parameters: ParameterInfo[] = [];
+
+  for (const param of signature.getParameters()) {
+    const paramType = checker.getTypeOfSymbolAtLocation(param, sourceFile);
+    const properties = paramType.getProperties().map((p) => p.getName());
+
+    parameters.push({
+      name: param.getName(),
+      type: checker.typeToString(paramType),
+      optional: !!(param.flags & ts.SymbolFlags.Optional),
+      properties,
+    });
+  }
+
+  return {
+    parameters,
+    returnType: checker.typeToString(signature.getReturnType()),
+  };
+}
+
 /** Gets detailed information about a module's default export. */
 export function getDefaultExportInfo(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
   const symbol = checker.getSymbolAtLocation(sourceFile);
@@ -58,26 +90,16 @@ export function getDefaultExportInfo(checker: ts.TypeChecker, sourceFile: ts.Sou
   const type = checker.getTypeOfSymbolAtLocation(defaultExport, sourceFile);
   const signatures = type.getCallSignatures();
   const typeString = checker.typeToString(type);
-  const isFunction = signatures.length > 0;
+  const signature = getFirstCallSignature(type);
+  const isFunction = !!signature;
 
   const parameters: ParameterInfo[] = [];
   let returnType: string | null = null;
 
-  if (isFunction && signatures.length > 0) {
-    const sig = signatures[0];
-    returnType = checker.typeToString(sig.getReturnType());
-
-    for (const param of sig.getParameters()) {
-      const paramType = checker.getTypeOfSymbolAtLocation(param, sourceFile);
-      const properties = paramType.getProperties().map((p) => p.getName());
-
-      parameters.push({
-        name: param.getName(),
-        type: checker.typeToString(paramType),
-        optional: !!(param.flags & ts.SymbolFlags.Optional),
-        properties,
-      });
-    }
+  if (isFunction && signature) {
+    const info = getSignatureParameterInfo(checker, signature, sourceFile);
+    parameters.push(...info.parameters);
+    returnType = info.returnType;
   }
 
   return {

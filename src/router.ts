@@ -1,10 +1,11 @@
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
-import diff from "./diff-dom-streaming.ts";
 import { resetHeadContext, applyHeadTags, type HeadTag } from "./head.ts";
 import { setNavigationMode } from "./hydration.ts";
 import type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
 export type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
 import { dedupeDeferredScripts, handleDeferredHydrationNode } from "./router-deferred.ts";
+import { fetchWithRetry } from "./fetch.ts";
+import { applyPatchStream } from "./router-stream.ts";
 
 /** Internal route representation. */
 interface Route {
@@ -42,51 +43,6 @@ export type RouteSubscriber = (match: RouteMatch | null) => void;
 /** Checks if View Transitions API is supported. */
 export function supportsViewTransitions() {
   return typeof document !== "undefined" && "startViewTransition" in document;
-}
-
-/** Fetch retry options. */
-export interface FetchRetryOptions {
-  /** Max retry attempts. @default 3 */
-  maxRetries?: number;
-  /** Base delay in ms between retries. @default 1000 */
-  baseDelay?: number;
-  /** Status codes to retry on. @default 5xx errors */
-  retryOnStatus?: (status: number) => boolean;
-}
-
-/** Fetch with exponential backoff retry for transient failures. */
-export async function fetchWithRetry(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-  options: FetchRetryOptions = {},
-) {
-  const { maxRetries = 3, baseDelay = 1000, retryOnStatus = (status) => status >= 500 } = options;
-
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(input, init);
-
-      // Don't retry client errors (4xx), only server errors (5xx)
-      if (response.ok || !retryOnStatus(response.status)) {
-        return response;
-      }
-
-      lastError = new Error(`HTTP ${response.status}`);
-    } catch (error) {
-      // Network errors are retryable
-      lastError = error instanceof Error ? error : new Error(String(error));
-    }
-
-    // Don't wait after the last attempt
-    if (attempt < maxRetries) {
-      const delay = baseDelay * Math.pow(2, attempt);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError ?? new Error("Fetch failed after retries");
 }
 
 /** Client-side SPA router using Navigation API and View Transitions. */
@@ -308,18 +264,6 @@ export class Router {
     const useTransition = this.#config.viewTransitions && supportsViewTransitions();
     let didScroll = false;
 
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    let htmlController: ReadableStreamDefaultController<Uint8Array> | null = null;
-    const htmlStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        htmlController = controller;
-      },
-      cancel() {
-        htmlController = null;
-      },
-    });
-
     const applyAttrs = (el: HTMLElement, attrs?: Record<string, string>) => {
       if (!attrs) return;
       for (const [key, value] of Object.entries(attrs)) {
@@ -345,82 +289,10 @@ export class Router {
       }
     };
 
-    const consumeNdjson = async () => {
-      const reader = response.body!.getReader();
-      let buffer = "";
-      let streamClosed = false;
-
-      const closeStream = () => {
-        if (streamClosed) return;
-        streamClosed = true;
-        htmlController?.close();
-      };
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-
-          let newlineIndex = buffer.indexOf("\n");
-          while (newlineIndex !== -1) {
-            const line = buffer.slice(0, newlineIndex).trim();
-            buffer = buffer.slice(newlineIndex + 1);
-            if (line) {
-              const msg = JSON.parse(line) as
-                | {
-                    type: "meta";
-                    head?: HeadTag[];
-                    htmlAttrs?: Record<string, string>;
-                    bodyAttrs?: Record<string, string>;
-                  }
-                | { type: "html"; chunk: string }
-                | { type: "done" };
-
-              if (msg.type === "meta") {
-                applyMeta(msg);
-              } else if (msg.type === "html") {
-                htmlController?.enqueue(encoder.encode(msg.chunk));
-              } else if (msg.type === "done") {
-                closeStream();
-                return;
-              }
-            }
-            newlineIndex = buffer.indexOf("\n");
-          }
-        }
-
-        buffer += decoder.decode();
-        if (buffer.trim()) {
-          const msg = JSON.parse(buffer) as
-            | {
-                type: "meta";
-                head?: HeadTag[];
-                htmlAttrs?: Record<string, string>;
-                bodyAttrs?: Record<string, string>;
-              }
-            | { type: "html"; chunk: string }
-            | { type: "done" };
-
-          if (msg.type === "meta") {
-            applyMeta(msg);
-          } else if (msg.type === "html") {
-            htmlController?.enqueue(encoder.encode(msg.chunk));
-          }
-        }
-        closeStream();
-      } catch (error) {
-        htmlController?.error(error);
-        throw error;
-      }
-    };
-
-    const ndjsonPromise = consumeNdjson();
-
     try {
-      await diff(document, htmlStream, {
-        transition: useTransition,
-        syncMutations: !useTransition, // Apply mutations synchronously when not using view transitions
+      await applyPatchStream(response, {
+        useTransition,
+        applyMeta,
         onChunkProcessed: () => {
           if (didScroll) return;
           didScroll = true;
@@ -431,7 +303,6 @@ export class Router {
           });
         },
       });
-      await ndjsonPromise;
     } catch (diffError) {
       abortController.abort();
       // diff-dom-streaming can fail with "insertBefore" errors when the DOM was mutated

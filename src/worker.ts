@@ -1,20 +1,9 @@
 import { type FunctionComponent } from "preact";
-import {
-  createRouter,
-  matchRoute,
-  findLayouts,
-  wrapWithLayouts,
-  renderComponent,
-  renderToStream,
-  renderErrorPage,
-  type ModuleMap,
-  type Route,
-  type SolarflareStream,
-} from "./server";
+import * as server from "./server";
+import type { Route, SolarflareStream } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
 import { isDevToolsRequest, handleDevToolsRequest } from "./devtools-json.ts";
 import { isHmrRequest, handleHmrRequest } from "./server.hmr.ts";
-export { broadcastHmrUpdate, type HmrEventType } from "./server.hmr.ts";
 import {
   generateStaticShell,
   createEarlyFlushStream,
@@ -24,18 +13,10 @@ import {
 import { extractCriticalCss, generateAsyncCssLoader } from "./critical-css.ts";
 import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
 import { ResponseCache, withCache } from "./route-cache.ts";
-import { parseMetaConfig, workerConfigMeta } from "./worker.config.ts";
-export { workerConfigMeta };
+import { parseMetaConfig } from "./worker.config.ts";
 import { getHeadContext, type HeadTag } from "./head.ts";
-import type { ChunkManifest } from "./manifest.ts";
-// @ts-ignore - Generated at build time, aliased by bundler
-import modules from ".modules.generated";
-// @ts-ignore - Generated at build time, aliased by bundler
-import chunkManifest from ".chunks.generated.json";
-
-const typedModules = modules as ModuleMap;
-
-const manifest = chunkManifest as ChunkManifest;
+import { typedModules, getScriptPath, getStylesheets, getDevScripts } from "./manifest.runtime.ts";
+import { findPairedModulePath } from "./paths.ts";
 
 const responseCache = new ResponseCache(100);
 
@@ -60,41 +41,13 @@ export interface WorkerOptimizations {
   readCss?: (path: string) => Promise<string>;
 }
 
-/** Gets the script path for a route from the chunk manifest. */
-function getScriptPath(tag: string) {
-  return manifest.tags[tag];
-}
-
-/** Gets stylesheets for a route pattern from the chunk manifest. */
-function getStylesheets(pattern: string) {
-  return manifest.styles[pattern] ?? [];
-}
-
-/** Gets dev mode scripts from the chunk manifest. */
-function getDevScripts() {
-  return manifest.devScripts;
-}
-
 /** Server data loader function type. */
 type ServerLoader = (
   request: Request,
   params: Record<string, string>,
 ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 
-const router = createRouter(typedModules);
-
-/** Finds paired module (server for client, or client for server). */
-function findPairedModule(path: string) {
-  if (path.includes(".client.")) {
-    const serverPath = path.replace(".client.", ".server.");
-    return serverPath in typedModules.server ? serverPath : null;
-  }
-  if (path.includes(".server.")) {
-    const clientPath = path.replace(".server.", ".client.");
-    return clientPath in typedModules.client ? clientPath : null;
-  }
-  return null;
-}
+const router = server.createRouter(typedModules);
 
 /** Worker environment. */
 interface WorkerEnv {
@@ -107,7 +60,7 @@ interface SsrContext {
   url: URL;
   route: Route;
   params: Record<string, string>;
-  content: ReturnType<typeof renderComponent>;
+  content: ReturnType<typeof server.renderComponent>;
   shellData: Record<string, unknown>;
   deferredData: Record<string, Promise<unknown>> | null;
   responseHeaders?: Record<string, string>;
@@ -171,11 +124,11 @@ async function renderErrorResponse(
   status: number,
   headers: Record<string, string>,
 ) {
-  const errorContent = await renderErrorPage(error, url, typedModules, status);
+  const errorContent = await server.renderErrorPage(error, url, typedModules, status);
   const stylesheets = getStylesheets("/");
   const devScripts = getDevScripts();
 
-  const stream = await renderToStream(errorContent, {
+  const stream = await server.renderToStream(errorContent, {
     pathname: url.pathname,
     styles: stylesheets,
     devScripts,
@@ -273,7 +226,7 @@ async function renderPatchResponse(
   const { url, route, params, content, shellData, deferredData } = context;
   const { scriptPath, stylesheets, devScripts } = context;
 
-  const ssrStream = await renderToStream(content, {
+  const ssrStream = await server.renderToStream(content, {
     params,
     serverData: shellData,
     pathname: url.pathname,
@@ -297,7 +250,7 @@ async function renderPatchResponse(
 }
 
 async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadResult> {
-  const match = matchRoute(router, url);
+  const match = server.matchRoute(router, url);
 
   if (!match) {
     return { kind: "not-found" };
@@ -306,7 +259,7 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
   const { route, params } = match;
 
   if (route.type === "server") {
-    const pairedClientPath = findPairedModule(route.path);
+    const pairedClientPath = findPairedModulePath(route.path, typedModules);
     if (!pairedClientPath) {
       const mod = await route.loader();
       const handler = mod.default as (request: Request) => Response | Promise<Response>;
@@ -322,7 +275,7 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
     clientPath = route.path.replace(".server.", ".client.");
   } else {
     clientPath = route.path;
-    serverPath = findPairedModule(route.path);
+    serverPath = findPairedModulePath(route.path, typedModules);
   }
 
   let shellData: Record<string, unknown> = {};
@@ -366,11 +319,11 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
   const clientMod = await typedModules.client[clientPath]();
   const Component = clientMod.default as FunctionComponent<any>;
 
-  let content = renderComponent(Component, route.tag, props);
+  let content = server.renderComponent(Component, route.tag, props);
 
-  const layouts = findLayouts(route.path, typedModules);
+  const layouts = server.findLayouts(route.path, typedModules);
   if (layouts.length > 0) {
-    content = await wrapWithLayouts(content, layouts);
+    content = await server.wrapWithLayouts(content, layouts);
   }
 
   const scriptPath = getScriptPath(route.tag);
@@ -423,7 +376,7 @@ async function renderStream(
   const useEarlyFlush = envOptimizations.earlyFlush ?? metaConfig.earlyFlush;
   const useCriticalCss = envOptimizations.criticalCss ?? metaConfig.criticalCss;
 
-  const ssrStream = await renderToStream(content, {
+  const ssrStream = await server.renderToStream(content, {
     params,
     serverData: shellData,
     pathname: url.pathname,

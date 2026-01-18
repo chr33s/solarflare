@@ -35,7 +35,7 @@ export const pathname: ReadonlySignal<string> = _pathname;
 
 /** Sets route parameters. */
 export function setParams(newParams: Record<string, string>) {
-  _params.value = Object.assign({}, newParams);
+  _params.value = newParams;
 }
 
 /** Sets server data. */
@@ -56,7 +56,7 @@ export function setPathname(path: string) {
 export function initStore(config: StoreConfig = {}) {
   batch(() => {
     if (config.params) {
-      _params.value = Object.assign({}, config.params);
+      _params.value = config.params;
     }
     if (config.serverData !== undefined) {
       _serverData.value = {

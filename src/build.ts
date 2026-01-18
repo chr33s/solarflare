@@ -1,30 +1,13 @@
 #!/usr/bin/env node
 import { spawn, type ChildProcess } from "node:child_process";
 import { watch } from "node:fs";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
 import { buildClient } from "./build.bundle-client.ts";
 import { buildServer } from "./build.bundle-server.ts";
-
-/** Node.js file system helpers. */
-export async function exists(path: string) {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function readText(path: string) {
-  return readFile(path, "utf-8");
-}
-
-export async function write(path: string, content: string) {
-  await writeFile(path, content);
-}
+import { exists } from "./fs.ts";
 
 /** Resolve paths relative to the current working directory. */
 const ROOT_DIR = process.cwd();
@@ -94,14 +77,14 @@ export default function Layout({ children }: { children: VNode }) {
   for (const [filename, content] of Object.entries(templates)) {
     const filepath = join(APP_DIR, filename);
     if (!(await exists(filepath))) {
-      await write(filepath, content);
+      await writeFile(filepath, content);
     }
   }
 
   for (const [filename, content] of Object.entries(rootTemplates)) {
     const filepath = join(ROOT_DIR, filename);
     if (!(await exists(filepath))) {
-      await write(filepath, content);
+      await writeFile(filepath, content);
     }
   }
 }

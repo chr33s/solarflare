@@ -1,3 +1,5 @@
+import { getDeferredIslandPrefix, getHydrateScriptPrefix } from "./hydration.ts";
+
 /**
  * Handles deferred hydration script and island insertion during streamed navigation.
  */
@@ -6,9 +8,12 @@ export function handleDeferredHydrationNode(
   processedScripts: Set<string>,
   node: Element,
 ) {
+  const hydratePrefix = getHydrateScriptPrefix(entryTag);
+  const islandPrefix = getDeferredIslandPrefix(entryTag);
+
   const processHydrationScript = (script: HTMLScriptElement) => {
     const scriptId = script.id;
-    if (!scriptId || !scriptId.includes("-hydrate-")) return;
+    if (!scriptId || !scriptId.startsWith(hydratePrefix)) return;
     if (processedScripts.has(scriptId)) return;
     processedScripts.add(scriptId);
 
@@ -31,7 +36,7 @@ export function handleDeferredHydrationNode(
 
   const processDataIsland = (script: HTMLScriptElement) => {
     const id = script.getAttribute("data-island");
-    if (!id || !id.startsWith(`${entryTag}-deferred-`)) return;
+    if (!id || !id.startsWith(islandPrefix)) return;
     const islandKey = `island:${id}`;
     if (processedScripts.has(islandKey)) return;
     processedScripts.add(islandKey);
@@ -58,8 +63,10 @@ export function handleDeferredHydrationNode(
 }
 
 export function dedupeDeferredScripts(entryTag: string) {
+  const islandPrefix = getDeferredIslandPrefix(entryTag);
+  const hydratePrefix = getHydrateScriptPrefix(entryTag);
   const scripts = document.querySelectorAll(
-    `script[data-island^="${entryTag}-deferred-"], script[id^="${entryTag}-hydrate-"]`,
+    `script[data-island^="${islandPrefix}"], script[id^="${hydratePrefix}"]`,
   );
   const seen = new Map<string, HTMLScriptElement>();
 

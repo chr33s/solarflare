@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { readFile, unlink, mkdir } from "node:fs/promises";
+import { readFile, unlink, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import ts from "typescript";
 import { rolldown } from "rolldown";
 import { replacePlugin } from "rolldown/plugins";
 import { transform } from "lightningcss";
 import { createProgram, getDefaultExportInfo } from "./ast.ts";
-import { exists, readText, write } from "./build.ts";
+import { exists } from "./fs.ts";
 import { assetUrlPrefixPlugin, type BuildArgs, moduleTypes } from "./build.bundle.ts";
 import { parsePath } from "./paths.ts";
 import { generateClientScript } from "./console-forward.ts";
@@ -74,7 +74,7 @@ async function getComponentMeta(program: ts.Program, appDir: string, file: strin
   const props = extractPropsFromProgram(program, filePath);
   const parsed = parsePath(file);
 
-  const content = await readText(filePath);
+  const content = await readFile(filePath, "utf-8");
   const contentHash = hash(content);
   const chunk = getChunkName(file, contentHash);
 
@@ -97,7 +97,7 @@ export async function buildClient(options: BuildClientOptions) {
 
     const cssRelativePath = cssSourcePath.replace(appDir + "/", "");
     const cssContent = transform({
-      code: Buffer.from(await readText(cssSourcePath)),
+      code: Buffer.from(await readFile(cssSourcePath, "utf-8")),
       filename: cssSourcePath,
       minify: args.production,
     }).code.toString();
@@ -110,7 +110,7 @@ export async function buildClient(options: BuildClientOptions) {
 
     await mkdir(distClientAssets, { recursive: true });
     const destPath = join(distClientAssets, cssOutputName);
-    await write(destPath, cssContent);
+    await writeFile(destPath, cssContent);
 
     const outputPath = `/assets/${cssOutputName}`;
     cssAssetCache.set(cssSourcePath, outputPath);
@@ -182,8 +182,8 @@ export async function buildClient(options: BuildClientOptions) {
       const destDir = dirname(dest);
       await mkdir(destDir, { recursive: true });
 
-      const content = await readText(src);
-      await write(dest, content);
+      const content = await readFile(src, "utf-8");
+      await writeFile(dest, content);
     }
   }
 
@@ -191,7 +191,7 @@ export async function buildClient(options: BuildClientOptions) {
     await mkdir(distClientAssets, { recursive: true });
     const consoleScript = generateClientScript();
     const consoleScriptPath = join(distClientAssets, "console-forward.js");
-    await write(consoleScriptPath, consoleScript);
+    await writeFile(consoleScriptPath, consoleScript);
     console.log("   Generated console-forward.js (dev mode)");
   }
 
@@ -234,7 +234,7 @@ export async function buildClient(options: BuildClientOptions) {
 
     const entryContent = generateChunkedClientEntry(meta, inlineRoutesManifest, cssFiles, args);
     const entryPath = join(distDir, `.entry-${meta.chunk.replace(".js", "")}.generated.tsx`);
-    await write(entryPath, entryContent);
+    await writeFile(entryPath, entryContent);
     entryPaths.push(entryPath);
     entryToMeta[entryPath] = meta;
   }
@@ -348,7 +348,7 @@ export async function buildClient(options: BuildClientOptions) {
     const cssFiles = await scanner.scanFiles("?(.)*.css", distClientAssets);
     for (const cssFile of cssFiles) {
       const cssPath = join(distClientAssets, cssFile);
-      let cssContent = await readText(cssPath);
+      let cssContent = await readFile(cssPath, "utf-8");
       const result = transform({
         code: Buffer.from(cssContent),
         filename: cssPath,
@@ -356,7 +356,7 @@ export async function buildClient(options: BuildClientOptions) {
       });
       const minified = result.code.toString();
       if (minified !== cssContent) {
-        await write(cssPath, minified);
+        await writeFile(cssPath, minified);
       }
     }
   }
@@ -392,7 +392,7 @@ export async function buildClient(options: BuildClientOptions) {
     }
   }
 
-  await write(chunksPath, JSON.stringify(manifest, null, 2));
+  await writeFile(chunksPath, JSON.stringify(manifest, null, 2));
 
   console.log(`   Generated ${metas.length} chunk(s)`);
 

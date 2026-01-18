@@ -75,7 +75,8 @@ export function generateChunkedClientEntry(
   return /* tsx */ `
     /** Auto-generated: ${meta.chunk} */
     ${debugImports}
-    import { initHmrEntry, hmr, reloadAllStylesheets } from '@chr33s/solarflare/client';${stylesheetImports}
+    import { initHmrEntry, hmr, reloadAllStylesheets } from '@chr33s/solarflare/client';
+    ${stylesheetImports}
     import BaseComponent from '../src/${meta.file}';
 
     ${stylesheetSetup}

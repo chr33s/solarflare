@@ -13,40 +13,21 @@ import { stylesheets } from "./stylesheets.ts";
 /** Global storage for component hook state across HMR updates. */
 const hookStateMap = new Map<string, unknown[]>();
 
-/** Global storage for component refs across HMR updates. */
-const refStateMap = new Map<string, Map<number, unknown>>();
-
 /** Saves hook state for a component. */
-export function saveHookState(componentId: string, hookState: unknown[]) {
+function saveHookState(componentId: string, hookState: unknown[]) {
   hookStateMap.set(componentId, [...hookState]);
 }
 
 /** Restores hook state for a component. */
-export function restoreHookState(componentId: string) {
+function restoreHookState(componentId: string) {
   return hookStateMap.get(componentId);
-}
-
-/** Clears hook state for a component. */
-export function clearHookState(componentId: string) {
-  hookStateMap.delete(componentId);
-  refStateMap.delete(componentId);
-}
-
-/** Gets or creates the ref storage for a component. */
-export function getRefStorage(componentId: string) {
-  let storage = refStateMap.get(componentId);
-  if (!storage) {
-    storage = new Map();
-    refStateMap.set(componentId, storage);
-  }
-  return storage;
 }
 
 /** Stored scroll positions keyed by component tag. */
 const scrollPositions = new Map<string, { x: number; y: number }>();
 
 /** Saves current scroll position. */
-export function saveScrollPosition(tag?: string) {
+function saveScrollPosition(tag?: string) {
   const key = tag ?? "__global__";
   scrollPositions.set(key, {
     x: globalThis.scrollX ?? 0,
@@ -55,7 +36,7 @@ export function saveScrollPosition(tag?: string) {
 }
 
 /** Restores scroll position. */
-export function restoreScrollPosition(tag?: string) {
+function restoreScrollPosition(tag?: string) {
   const key = tag ?? "__global__";
   const pos = scrollPositions.get(key);
   if (pos) {
@@ -63,28 +44,6 @@ export function restoreScrollPosition(tag?: string) {
       globalThis.scrollTo(pos.x, pos.y);
     });
   }
-}
-
-/** Clears stored scroll position. */
-export function clearScrollPosition(tag?: string) {
-  const key = tag ?? "__global__";
-  scrollPositions.delete(key);
-}
-
-/** Clears all HMR state maps (call periodically or on app reset to prevent memory growth). */
-export function clearAllHMRState() {
-  hookStateMap.clear();
-  refStateMap.clear();
-  scrollPositions.clear();
-}
-
-/** Gets the current size of HMR state maps. */
-export function getHMRStateSize() {
-  return {
-    hookStates: hookStateMap.size,
-    refStates: refStateMap.size,
-    scrollPositions: scrollPositions.size,
-  };
 }
 
 /** Props for HMR error boundary. */
