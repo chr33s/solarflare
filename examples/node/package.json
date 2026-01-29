@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@chr33s/solarflare": "file:../../",
-    "srvx": "^0.9.8"
+    "srvx": "^0.10.1"
   },
   "engines": {
     "node": ">=24.12.0"

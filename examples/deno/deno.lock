@@ -5,15 +5,16 @@
     "jsr:@std/cli@~0.224.7": "0.224.7",
     "jsr:@std/encoding@1.0.0-rc.2": "1.0.0-rc.2",
     "jsr:@std/fmt@~0.225.4": "0.225.6",
-    "jsr:@std/http@0.224": "0.224.5",
+    "jsr:@std/http@~0.224.5": "0.224.5",
     "jsr:@std/media-types@^1.0.0-rc.1": "1.1.0",
     "jsr:@std/net@~0.224.3": "0.224.5",
     "jsr:@std/path@1.0.0-rc.2": "1.0.0-rc.2",
     "jsr:@std/streams@~0.224.5": "0.224.5",
-    "npm:@preact/signals@^2.5.1": "2.5.1_preact@10.28.1",
-    "npm:preact-custom-element@^4.6.0": "4.6.0_preact@10.28.1",
-    "npm:preact-render-to-string@^6.6.5": "6.6.5_preact@10.28.1",
-    "npm:preact@^10.28.1": "10.28.1"
+    "npm:@preact/signals@^2.6.1": "2.6.1_preact@11.0.0-beta.0",
+    "npm:preact-custom-element@^4.6.0": "4.6.0_preact@11.0.0-beta.0",
+    "npm:preact-render-to-string@^6.6.5": "6.6.5_preact@11.0.0-beta.0",
+    "npm:preact@11.0.0-beta.0": "11.0.0-beta.0",
+    "npm:preact@^11.0.0-experimental.1": "11.0.0-experimental.1"
   },
   "jsr": {
     "@std/async@1.0.16": {
@@ -55,39 +56,43 @@
     }
   },
   "npm": {
-    "@preact/signals-core@1.12.1": {
-      "integrity": "sha512-BwbTXpj+9QutoZLQvbttRg5x3l5468qaV2kufh+51yha1c53ep5dY4kTuZR35+3pAZxpfQerGJiQqg34ZNZ6uA=="
+    "@preact/signals-core@1.12.2": {
+      "integrity": "sha512-5Yf8h1Ke3SMHr15xl630KtwPTW4sYDFkkxS0vQ8UiQLWwZQnrF9IKaVG1mN5VcJz52EcWs2acsc/Npjha/7ysA=="
     },
-    "@preact/signals@2.5.1_preact@10.28.1": {
-      "integrity": "sha512-VPjk5YFt7i11Fi4UK0tzaEe5xLwfhUxXL3l89ocxQ5aPz7bRo8M5+N73LjBMPklyXKYKz6YsNo4Smp8n6nplng==",
+    "@preact/signals@2.6.1_preact@11.0.0-beta.0": {
+      "integrity": "sha512-Gp3DI1T/0YyirwJnImR8l9xyVJgKiVzJXmEhic1/7SPw3zStrsvuBpwKnD609CzsIdzxprWa6yTNXN+VLLZPGQ==",
       "dependencies": [
         "@preact/signals-core",
-        "preact"
+        "preact@11.0.0-beta.0"
       ]
     },
-    "preact-custom-element@4.6.0_preact@10.28.1": {
+    "preact-custom-element@4.6.0_preact@11.0.0-beta.0": {
       "integrity": "sha512-RhPMuFpEIsbpEwnF+MoRbddzX0y8AdLn1dSpJSbpc6Nx3aSAPXSW9t2xAqQyGfEH1sl/bcsi8Vf0XbvStUy/Ug==",
       "dependencies": [
-        "preact"
+        "preact@11.0.0-beta.0"
       ]
     },
-    "preact-render-to-string@6.6.5_preact@10.28.1": {
+    "preact-render-to-string@6.6.5_preact@11.0.0-beta.0": {
       "integrity": "sha512-O6MHzYNIKYaiSX3bOw0gGZfEbOmlIDtDfWwN1JJdc/T3ihzRT6tGGSEWE088dWrEDGa1u7101q+6fzQnO9XCPA==",
       "dependencies": [
-        "preact"
+        "preact@11.0.0-beta.0"
       ]
     },
-    "preact@10.28.1": {
-      "integrity": "sha512-u1/ixq/lVQI0CakKNvLDEcW5zfCjUQfZdK9qqWuIJtsezuyG6pk9TWj75GMuI/EzRSZB/VAE43sNWWZfiy8psw=="
+    "preact@11.0.0-beta.0": {
+      "integrity": "sha512-IcODoASASYwJ9kxz7+MJeiJhvLriwSb4y4mHIyxdgaRZp6kPUud7xytrk/6GZw8U3y6EFJaRb5wi9SrEK+8+lg=="
+    },
+    "preact@11.0.0-experimental.1": {
+      "integrity": "sha512-a5AyuvVRDFkzF/sQNTEk7fhHSssq8fxUML9meWt5gDiS29F0KTnvlaMDWudQ7vuM7NZZPdw8Y2/1KeLUIqN4vw=="
     }
   },
   "workspace": {
     "dependencies": [
-      "jsr:@std/http@0.224",
-      "npm:@preact/signals@^2.5.1",
+      "jsr:@std/http@~0.224.5",
+      "npm:@preact/signals@^2.6.1",
       "npm:preact-custom-element@^4.6.0",
       "npm:preact-render-to-string@^6.6.5",
-      "npm:preact@^10.28.1"
+      "npm:preact@11.0.0-beta.0",
+      "npm:preact@^11.0.0-experimental.1"
     ]
   }
 }
