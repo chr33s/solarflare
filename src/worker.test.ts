@@ -64,6 +64,7 @@ function spawnAsync(command: string[], options: { cwd: string }) {
     cwd: options.cwd,
     env: { ...process.env, WRANGLER_LOG: "error" },
     stdio: ["ignore", "inherit", "inherit"],
+    detached: process.platform !== "win32",
   });
 
   const exited = new Promise<number | null>((resolve) => {
@@ -72,6 +73,21 @@ function spawnAsync(command: string[], options: { cwd: string }) {
   });
 
   return { process: proc, exited };
+}
+
+/** Kill process tree (needed for npm/wrangler child processes) */
+function killProcessTree(proc: ChildProcess | null) {
+  if (!proc?.pid) return;
+  try {
+    // On Unix, kill the process group with negative PID
+    if (process.platform !== "win32") {
+      process.kill(-proc.pid, "SIGTERM");
+    } else {
+      proc.kill();
+    }
+  } catch {
+    // Process may already be dead
+  }
 }
 
 const BASIC_EXAMPLE_DIR = join(__dirname, "../examples/basic");
@@ -104,12 +120,10 @@ describe("integration", () => {
   });
 
   after(async () => {
-    if (serverProcess) {
-      serverProcess.kill();
-      // Give it time to cleanup
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      serverProcess = null;
-    }
+    killProcessTree(serverProcess);
+    serverProcess = null;
+    // Give it time to cleanup
+    await new Promise((resolve) => setTimeout(resolve, 500));
   });
 
   it("should return HTML for root route", async () => {
@@ -335,12 +349,10 @@ describe("e2e", () => {
 
   after(async () => {
     if (browser) await browser.close();
-    if (serverProcess) {
-      serverProcess.kill();
-      // Give it time to cleanup
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      serverProcess = null;
-    }
+    killProcessTree(serverProcess);
+    serverProcess = null;
+    // Give it time to cleanup
+    await new Promise((resolve) => setTimeout(resolve, 500));
   });
 
   it("should render the page in browser", async () => {

@@ -112,7 +112,7 @@ export async function buildServer(options: BuildServerOptions) {
   await bundle.write({
     dir: distServer,
     format: "esm",
-    inlineDynamicImports: true,
+    codeSplitting: false,
     entryFileNames: "index.js",
     assetFileNames: "[name]-[hash][extname]",
     minify: args.production,
