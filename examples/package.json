@@ -1,0 +1,10 @@
+{
+  "name": "@chr33s/solarflare-examples",
+  "private": true,
+  "workspaces": [
+    "*"
+  ],
+  "scripts": {
+    "clean": "rm -rvf ./*/.wrangler ./*/.shopify ./*/dist  ./*/node_modules"
+  }
+}

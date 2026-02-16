@@ -1,5 +1,6 @@
 *.log*
 .wrangler
 dist/
+examples/package-lock.json
 examples/*/package-lock.json
 node_modules/
