@@ -1,7 +1,6 @@
 {
   "name": "@chr33s/solarflare",
   "version": "0.0.0",
-  "private": true,
   "license": "MIT",
   "bin": "./src/build.ts",
   "files": [
