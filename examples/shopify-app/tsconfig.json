@@ -1,6 +1,11 @@
 {
   "compilerOptions": {
-    "types": ["@chr33s/solarflare", "@shopify/app-bridge-types", "@shopify/polaris-types"]
+    "types": [
+      "@chr33s/solarflare",
+      "@shopify/app-bridge-types",
+      "@shopify/app-bridge-ui-types",
+      "@shopify/polaris-types"
+    ]
   },
   "extends": "@chr33s/solarflare/tsconfig.json",
   "include": ["./src", "./worker-configuration.d.ts"]
