@@ -132,7 +132,6 @@ import { Deferred } from "@chr33s/solarflare/client";
 <!-- performance -->
 <meta name="sf:preconnect" content="https://cdn.example.com" />
 <meta name="sf:early-flush" content="true" />
-<meta name="sf:critical-css" content="true" />
 <meta name="sf:cache-max-age" content="300" />
 <meta name="sf:cache-swr" content="3600" />
 <meta name="sf:prefetch" content="/about, /faq, /blog/*" />

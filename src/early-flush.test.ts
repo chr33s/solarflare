@@ -108,35 +108,6 @@ describe("createEarlyFlushStream", () => {
     assert.ok(html.includes("</body></html>"));
   });
 
-  it("should include critical CSS in head", async () => {
-    const shell = generateStaticShell({});
-    const contentStream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.close();
-      },
-    });
-
-    const stream = createEarlyFlushStream(shell, {
-      contentStream,
-      headTags: "",
-      bodyTags: "",
-      criticalCss: ".critical { color: red; }",
-    });
-
-    const reader = stream.getReader();
-    const chunks: string[] = [];
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(decoder.decode(value));
-    }
-
-    const html = chunks.join("");
-    assert.ok(html.includes("<style>.critical { color: red; }</style>"));
-  });
-
   it("should include preload hints", async () => {
     const shell = generateStaticShell({});
     const contentStream = new ReadableStream<Uint8Array>({

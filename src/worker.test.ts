@@ -999,34 +999,6 @@ describe("e2e", () => {
   });
 });
 
-describe("Critical CSS integration", () => {
-  it("should inline critical CSS for faster rendering", async () => {
-    // Import the critical-css module
-    const { extractCriticalCss, generateCssFallback, generateAsyncCssLoader } =
-      await import("./critical-css.ts");
-
-    // Test extraction with mock CSS
-    const mockCss = { "/layout.css": ".container { max-width: 1200px; }" };
-    const critical = await extractCriticalCss("/test", ["/layout.css"], {
-      readCss: async (path) => mockCss[path as keyof typeof mockCss] ?? "",
-      cache: false,
-    });
-
-    assert.ok(critical.includes(".container"));
-    assert.ok(!critical.includes("\n")); // Should be minified
-
-    // Test fallback generation
-    const fallback = generateCssFallback(["/style.css"]);
-    assert.ok(fallback.includes("<noscript>"));
-    assert.ok(fallback.includes('href="/style.css"'));
-
-    // Test async loader
-    const loader = generateAsyncCssLoader(["/async.css"]);
-    assert.ok(loader.includes("<script>"));
-    assert.ok(loader.includes("/async.css"));
-  });
-});
-
 describe("Early flush streaming integration", () => {
   it("should generate static shell for immediate flushing", async () => {
     const { generateStaticShell, generateResourceHints } = await import("./early-flush.ts");
@@ -1062,7 +1034,6 @@ describe("Early flush streaming integration", () => {
       contentStream,
       headTags: "<title>Test</title>",
       bodyTags: '<script src="/app.js"></script>',
-      criticalCss: ".critical { color: red; }",
     });
 
     const reader = stream.getReader();
@@ -1077,7 +1048,6 @@ describe("Early flush streaming integration", () => {
     const html = chunks.join("");
     assert.ok(html.includes("<!DOCTYPE html>"));
     assert.ok(html.includes("<title>Test</title>"));
-    assert.ok(html.includes("<style>.critical { color: red; }</style>"));
     assert.ok(html.includes("<main>Content</main>"));
     assert.ok(html.includes('src="/app.js"'));
     assert.ok(html.includes("</body></html>"));

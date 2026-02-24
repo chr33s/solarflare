@@ -10,7 +10,6 @@ import {
   generateResourceHints,
   type StreamingShell,
 } from "./early-flush.ts";
-import { extractCriticalCss, generateAsyncCssLoader } from "./critical-css.ts";
 import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
 import { ResponseCache, withCache } from "./route-cache.ts";
 import { parseMetaConfig } from "./worker.config.ts";
@@ -38,8 +37,6 @@ function getStaticShell(lang: string) {
 /** Worker optimization options. */
 export interface WorkerOptimizations {
   earlyFlush?: boolean;
-  criticalCss?: boolean;
-  readCss?: (path: string) => Promise<string>;
 }
 
 /** Server data loader function type. */
@@ -79,11 +76,8 @@ interface RenderPlan {
   status: number;
   statusText?: string;
   metaConfig: ReturnType<typeof parseMetaConfig>;
-  stylesheets: string[];
   resourceHints: string;
   useEarlyFlush: boolean;
-  useCriticalCss: boolean;
-  pathname: string;
 }
 
 type MatchAndLoadResult =
@@ -363,7 +357,6 @@ async function renderStream(
   });
 
   const useEarlyFlush = envOptimizations.earlyFlush ?? metaConfig.earlyFlush;
-  const useCriticalCss = envOptimizations.criticalCss ?? metaConfig.criticalCss;
 
   const ssrStream = await server.renderToStream(content, {
     params,
@@ -395,45 +388,23 @@ async function renderStream(
     status: ssrStream.status ?? 200,
     statusText: ssrStream.statusText,
     metaConfig,
-    stylesheets,
     resourceHints,
     useEarlyFlush,
-    useCriticalCss,
-    pathname: route.parsedPattern.pathname,
   };
 }
 
-async function applyPerfFeatures(plan: RenderPlan, envOptimizations: WorkerOptimizations) {
-  const {
-    ssrStream,
-    finalHeaders,
-    status,
-    statusText,
-    stylesheets,
-    resourceHints,
-    useEarlyFlush,
-    useCriticalCss,
-    pathname,
-    metaConfig,
-  } = plan;
+async function applyPerfFeatures(plan: RenderPlan) {
+  const { ssrStream, finalHeaders, status, statusText, resourceHints, useEarlyFlush, metaConfig } =
+    plan;
 
   if (useEarlyFlush) {
     const staticShell = getStaticShell(metaConfig.lang);
 
-    let criticalCss = "";
-    if (useCriticalCss && envOptimizations.readCss) {
-      criticalCss = await extractCriticalCss(pathname, stylesheets, {
-        readCss: envOptimizations.readCss,
-        cache: true,
-      });
-    }
-
     const optimizedStream = createEarlyFlushStream(staticShell, {
-      criticalCss,
       preloadHints: resourceHints,
       contentStream: ssrStream,
       headTags: "",
-      bodyTags: generateAsyncCssLoader(stylesheets),
+      bodyTags: "",
     });
 
     return new Response(optimizedStream, {
@@ -518,7 +489,7 @@ async function worker(request: Request, env?: WorkerEnv) {
 
     const render = async () => {
       const plan = await renderStream(context, headers, envOptimizations);
-      return applyPerfFeatures(plan, envOptimizations);
+      return applyPerfFeatures(plan);
     };
 
     if (context.metaConfig.cacheConfig) {

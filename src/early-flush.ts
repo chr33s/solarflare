@@ -39,7 +39,6 @@ export function generateStaticShell(options: {
 export function createEarlyFlushStream(
   shell: StreamingShell,
   options: {
-    criticalCss?: string;
     preloadHints?: string;
     contentStream: ReadableStream<Uint8Array>;
     headTags: string;
@@ -52,11 +51,7 @@ export function createEarlyFlushStream(
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const shellStart = [
-        shell.preHead,
-        options.preloadHints || "",
-        options.criticalCss ? /* html */ `<style>${options.criticalCss}</style>` : "",
-      ].join("");
+      const shellStart = [shell.preHead, options.preloadHints || ""].join("");
 
       controller.enqueue(encoder.encode(shellStart));
 

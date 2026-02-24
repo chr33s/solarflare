@@ -15,7 +15,6 @@ describe("parseMetaConfig", () => {
       "https://fonts.gstatic.com",
     ]);
     strictEqual(config.earlyFlush, false);
-    strictEqual(config.criticalCss, false);
     strictEqual(config.cacheConfig, undefined);
     deepStrictEqual(config.prefetch, []);
     deepStrictEqual(config.prerender, []);
@@ -80,12 +79,6 @@ describe("parseMetaConfig", () => {
     strictEqual(config.earlyFlush, false);
   });
 
-  it("should extract critical-css setting", () => {
-    const html = '<meta name="sf:critical-css" content="true">';
-    const config = parseMetaConfig(html);
-    strictEqual(config.criticalCss, true);
-  });
-
   it("should parse complete configuration", () => {
     const html = `
       <html lang="fr">
@@ -94,7 +87,6 @@ describe("parseMetaConfig", () => {
         <meta name="sf:cache-max-age" content="600">
         <meta name="sf:cache-swr" content="7200">
         <meta name="sf:early-flush" content="true">
-        <meta name="sf:critical-css" content="true">
       </head>
     `;
     const config = parseMetaConfig(html);
@@ -103,7 +95,6 @@ describe("parseMetaConfig", () => {
     strictEqual(config.cacheConfig?.maxAge, 600);
     strictEqual(config.cacheConfig?.staleWhileRevalidate, 7200);
     strictEqual(config.earlyFlush, true);
-    strictEqual(config.criticalCss, true);
   });
 
   it("should trim whitespace from preconnect origins", () => {
@@ -181,27 +172,18 @@ describe("workerConfigMeta", () => {
     deepStrictEqual(meta, [{ name: "sf:early-flush", content: "true" }]);
   });
 
-  it("should generate critical-css meta", () => {
-    const meta = workerConfigMeta({
-      criticalCss: true,
-    });
-    deepStrictEqual(meta, [{ name: "sf:critical-css", content: "true" }]);
-  });
-
   it("should generate all meta tags", () => {
     const meta = workerConfigMeta({
       preconnect: ["https://api.example.com", "https://cdn.example.com"],
       cacheMaxAge: 600,
       cacheSwr: 7200,
       earlyFlush: true,
-      criticalCss: true,
     });
     deepStrictEqual(meta, [
       { name: "sf:preconnect", content: "https://api.example.com,https://cdn.example.com" },
       { name: "sf:cache-max-age", content: "600" },
       { name: "sf:cache-swr", content: "7200" },
       { name: "sf:early-flush", content: "true" },
-      { name: "sf:critical-css", content: "true" },
     ]);
   });
 
@@ -246,7 +228,6 @@ describe("workerConfigMeta", () => {
       cacheMaxAge: 300,
       cacheSwr: 3600,
       earlyFlush: true,
-      criticalCss: true,
     };
     const meta = workerConfigMeta(original);
     const html = meta.map((m) => `<meta name="${m.name}" content="${m.content}">`).join("\n");
@@ -256,7 +237,6 @@ describe("workerConfigMeta", () => {
     strictEqual(parsed.cacheConfig?.maxAge, original.cacheMaxAge);
     strictEqual(parsed.cacheConfig?.staleWhileRevalidate, original.cacheSwr);
     strictEqual(parsed.earlyFlush, original.earlyFlush);
-    strictEqual(parsed.criticalCss, original.criticalCss);
   });
 });
 

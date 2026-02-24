@@ -18,8 +18,7 @@ export interface WorkerMetaConfig {
   cacheConfig?: RouteCacheConfig;
   /** Enable early flush */
   earlyFlush: boolean;
-  /** Enable critical CSS inlining */
-  criticalCss: boolean;
+
   /** URLs/patterns to prefetch */
   prefetch: string[];
   /** URLs/patterns to prerender */
@@ -35,7 +34,6 @@ const DEFAULTS: WorkerMetaConfig = {
   lang: "en",
   preconnectOrigins: ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
   earlyFlush: false,
-  criticalCss: false,
   prefetch: [],
   prerender: [],
   speculationEagerness: "moderate",
@@ -78,11 +76,6 @@ export function parseMetaConfig(html: string) {
   const earlyFlush = matchMeta("sf:early-flush");
   if (earlyFlush) {
     config.earlyFlush = earlyFlush === "true";
-  }
-
-  const criticalCss = matchMeta("sf:critical-css");
-  if (criticalCss) {
-    config.criticalCss = criticalCss === "true";
   }
 
   const prefetch = matchMeta("sf:prefetch");
@@ -138,7 +131,6 @@ export function workerConfigMeta(config: {
   cacheMaxAge?: number;
   cacheSwr?: number;
   earlyFlush?: boolean;
-  criticalCss?: boolean;
   prefetch?: string[];
   prerender?: string[];
   prefetchSelector?: string;
@@ -162,10 +154,6 @@ export function workerConfigMeta(config: {
 
   if (config.earlyFlush !== undefined) {
     meta.push({ name: "sf:early-flush", content: String(config.earlyFlush) });
-  }
-
-  if (config.criticalCss !== undefined) {
-    meta.push({ name: "sf:critical-css", content: String(config.criticalCss) });
   }
 
   if (config.prefetch?.length) {
