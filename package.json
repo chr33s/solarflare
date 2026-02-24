@@ -24,24 +24,24 @@
     "test": "WRANGLER_LOG=error; node --test src/*.test.ts"
   },
   "dependencies": {
-    "@preact/signals": "2.8.0",
+    "@preact/signals": "2.8.1",
     "lightningcss": "1.31.1",
     "picomatch": "4.0.3",
     "preact": "11.0.0-beta.1",
     "preact-custom-element": "4.6.0",
-    "preact-render-to-string": "6.6.5",
-    "rolldown": "1.0.0-rc.4",
+    "preact-render-to-string": "6.6.6",
+    "rolldown": "1.0.0-rc.5",
     "turbo-stream": "3.1.0"
   },
   "devDependencies": {
-    "@preact/signals-debug": "1.4.1",
-    "@types/node": "25.2.3",
-    "oxfmt": "0.32.0",
-    "oxlint": "1.47.0",
-    "oxlint-tsgolint": "0.13.0",
+    "@preact/signals-debug": "1.4.2",
+    "@types/node": "25.3.0",
+    "oxfmt": "0.35.0",
+    "oxlint": "1.50.0",
+    "oxlint-tsgolint": "0.14.2",
     "playwright": "1.58.2",
     "typescript": "5.9.3",
-    "wrangler": "4.65.0"
+    "wrangler": "4.68.0"
   },
   "optionalDependencies": {
     "ts-morph": "27.0.2"
