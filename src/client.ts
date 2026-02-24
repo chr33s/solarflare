@@ -1,5 +1,4 @@
 import { type FunctionComponent } from "preact";
-import register from "preact-custom-element";
 import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
@@ -34,6 +33,14 @@ export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]) {
   if (!styles.length) return;
   if (!supportsConstructableStylesheets() || typeof document === "undefined") return;
 
+  // If DSD already provided inline <style> in the shadow root, migrate it to
+  // adoptedStyleSheets so StylesheetManager.update() can reach it during HMR.
+  const el = document.querySelector(tag);
+  const shadowStyle = el?.shadowRoot?.querySelector("style");
+  if (shadowStyle) {
+    shadowStyle.remove();
+  }
+
   for (const style of styles) {
     const preloaded = getPreloadedStylesheet(style.id);
     if (!preloaded) {
@@ -42,10 +49,18 @@ export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]) {
   }
 
   const sheets = stylesheets.getForConsumer(tag);
-  document.adoptedStyleSheets = [
-    ...document.adoptedStyleSheets.filter((s) => !sheets.includes(s)),
-    ...sheets,
-  ];
+  const shadowRoot = el?.shadowRoot;
+  if (shadowRoot) {
+    shadowRoot.adoptedStyleSheets = [
+      ...shadowRoot.adoptedStyleSheets.filter((s) => !sheets.includes(s)),
+      ...sheets,
+    ];
+  } else {
+    document.adoptedStyleSheets = [
+      ...document.adoptedStyleSheets.filter((s) => !sheets.includes(s)),
+      ...sheets,
+    ];
+  }
 }
 
 /** Tag metadata from file path. */
@@ -145,46 +160,14 @@ export interface DefineOptions {
   validate?: boolean;
 }
 
-/** Registers a Preact component as a web component (build-time macro). */
+/**
+ * Registers a Preact component as a web component.
+ * When used inside the solarflare build pipeline, `initHmrEntry` handles
+ * actual registration — `define()` just returns the component.
+ */
 export function define<P extends Record<string, any>>(
   Component: FunctionComponent<P>,
-  options?: DefineOptions,
+  _options?: DefineOptions,
 ) {
-  // Only register custom elements in the browser
-  if (typeof window !== "undefined" && typeof HTMLElement !== "undefined") {
-    const propNames = options?.observedAttributes ?? [];
-    const filePath = import.meta.path ?? import.meta.url ?? "";
-    const meta = parseTagMeta(filePath);
-    const tag = options?.tag ?? meta.tag;
-    const shadow = options?.shadow ?? false;
-    const shouldValidate = options?.validate ?? import.meta.env?.DEV ?? false;
-
-    if (customElements.get(tag)) {
-      console.warn(`[solarflare] Custom element "${tag}" is already registered, skipping`);
-      return Component;
-    }
-
-    if (shouldValidate) {
-      const validation = validateTag({ ...meta, tag });
-
-      for (const warning of validation.warnings) {
-        console.warn(`[solarflare] ${warning}`);
-      }
-
-      for (const error of validation.errors) {
-        console.error(`[solarflare] ${error}`);
-      }
-
-      if (!validation.valid) {
-        console.error(
-          `[solarflare] Tag validation failed for "${filePath}", component may not work correctly`,
-        );
-      }
-    }
-
-    // Register the component as a custom element
-    register(Component, tag, propNames, { shadow });
-  }
-
   return Component;
 }

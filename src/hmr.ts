@@ -437,6 +437,7 @@ export function onHMREvent(
 interface HmrEntryOptions {
   tag: string;
   props: string[];
+  shadow?: boolean;
   routesManifest: RoutesManifest;
   BaseComponent: FunctionComponent<any>;
   hmr: HmrApi;
@@ -642,6 +643,18 @@ function createHmrEntryComponent(options: HmrEntryOptions) {
 export function initHmrEntry(options: HmrEntryOptions) {
   const Component = createHmrEntryComponent(options);
   if (!customElements.get(options.tag)) {
-    register(Component, options.tag, options.props, { shadow: false });
+    const shadow = options.shadow ?? false;
+    if (shadow) {
+      // When DSD has already created a shadow root, patch attachShadow to
+      // return the existing root so preact-custom-element won't throw.
+      const orig = HTMLElement.prototype.attachShadow;
+      HTMLElement.prototype.attachShadow = function (init: ShadowRootInit) {
+        return this.shadowRoot ?? orig.call(this, init);
+      };
+      register(Component, options.tag, options.props, { shadow });
+      HTMLElement.prototype.attachShadow = orig;
+    } else {
+      register(Component, options.tag, options.props, { shadow });
+    }
   }
 }

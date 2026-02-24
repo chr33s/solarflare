@@ -71,3 +71,34 @@ it("extracts CSS and resolves imports", async () => {
   const allCss = await scanner.extractAllCssImports(join(appDir, "index.client.tsx"));
   assert.deepStrictEqual(allCss.sort(), ["./components/widget.css", "./styles/base.css"].sort());
 });
+
+it("detects shadow option in define() calls", async () => {
+  const rootDir = await mkdtemp(join(tmpdir(), "sf-scan-"));
+  const appDir = join(rootDir, "src");
+  await mkdir(appDir, { recursive: true });
+
+  await writeFile(
+    join(appDir, "with-shadow.client.tsx"),
+    "import { define } from '@chr33s/solarflare/client';\nexport default define(MyComponent, { shadow: true });\n",
+  );
+  await writeFile(
+    join(appDir, "no-shadow.client.tsx"),
+    "import { define } from '@chr33s/solarflare/client';\nexport default define(MyComponent);\n",
+  );
+  await writeFile(
+    join(appDir, "explicit-false.client.tsx"),
+    "import { define } from '@chr33s/solarflare/client';\nexport default define(MyComponent, { shadow: false });\n",
+  );
+
+  const scanner = createScanner({ rootDir, appDir });
+
+  assert.strictEqual(
+    await scanner.detectShadowOption(join(appDir, "with-shadow.client.tsx")),
+    true,
+  );
+  assert.strictEqual(await scanner.detectShadowOption(join(appDir, "no-shadow.client.tsx")), false);
+  assert.strictEqual(
+    await scanner.detectShadowOption(join(appDir, "explicit-false.client.tsx")),
+    false,
+  );
+});

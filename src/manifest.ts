@@ -19,5 +19,7 @@ export interface ChunkManifest {
   chunks: Record<string, string>;
   tags: Record<string, string>;
   styles: Record<string, string[]>;
+  /** Tags that use Shadow DOM (DSD). */
+  shadow?: Record<string, boolean>;
   devScripts?: string[];
 }

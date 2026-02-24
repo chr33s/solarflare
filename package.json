@@ -20,6 +20,8 @@
   },
   "scripts": {
     "check": "oxfmt --check && oxlint --type-aware --type-check",
+    "examples:clean": "rm -rvf ./examples/*/.wrangler ./examples/*/.shopify ./examples/*/dist  ./examples/*/node_modules",
+    "examples:install": "for dir in basic dsd minimal node shopify-app; do npm install --prefix ./examples/${dir} --silent; done",
     "fix": "oxlint --type-aware --type-check --fix && oxfmt --write",
     "test": "WRANGLER_LOG=error; node --test src/*.test.ts"
   },

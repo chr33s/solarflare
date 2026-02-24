@@ -1,0 +1,8 @@
+{
+  "assets": { "directory": "./dist/client" },
+  "compatibility_date": "2025-12-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "dev": { "port": 8080 },
+  "main": "./dist/server/index.js",
+  "name": "solarflare"
+}

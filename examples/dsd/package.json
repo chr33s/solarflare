@@ -1,0 +1,17 @@
+{
+  "name": "@chr33s/solarflare-examples-dsd",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "solarflare",
+    "dev": "solarflare --serve --watch",
+    "deploy": "solarflare --production && wrangler deploy"
+  },
+  "dependencies": {
+    "@chr33s/solarflare": "file:../../"
+  },
+  "engines": {
+    "node": ">=24.12.0"
+  }
+}

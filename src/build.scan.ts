@@ -167,6 +167,12 @@ export function createScanner(ctx: BuildScanContext) {
     return allCss;
   }
 
+  /** Detects `define(_, { shadow: true })` in a client component file. */
+  async function detectShadowOption(filePath: string) {
+    const content = await readFile(filePath, "utf-8");
+    return /define\s*\([^)]*\{[^}]*shadow\s*:\s*true/.test(content);
+  }
+
   return {
     scanFiles,
     getPackageImports,
@@ -178,5 +184,6 @@ export function createScanner(ctx: BuildScanContext) {
     extractComponentImports,
     resolveImportPath,
     extractAllCssImports,
+    detectShadowOption,
   };
 }

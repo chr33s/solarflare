@@ -1099,6 +1099,51 @@ describe("chromium", () => {
       `),
     );
   });
+
+  it("should atomically replace element with shadow root when new HTML has DSD template", async () => {
+    // Set up old DOM with a custom element that has a shadow root (simulating DSD)
+    await page.setContent(normalize("<div><my-widget>old light</my-widget></div>"));
+    await page.evaluate(() => {
+      const el = document.querySelector("my-widget")!;
+      const shadow = el.attachShadow({ mode: "open" });
+      shadow.innerHTML = "<span>old shadow content</span>";
+    });
+
+    // Diff with new HTML containing a <template shadowrootmode> child.
+    // In the parsed diff document the template stays as a regular element
+    // because document.write doesn't consume DSD templates, so the diff
+    // detects the mismatch and does an atomic replacement.
+    const newChunks = [
+      '<div><my-widget><template shadowrootmode="open"><span>new shadow</span></template></my-widget></div>',
+    ];
+
+    const result = await page.evaluate(
+      async ([diffCode, ...chunks]) => {
+        // oxlint-disable-next-line no-eval
+        eval(diffCode as string);
+        const encoder = new TextEncoder();
+        const readable = new ReadableStream({
+          start(controller) {
+            for (const c of chunks) controller.enqueue(encoder.encode(c as string));
+            controller.close();
+          },
+        });
+
+        // @ts-expect-error - diff is defined via eval
+        await diff(document.documentElement!, readable, { syncMutations: true });
+
+        const el = document.querySelector("my-widget");
+        return {
+          exists: !!el,
+          outerHTML: el?.outerHTML ?? "",
+        };
+      },
+      [diffCode, ...newChunks],
+    );
+
+    assert.ok(result.exists, "my-widget should still exist after diff");
+    assert.ok(result.outerHTML.includes("my-widget"), "replaced element should be a my-widget");
+  });
 });
 
 describe("firefox", () => {

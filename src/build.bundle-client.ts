@@ -78,7 +78,7 @@ async function getComponentMeta(program: ts.Program, appDir: string, file: strin
   const contentHash = hash(content);
   const chunk = getChunkName(file, contentHash);
 
-  return { file, tag: parsed.tag, props, parsed, chunk, hash: contentHash };
+  return { file, tag: parsed.tag, props, parsed, chunk, hash: contentHash, shadow: false };
 }
 
 export async function buildClient(options: BuildClientOptions) {
@@ -214,6 +214,10 @@ export async function buildClient(options: BuildClientOptions) {
   for (const meta of metas) {
     const componentPath = join(appDir, meta.file);
     const componentCssImports = await scanner.extractAllCssImports(componentPath);
+
+    if (await scanner.detectShadowOption(componentPath)) {
+      meta.shadow = true;
+    }
 
     const componentDir = meta.file.split("/").slice(0, -1).join("/");
     const componentCssOutputPaths = await resolveCssOutputs(componentCssImports, componentDir);
@@ -365,12 +369,18 @@ export async function buildClient(options: BuildClientOptions) {
     chunks: {},
     tags: {},
     styles: {},
+    shadow: {},
     devScripts: args.production ? undefined : ["/assets/console-forward.js"],
   };
 
   for (const meta of metas) {
     manifest.chunks[meta.parsed.pattern] = `/assets/${meta.chunk}`;
     manifest.tags[meta.tag] = `/assets/${meta.chunk}`;
+
+    const filePath = join(appDir, meta.file);
+    if (await scanner.detectShadowOption(filePath)) {
+      manifest.shadow![meta.tag] = true;
+    }
   }
 
   for (const meta of metas) {

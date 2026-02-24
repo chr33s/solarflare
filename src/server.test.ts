@@ -6,6 +6,7 @@ import {
   matchRoute,
   findLayoutHierarchy,
   findLayouts,
+  renderComponent,
   type Route,
   type ModuleMap,
 } from "./server.ts";
@@ -238,6 +239,57 @@ describe("findLayouts", () => {
   it("should return layouts in root-to-leaf order", () => {
     const layouts = findLayouts("./blog/post.server.tsx", mockModules);
     assert.ok(layouts[0].depth < layouts[1].depth);
+  });
+});
+
+describe("renderComponent", () => {
+  it("should render light DOM children by default", async () => {
+    const { h } = await import("preact");
+    const { renderToStringAsync } = await import("preact-render-to-string");
+    const Component = ({ title }: { title: string }) => h("h1", null, title);
+    const vnode = renderComponent(Component, "my-tag", { title: "Hello" });
+    const html = await renderToStringAsync(vnode);
+    assert.ok(html.includes("<my-tag"));
+    assert.ok(html.includes("<h1>Hello</h1>"));
+    assert.ok(!html.includes("shadowrootmode"));
+  });
+
+  it("should wrap in <template shadowrootmode> when shadow: true", async () => {
+    const { h } = await import("preact");
+    const { renderToStringAsync } = await import("preact-render-to-string");
+    const Component = ({ title }: { title: string }) => h("h1", null, title);
+    const vnode = renderComponent(Component, "my-tag", { title: "Hello" }, { shadow: true });
+    const html = await renderToStringAsync(vnode);
+    assert.ok(html.includes("<my-tag"));
+    assert.ok(html.includes('shadowrootmode="open"'));
+    assert.ok(html.includes("<h1>Hello</h1>"));
+  });
+
+  it("should render light DOM when shadow: false", async () => {
+    const { h } = await import("preact");
+    const { renderToStringAsync } = await import("preact-render-to-string");
+    const Component = () => h("span", null, "content");
+    const vnode = renderComponent(Component, "sf-test", {}, { shadow: false });
+    const html = await renderToStringAsync(vnode);
+    assert.ok(!html.includes("shadowrootmode"));
+    assert.ok(html.includes("<span>content</span>"));
+  });
+
+  it("should serialize primitive props as attributes", async () => {
+    const { h } = await import("preact");
+    const { renderToStringAsync } = await import("preact-render-to-string");
+    const Component = (props: any) => h("div", null, props.title);
+    const vnode = renderComponent(Component, "my-tag", {
+      title: "Hi",
+      count: 5,
+      active: true,
+      data: { nested: true },
+    });
+    const html = await renderToStringAsync(vnode);
+    assert.ok(html.includes('title="Hi"'));
+    assert.ok(html.includes('count="5"'));
+    assert.ok(html.includes('active="true"'));
+    assert.ok(!html.includes("data="));
   });
 });
 

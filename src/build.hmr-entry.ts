@@ -10,6 +10,7 @@ export interface ComponentMeta {
   tag: string;
   props: string[];
   chunk: string;
+  shadow?: boolean;
 }
 
 function buildDebugImports(args: HmrEntryArgs) {
@@ -47,7 +48,7 @@ function buildEntryInit(meta: ComponentMeta, cssFiles: string[]) {
   return /* tsx */ `
     initHmrEntry({
       tag: '${meta.tag}',
-      props: ${JSON.stringify(meta.props)},
+      props: ${JSON.stringify(meta.props)},${meta.shadow ? `\n      shadow: true,` : ""}
       routesManifest,
       BaseComponent,
       hmr,

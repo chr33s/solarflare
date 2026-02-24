@@ -14,7 +14,13 @@ import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
 import { ResponseCache, withCache } from "./route-cache.ts";
 import { parseMetaConfig } from "./worker.config.ts";
 import { getHeadContext, type HeadTag } from "./head.ts";
-import { typedModules, getScriptPath, getStylesheets, getDevScripts } from "./manifest.runtime.ts";
+import {
+  typedModules,
+  getScriptPath,
+  getStylesheets,
+  getDevScripts,
+  isShadowTag,
+} from "./manifest.runtime.ts";
 import { findPairedModulePath } from "./paths.ts";
 import { encode } from "turbo-stream";
 
@@ -290,6 +296,13 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
         deferredPromises[key] = value;
       } else {
         immediateData[key] = value;
+        // Non-primitive values can't be serialized as HTML attributes on the
+        // custom element. Emit them as instantly-resolved deferred data islands
+        // so the client-side hydration mechanism picks them up.
+        const t = typeof value;
+        if (value != null && t !== "string" && t !== "number" && t !== "boolean") {
+          deferredPromises[key] = Promise.resolve(value);
+        }
       }
     }
 
@@ -302,7 +315,9 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
   const clientMod = await typedModules.client[clientPath]();
   const Component = clientMod.default as FunctionComponent<any>;
 
-  let content = server.renderComponent(Component, route.tag, props);
+  let content = server.renderComponent(Component, route.tag, props, {
+    shadow: isShadowTag(route.tag),
+  });
 
   const layouts = server.findLayouts(route.path, typedModules);
   if (layouts.length > 0) {

@@ -222,6 +222,7 @@ export function renderComponent(
   Component: FunctionComponent<any>,
   tag: string,
   props: Record<string, unknown>,
+  options?: { shadow?: boolean },
 ) {
   const attrs: Record<string, string> = {};
   for (const [key, value] of Object.entries(props)) {
@@ -230,7 +231,11 @@ export function renderComponent(
       attrs[key] = String(value);
     }
   }
-  return h(tag, attrs, h(Component, props));
+  const children = h(Component, props);
+  if (options?.shadow) {
+    return h(tag, attrs, h("template", { shadowrootmode: "open" }, children));
+  }
+  return h(tag, attrs, children);
 }
 
 /** Error page props interface. */

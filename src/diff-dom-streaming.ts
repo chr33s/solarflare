@@ -64,6 +64,17 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
   }
 
   if (oldNode.nodeType === ELEMENT_TYPE) {
+    // Treat DSD custom elements as atomic: the old DOM has a real shadow root
+    // while the new HTML has a <template shadowrootmode> child — these can't
+    // be diffed structurally, so replace the entire element.
+    if (hasShadowRoot(oldNode as Element) && hasDsdTemplate(newNode as Element)) {
+      return walker[APPLY_TRANSITION](() => {
+        if (oldNode.parentNode) {
+          oldNode.parentNode.replaceChild(newNode.cloneNode(true), oldNode);
+        }
+      });
+    }
+
     await setChildNodes(oldNode, newNode, walker);
 
     walker[APPLY_TRANSITION](() => {
@@ -84,6 +95,19 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
   } else if (oldNode.nodeValue !== newNode.nodeValue) {
     walker[APPLY_TRANSITION](() => (oldNode.nodeValue = newNode.nodeValue));
   }
+}
+
+/** Checks if an element has a live shadow root (from DSD or imperative). */
+function hasShadowRoot(el: Element) {
+  return !!(el as HTMLElement).shadowRoot;
+}
+
+/** Checks if an element contains a `<template shadowrootmode>` child. */
+function hasDsdTemplate(el: Element) {
+  for (let c = el.firstElementChild; c; c = c.nextElementSibling) {
+    if (c.nodeName === "TEMPLATE" && c.hasAttribute("shadowrootmode")) return true;
+  }
+  return false;
 }
 
 /**

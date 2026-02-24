@@ -19,6 +19,11 @@ export function getStylesheets(pattern: string) {
   return manifest.styles[pattern] ?? [];
 }
 
+/** Gets whether a tag uses Shadow DOM (DSD). */
+export function isShadowTag(tag: string) {
+  return manifest.shadow?.[tag] ?? false;
+}
+
 /** Gets dev mode scripts from the chunk manifest. */
 export function getDevScripts() {
   return manifest.devScripts;
