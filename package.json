@@ -7,7 +7,7 @@
     "url": "https://github.com/chr33s/solarflare"
   },
   "bin": {
-    "solarflare": "tsx src/build.ts"
+    "solarflare": "./src/build.ts"
   },
   "files": [
     "src",
