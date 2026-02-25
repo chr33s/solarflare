@@ -63,7 +63,8 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
     return walker[APPLY_TRANSITION](() => {
       // oldNode may have been moved/removed by a previous batched mutation
       if (oldNode.parentNode) {
-        oldNode.parentNode.replaceChild(newNode.cloneNode(true), oldNode);
+        const doc = oldNode.ownerDocument ?? document;
+        oldNode.parentNode.replaceChild(doc.importNode(newNode, true), oldNode);
       }
     });
   }
@@ -75,7 +76,8 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
     if (hasShadowRoot(oldNode as Element) && hasDsdTemplate(newNode as Element)) {
       return walker[APPLY_TRANSITION](() => {
         if (oldNode.parentNode) {
-          oldNode.parentNode.replaceChild(newNode.cloneNode(true), oldNode);
+          const doc = oldNode.ownerDocument ?? document;
+          oldNode.parentNode.replaceChild(doc.importNode(newNode, true), oldNode);
         }
       });
     }
@@ -102,7 +104,8 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
         }
       } else {
         const hasDocumentFragmentInside = newNode.nodeName === "TEMPLATE";
-        const clonedNewNode = newNode.cloneNode(hasDocumentFragmentInside);
+        const doc = oldNode.ownerDocument ?? document;
+        const clonedNewNode = doc.importNode(newNode, hasDocumentFragmentInside);
         while (oldNode.firstChild) clonedNewNode.appendChild(oldNode.firstChild);
         // oldNode may have been moved/removed by a previous batched mutation
         if (oldNode.parentNode) {
@@ -165,15 +168,9 @@ function setAttributes(oldAttributes: NamedNodeMap, newAttributes: NamedNodeMap)
   }
 }
 
-/**
- * Clone a node, using importNode for elements matching shouldReplaceNode
- * to avoid triggering adoptedCallback on third-party web components.
- */
-function cloneForDocument(node: Node, targetDoc: Document, walker: Walker): Node {
-  if (walker.shouldReplaceNode?.(node)) {
-    return targetDoc.importNode(node, true);
-  }
-  return node.cloneNode(true);
+/** Clone a node into the target document via importNode to avoid cross-document adoption. */
+function cloneForDocument(node: Node, targetDoc: Document): Node {
+  return targetDoc.importNode(node, true);
 }
 
 /**
@@ -267,7 +264,7 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
       oldNode = oldNode.nextSibling;
       if (getKey(checkOld)) {
         const targetDoc = oldParent.ownerDocument ?? document;
-        insertedNode = cloneForDocument(newNode, targetDoc, walker);
+        insertedNode = cloneForDocument(newNode, targetDoc);
         if (shouldInsertImmediately(insertedNode!)) {
           flushPendingInsertions();
           walker[APPLY_TRANSITION](() => {
@@ -289,7 +286,7 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
       }
     } else {
       const targetDoc = oldParent.ownerDocument ?? document;
-      insertedNode = cloneForDocument(newNode, targetDoc, walker);
+      insertedNode = cloneForDocument(newNode, targetDoc);
       if (shouldInsertImmediately(insertedNode!)) {
         flushPendingInsertions();
         walker[APPLY_TRANSITION](() => oldParent.appendChild(insertedNode!));
