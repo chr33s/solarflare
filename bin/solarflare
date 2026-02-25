@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec node --experimental-transform-types "$(dirname "$0")/../src/build.ts" "$@"

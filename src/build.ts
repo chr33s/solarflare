@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { spawn, type ChildProcess } from "node:child_process";
 import { watch } from "node:fs";
 import { writeFile } from "node:fs/promises";
