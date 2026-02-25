@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-exec node --experimental-transform-types "$SCRIPT_DIR/../src/build.ts" "$@"

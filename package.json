@@ -7,10 +7,9 @@
     "url": "https://github.com/chr33s/solarflare"
   },
   "bin": {
-    "solarflare": "bin/solarflare"
+    "solarflare": "tsx src/build.ts"
   },
   "files": [
-    "bin",
     "src",
     "tsconfig.json",
     "!src/*.test.ts"
@@ -40,6 +39,7 @@
     "preact-custom-element": "4.6.0",
     "preact-render-to-string": "6.6.6",
     "rolldown": "1.0.0-rc.5",
+    "tsx": "4.21.0",
     "turbo-stream": "3.1.0"
   },
   "devDependencies": {
