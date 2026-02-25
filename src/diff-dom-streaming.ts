@@ -1,11 +1,14 @@
 // src: https://github.com/brisa-build/diff-dom-streaming/blob/main/src/index.ts
 
+type ShouldReplaceNode = (node: Node) => boolean;
+
 type Walker = {
   root: Node | null;
   [FIRST_CHILD]: (node: Node) => Promise<Node | null>;
   [NEXT_SIBLING]: (node: Node) => Promise<Node | null>;
   [APPLY_TRANSITION]: (v: () => void) => void;
   [FLUSH_SYNC]: () => void;
+  shouldReplaceNode?: ShouldReplaceNode;
 };
 
 type NextNodeCallback = (node: Node) => void;
@@ -18,6 +21,8 @@ type Options = {
   onChunkProcessed?: () => void;
   /** Apply mutations synchronously instead of batching via requestAnimationFrame. */
   syncMutations?: boolean;
+  /** Elements matching this predicate are atomically replaced instead of diffed. */
+  shouldReplaceNode?: ShouldReplaceNode;
 };
 
 const ELEMENT_TYPE = 1;
@@ -68,6 +73,16 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
     // while the new HTML has a <template shadowrootmode> child — these can't
     // be diffed structurally, so replace the entire element.
     if (hasShadowRoot(oldNode as Element) && hasDsdTemplate(newNode as Element)) {
+      return walker[APPLY_TRANSITION](() => {
+        if (oldNode.parentNode) {
+          oldNode.parentNode.replaceChild(newNode.cloneNode(true), oldNode);
+        }
+      });
+    }
+
+    // Elements matching shouldReplaceNode are atomically replaced to avoid
+    // triggering adoptedCallback on third-party web components (e.g. Polaris).
+    if (walker.shouldReplaceNode?.(oldNode) || walker.shouldReplaceNode?.(newNode)) {
       return walker[APPLY_TRANSITION](() => {
         if (oldNode.parentNode) {
           oldNode.parentNode.replaceChild(newNode.cloneNode(true), oldNode);
@@ -426,5 +441,6 @@ async function htmlStreamWalker(stream: ReadableStream, options: Options = {}) {
       }
     },
     [FLUSH_SYNC]: flushMutationsSync,
+    shouldReplaceNode: options.shouldReplaceNode,
   };
 }

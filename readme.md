@@ -128,6 +128,7 @@ import { Deferred } from "@chr33s/solarflare/client";
 <meta name="sf:base" content="/" />
 <meta name="sf:scroll-behavior" content="auto" />
 <meta name="sf:view-transitions" content="false" />
+<meta name="sf:skip-node-replacement" content="s-*" />
 
 <!-- performance -->
 <meta name="sf:preconnect" content="https://cdn.example.com" />

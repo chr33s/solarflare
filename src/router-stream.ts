@@ -19,6 +19,8 @@ export interface ApplyPatchStreamOptions {
   useTransition: boolean;
   applyMeta: (meta: PatchMeta) => void;
   onChunkProcessed?: () => void;
+  /** Elements matching this predicate are atomically replaced instead of diffed. */
+  shouldReplaceNode?: (node: Node) => boolean;
 }
 
 export async function applyPatchStream(response: Response, options: ApplyPatchStreamOptions) {
@@ -60,6 +62,7 @@ export async function applyPatchStream(response: Response, options: ApplyPatchSt
     transition: options.useTransition,
     syncMutations: !options.useTransition,
     onChunkProcessed: options.onChunkProcessed,
+    shouldReplaceNode: options.shouldReplaceNode,
   });
   await consumeHtml;
 }

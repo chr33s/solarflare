@@ -3,6 +3,7 @@ import * as assert from "node:assert/strict";
 import {
   Router,
   createRouter,
+  createNodeMatcher,
   supportsViewTransitions,
   type RoutesManifest,
   type RouteManifestEntry,
@@ -10,6 +11,43 @@ import {
   type RouteMatch,
 } from "./router.ts";
 import { handleDeferredHydrationNode } from "./router-deferred.ts";
+
+describe("createNodeMatcher", () => {
+  const mockNode = (name: string) => ({ nodeName: name }) as Node;
+
+  it("should match prefix patterns", () => {
+    const matcher = createNodeMatcher("s-*");
+    assert.strictEqual(matcher(mockNode("S-PAGE")), true);
+    assert.strictEqual(matcher(mockNode("S-TABLE")), true);
+    assert.strictEqual(matcher(mockNode("DIV")), false);
+  });
+
+  it("should match suffix patterns", () => {
+    const matcher = createNodeMatcher("*-element");
+    assert.strictEqual(matcher(mockNode("MY-ELEMENT")), true);
+    assert.strictEqual(matcher(mockNode("CUSTOM-ELEMENT")), true);
+    assert.strictEqual(matcher(mockNode("DIV")), false);
+  });
+
+  it("should match exact patterns", () => {
+    const matcher = createNodeMatcher("my-component");
+    assert.strictEqual(matcher(mockNode("MY-COMPONENT")), true);
+    assert.strictEqual(matcher(mockNode("MY-COMPONENT-2")), false);
+  });
+
+  it("should match multiple comma-separated patterns", () => {
+    const matcher = createNodeMatcher("s-*, ui-*");
+    assert.strictEqual(matcher(mockNode("S-PAGE")), true);
+    assert.strictEqual(matcher(mockNode("UI-BUTTON")), true);
+    assert.strictEqual(matcher(mockNode("DIV")), false);
+  });
+
+  it("should be case-insensitive", () => {
+    const matcher = createNodeMatcher("S-*");
+    assert.strictEqual(matcher(mockNode("s-page")), false); // nodeName is typically uppercase
+    assert.strictEqual(matcher(mockNode("S-PAGE")), true);
+  });
+});
 
 describe("supportsViewTransitions", () => {
   it("should return false in non-browser environment", () => {

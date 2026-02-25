@@ -35,10 +35,30 @@ export interface RouterConfig {
   onNotFound?: (url: URL) => void;
   onNavigate?: (match: RouteMatch) => void;
   onError?: (error: Error, url: URL) => void;
+  /** Elements matching this predicate are atomically replaced instead of diffed. */
+  shouldReplaceNode?: (node: Node) => boolean;
 }
 
 /** Subscription callback for route changes. */
 export type RouteSubscriber = (match: RouteMatch | null) => void;
+
+/**
+ * Creates a node matcher from a glob-like pattern.
+ * Supports: "s-*" (prefix), "*-element" (suffix), "my-component" (exact)
+ * Multiple patterns can be comma-separated: "s-*,ui-*"
+ */
+export function createNodeMatcher(pattern: string): (node: Node) => boolean {
+  const patterns = pattern.split(",").map((p) => p.trim().toUpperCase());
+  const matchers = patterns.map((p) => {
+    if (p.endsWith("*")) return (name: string) => name.startsWith(p.slice(0, -1));
+    if (p.startsWith("*")) return (name: string) => name.endsWith(p.slice(1));
+    return (name: string) => name === p;
+  });
+  return (node: Node) => {
+    const name = node.nodeName;
+    return matchers.some((m) => m(name));
+  };
+}
 
 /** Checks if View Transitions API is supported. */
 export function supportsViewTransitions() {
@@ -48,7 +68,8 @@ export function supportsViewTransitions() {
 /** Client-side SPA router using Navigation API and View Transitions. */
 export class Router {
   #routes: Route[] = [];
-  #config: Required<RouterConfig>;
+  #config: Required<Omit<RouterConfig, "shouldReplaceNode">> &
+    Pick<RouterConfig, "shouldReplaceNode">;
   #started = false;
   #cleanupFns: (() => void)[] = [];
   #inflightAbort: AbortController | null = null;
@@ -72,6 +93,12 @@ export class Router {
     const metaBase = getMeta("base");
     const metaViewTransitions = getMeta<"true" | "false">("view-transitions");
     const metaScrollBehavior = getMeta<"auto" | "smooth" | "instant">("scroll-behavior");
+    const metaSkipNodeReplace = getMeta("skip-node-replacement");
+
+    // Convert glob pattern (e.g., "s-*") to shouldReplaceNode predicate
+    const shouldReplaceNode =
+      config.shouldReplaceNode ??
+      (metaSkipNodeReplace ? createNodeMatcher(metaSkipNodeReplace) : undefined);
 
     this.#config = {
       base: config.base ?? metaBase ?? manifest.base ?? "",
@@ -84,6 +111,7 @@ export class Router {
         ((error, url) => {
           console.error(`[solarflare] Navigation error for ${url.href}:`, error);
         }),
+      shouldReplaceNode,
     };
 
     this.params = computed(() => this.current.value?.params ?? {});
@@ -293,6 +321,7 @@ export class Router {
       await applyPatchStream(response, {
         useTransition,
         applyMeta,
+        shouldReplaceNode: this.#config.shouldReplaceNode,
         onChunkProcessed: () => {
           if (didScroll) return;
           didScroll = true;
