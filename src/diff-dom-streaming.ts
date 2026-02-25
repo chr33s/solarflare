@@ -80,12 +80,15 @@ async function updateNode(oldNode: Node, newNode: Node, walker: Walker) {
       });
     }
 
-    // Elements matching shouldReplaceNode are atomically replaced to avoid
-    // triggering adoptedCallback on third-party web components (e.g. Polaris).
+    // Elements matching shouldReplaceNode are atomically replaced.
+    // Use importNode to create the element in the target document context,
+    // avoiding adoptedCallback from firing on third-party web components.
     if (walker.shouldReplaceNode?.(oldNode) || walker.shouldReplaceNode?.(newNode)) {
       return walker[APPLY_TRANSITION](() => {
         if (oldNode.parentNode) {
-          oldNode.parentNode.replaceChild(newNode.cloneNode(true), oldNode);
+          const doc = oldNode.ownerDocument ?? document;
+          const imported = doc.importNode(newNode, true);
+          oldNode.parentNode.replaceChild(imported, oldNode);
         }
       });
     }
@@ -160,6 +163,17 @@ function setAttributes(oldAttributes: NamedNodeMap, newAttributes: NamedNodeMap)
       newAttribute.value = oldAttribute.value;
     }
   }
+}
+
+/**
+ * Clone a node, using importNode for elements matching shouldReplaceNode
+ * to avoid triggering adoptedCallback on third-party web components.
+ */
+function cloneForDocument(node: Node, targetDoc: Document, walker: Walker): Node {
+  if (walker.shouldReplaceNode?.(node)) {
+    return targetDoc.importNode(node, true);
+  }
+  return node.cloneNode(true);
 }
 
 /**
@@ -252,7 +266,8 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
       checkOld = oldNode;
       oldNode = oldNode.nextSibling;
       if (getKey(checkOld)) {
-        insertedNode = newNode.cloneNode(true);
+        const targetDoc = oldParent.ownerDocument ?? document;
+        insertedNode = cloneForDocument(newNode, targetDoc, walker);
         if (shouldInsertImmediately(insertedNode!)) {
           flushPendingInsertions();
           walker[APPLY_TRANSITION](() => {
@@ -273,7 +288,8 @@ async function setChildNodes(oldParent: Node, newParent: Node, walker: Walker) {
         await updateNode(checkOld, newNode, walker);
       }
     } else {
-      insertedNode = newNode.cloneNode(true);
+      const targetDoc = oldParent.ownerDocument ?? document;
+      insertedNode = cloneForDocument(newNode, targetDoc, walker);
       if (shouldInsertImmediately(insertedNode!)) {
         flushPendingInsertions();
         walker[APPLY_TRANSITION](() => oldParent.appendChild(insertedNode!));
