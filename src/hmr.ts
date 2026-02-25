@@ -647,7 +647,7 @@ export function initHmrEntry(options: HmrEntryOptions) {
     if (shadow) {
       // When DSD has already created a shadow root, patch attachShadow to
       // return the existing root so preact-custom-element won't throw.
-      const orig = HTMLElement.prototype.attachShadow;
+      const orig = HTMLElement.prototype.attachShadow.bind(HTMLElement.prototype);
       HTMLElement.prototype.attachShadow = function (init: ShadowRootInit) {
         return this.shadowRoot ?? orig.call(this, init);
       };

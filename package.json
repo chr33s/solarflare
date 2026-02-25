@@ -2,7 +2,13 @@
   "name": "@chr33s/solarflare",
   "version": "0.0.3",
   "license": "MIT",
-  "bin": "./src/build.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chr33s/solarflare"
+  },
+  "bin": {
+    "solarflare": "src/build.ts"
+  },
   "files": [
     "src",
     "tsconfig.json",
@@ -21,7 +27,7 @@
   "scripts": {
     "check": "oxfmt --check && oxlint --type-aware --type-check",
     "examples:clean": "rm -rvf ./examples/*/.wrangler ./examples/*/.shopify ./examples/*/dist  ./examples/*/node_modules",
-    "examples:install": "for dir in basic dsd minimal node shopify-app; do npm install --prefix ./examples/${dir} --silent; done",
+    "examples:install": "for dir in basic dsd minimal node shopify-app; do npm install --prefix ./examples/${dir} --silent; done && bun install --cwd=./examples/bun && cd examples/deno && deno install",
     "fix": "oxlint --type-aware --type-check --fix && oxfmt --write",
     "test": "WRANGLER_LOG=error; node --test src/*.test.ts"
   },
@@ -49,6 +55,7 @@
     "ts-morph": "27.0.2"
   },
   "engines": {
+    "bun": ">=1.3.0",
     "node": ">=24.12.0"
   }
 }
