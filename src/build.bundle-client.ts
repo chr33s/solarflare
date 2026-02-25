@@ -3,11 +3,18 @@ import { readFile, unlink, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import ts from "typescript";
 import { rolldown } from "rolldown";
+import type { RolldownOptions } from "rolldown";
 import { replacePlugin } from "rolldown/plugins";
 import { transform } from "lightningcss";
 import { createProgram, getDefaultExportInfo } from "./ast.ts";
 import { exists } from "./fs.ts";
-import { assetUrlPrefixPlugin, type BuildArgs, moduleTypes } from "./build.bundle.ts";
+import {
+  assetUrlPrefixPlugin,
+  type BuildArgs,
+  mergeInputOptions,
+  mergeOutputOptions,
+  moduleTypes,
+} from "./build.bundle.ts";
 import { parsePath } from "./paths.ts";
 import { generateClientScript } from "./console-forward.ts";
 import { createScanner } from "./build.scan.ts";
@@ -22,6 +29,7 @@ export interface BuildClientOptions {
   distClient: string;
   publicDir: string;
   chunksPath: string;
+  userConfig?: RolldownOptions;
 }
 
 async function remove(path: string) {
@@ -82,7 +90,7 @@ async function getComponentMeta(program: ts.Program, appDir: string, file: strin
 }
 
 export async function buildClient(options: BuildClientOptions) {
-  const { args, rootDir, appDir, distDir, distClient, publicDir, chunksPath } = options;
+  const { args, rootDir, appDir, distDir, distClient, publicDir, chunksPath, userConfig } = options;
   const distClientAssets = join(distClient, "assets");
   const scanner = createScanner({ rootDir, appDir });
 
@@ -255,80 +263,90 @@ export async function buildClient(options: BuildClientOptions) {
 
   const packageImports = await scanner.getPackageImports();
 
-  const bundle = await rolldown({
-    input,
-    platform: "browser",
-    tsconfig: true,
-    moduleTypes,
-    plugins: [
-      replacePlugin({
-        "globalThis.__SF_DEV__": JSON.stringify(!args.production),
-      }),
+  const bundle = await rolldown(
+    mergeInputOptions(
       {
-        name: "raw-css-loader",
-        resolveId(source: string, importer: string | undefined) {
-          if (source.endsWith("?raw") && source.includes(".css")) {
-            const realPath = source.replace(/\?raw$/, "");
-            if (importer) {
-              const importerDir = importer.split("/").slice(0, -1).join("/");
-              return {
-                id: join(importerDir, realPath) + "?raw",
-                external: false,
-              };
-            }
-            return { id: realPath + "?raw", external: false };
-          }
-          return null;
+        input,
+        platform: "browser",
+        tsconfig: true,
+        moduleTypes,
+        plugins: [
+          replacePlugin({
+            "globalThis.__SF_DEV__": JSON.stringify(!args.production),
+          }),
+          {
+            name: "raw-css-loader",
+            resolveId(source: string, importer: string | undefined) {
+              if (source.endsWith("?raw") && source.includes(".css")) {
+                const realPath = source.replace(/\?raw$/, "");
+                if (importer) {
+                  const importerDir = importer.split("/").slice(0, -1).join("/");
+                  return {
+                    id: join(importerDir, realPath) + "?raw",
+                    external: false,
+                  };
+                }
+                return { id: realPath + "?raw", external: false };
+              }
+              return null;
+            },
+            async load(id: string) {
+              if (id.endsWith("?raw")) {
+                const realPath = id.replace(/\?raw$/, "");
+                try {
+                  const content = await readFile(realPath, "utf-8");
+                  return {
+                    code: /* tsx */ `export default ${JSON.stringify(content)};`,
+                    moduleType: "js",
+                  };
+                } catch {
+                  console.warn(`[raw-css-loader] Could not load: ${realPath}`);
+                  return { code: `export default "";`, moduleType: "js" };
+                }
+              }
+              return null;
+            },
+          },
+          assetUrlPrefixPlugin,
+        ],
+        resolve: {
+          alias: packageImports,
         },
-        async load(id: string) {
-          if (id.endsWith("?raw")) {
-            const realPath = id.replace(/\?raw$/, "");
-            try {
-              const content = await readFile(realPath, "utf-8");
-              return {
-                code: /* tsx */ `export default ${JSON.stringify(content)};`,
-                moduleType: "js",
-              };
-            } catch {
-              console.warn(`[raw-css-loader] Could not load: ${realPath}`);
-              return { code: `export default "";`, moduleType: "js" };
-            }
-          }
-          return null;
+        transform: {
+          target: "es2020",
+          jsx: {
+            runtime: "automatic",
+            development: !args.production,
+          },
         },
       },
-      assetUrlPrefixPlugin,
-    ],
-    resolve: {
-      alias: packageImports,
-    },
-    transform: {
-      target: "es2020",
-      jsx: {
-        runtime: "automatic",
-        development: !args.production,
-      },
-    },
-  });
+      userConfig,
+    ),
+  );
 
-  await bundle.write({
-    dir: distClientAssets,
-    format: "esm",
-    entryFileNames: "[name].js",
-    minify: args.production,
-    chunkFileNames: "[name]-[hash].js",
-    assetFileNames: "[name]-[hash][extname]",
-    codeSplitting: {
-      minSize: 20000,
-      groups: [
-        {
-          name: "vendor",
-          test: /node_modules/,
+  await bundle.write(
+    mergeOutputOptions(
+      {
+        dir: distClientAssets,
+        format: "esm",
+        entryFileNames: "[name].js",
+        minify: args.production,
+        chunkFileNames: "[name]-[hash].js",
+        assetFileNames: "[name]-[hash][extname]",
+        codeSplitting: {
+          minSize: 20000,
+          groups: [
+            {
+              name: "vendor",
+              test: /node_modules/,
+            },
+          ],
         },
-      ],
-    },
-    ...(args.sourcemap && { sourcemap: true }),
-  });
+        ...(args.sourcemap && { sourcemap: true }),
+      },
+      userConfig,
+    ),
+  );
 
   if (cssOutputsByBase.size > 0) {
     const emittedCss = new Set(cssOutputsByBase.values());

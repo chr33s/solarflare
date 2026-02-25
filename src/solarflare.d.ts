@@ -5,13 +5,12 @@ interface ImportMeta {
   ): Record<string, () => Promise<T>>;
   /** The file path of the current module (Node runtime) */
   path?: string;
-  /** Environment variables (bundler) */
-  env?: {
+  /** Environment variables replaced at build time via `transform.define` in `rolldown.config.ts`. */
+  env: {
     DEV?: boolean;
     PROD?: boolean;
     MODE?: string;
-    [key: string]: unknown;
-  };
+  } & Record<string, string>;
 }
 
 declare module "*.css" {

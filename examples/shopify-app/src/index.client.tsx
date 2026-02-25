@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 
-export default function Client(props: { SHOPIFY_API_KEY: string }) {
+export default function Client(_props: {}) {
   const [error, setError] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string>("Loading...");
   useEffect(() => {
@@ -29,8 +29,6 @@ export default function Client(props: { SHOPIFY_API_KEY: string }) {
 
   return (
     <s-page heading={shopName}>
-      <meta name="shopify-api-key" content={props.SHOPIFY_API_KEY} />
-
       {error && <s-banner heading={error} tone="critical" />}
 
       <s-section>

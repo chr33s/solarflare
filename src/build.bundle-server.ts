@@ -2,8 +2,15 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { glob } from "node:fs/promises";
 import { rolldown } from "rolldown";
+import type { RolldownOptions } from "rolldown";
 import { createProgram } from "./ast.ts";
-import { assetUrlPrefixPlugin, type BuildArgs, moduleTypes } from "./build.bundle.ts";
+import {
+  assetUrlPrefixPlugin,
+  type BuildArgs,
+  mergeInputOptions,
+  mergeOutputOptions,
+  moduleTypes,
+} from "./build.bundle.ts";
 import { createScanner } from "./build.scan.ts";
 import { validateRoutes, generateRoutesTypeFile } from "./build.validate.ts";
 import { generateModulesFile } from "./build.emit-manifests.ts";
@@ -16,10 +23,12 @@ export interface BuildServerOptions {
   modulesPath: string;
   chunksPath: string;
   routesTypePath: string;
+  userConfig?: RolldownOptions;
 }
 
 export async function buildServer(options: BuildServerOptions) {
-  const { args, rootDir, appDir, distServer, modulesPath, chunksPath, routesTypePath } = options;
+  const { args, rootDir, appDir, distServer, modulesPath, chunksPath, routesTypePath, userConfig } =
+    options;
   const scanner = createScanner({ rootDir, appDir });
 
   console.log("🔍 Scanning for route modules...");
@@ -73,51 +82,61 @@ export async function buildServer(options: BuildServerOptions) {
 
   const packageImports = await scanner.getPackageImports();
 
-  const bundle = await rolldown({
-    input: join(appDir, "index.ts"),
-    platform: "node",
-    tsconfig: true,
-    moduleTypes,
-    external: [
-      "cloudflare:workers",
-      "preact",
-      "preact/hooks",
-      "preact/compat",
-      "preact/jsx-runtime",
-      "preact/jsx-dev-runtime",
-      "preact/debug",
-      "@preact/signals",
-      "@preact/signals-core",
-      "@preact/signals-debug",
-      "preact-render-to-string",
-      "preact-render-to-string/stream",
-      "preact-custom-element",
-    ],
-    resolve: {
-      alias: {
-        ...packageImports,
-        ".modules.generated": modulesPath,
-        ".chunks.generated.json": chunksPath,
+  const bundle = await rolldown(
+    mergeInputOptions(
+      {
+        input: join(appDir, "index.ts"),
+        platform: "node",
+        tsconfig: true,
+        moduleTypes,
+        external: [
+          "cloudflare:workers",
+          "preact",
+          "preact/hooks",
+          "preact/compat",
+          "preact/jsx-runtime",
+          "preact/jsx-dev-runtime",
+          "preact/debug",
+          "@preact/signals",
+          "@preact/signals-core",
+          "@preact/signals-debug",
+          "preact-render-to-string",
+          "preact-render-to-string/stream",
+          "preact-custom-element",
+        ],
+        resolve: {
+          alias: {
+            ...packageImports,
+            ".modules.generated": modulesPath,
+            ".chunks.generated.json": chunksPath,
+          },
+        },
+        plugins: [assetUrlPrefixPlugin],
+        transform: {
+          jsx: {
+            runtime: "automatic",
+            development: false,
+          },
+        },
       },
-    },
-    plugins: [assetUrlPrefixPlugin],
-    transform: {
-      jsx: {
-        runtime: "automatic",
-        development: false,
-      },
-    },
-  });
+      userConfig,
+    ),
+  );
 
-  await bundle.write({
-    dir: distServer,
-    format: "esm",
-    codeSplitting: false,
-    entryFileNames: "index.js",
-    assetFileNames: "[name]-[hash][extname]",
-    minify: args.production,
-    ...(args.sourcemap && { sourcemap: true }),
-  });
+  await bundle.write(
+    mergeOutputOptions(
+      {
+        dir: distServer,
+        format: "esm",
+        codeSplitting: false,
+        entryFileNames: "index.js",
+        assetFileNames: "[name]-[hash][extname]",
+        minify: args.production,
+        ...(args.sourcemap && { sourcemap: true }),
+      },
+      userConfig,
+    ),
+  );
 
   await bundle.close();
 

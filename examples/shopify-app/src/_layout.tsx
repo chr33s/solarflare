@@ -7,6 +7,7 @@ export default function Layout({ children }: { children: VNode }) {
       <head>
         <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
         <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+        <meta name="shopify-api-key" content={import.meta.env.SHOPIFY_API_KEY} />
         <Head />
       </head>
       <body>

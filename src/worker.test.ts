@@ -1,6 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import * as assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { decode } from "turbo-stream";
@@ -134,6 +135,16 @@ describe("integration", () => {
     const html = await response.text();
     assert.ok(html.includes("<!doctype html>"));
     assert.ok(html.includes("<html"));
+  });
+
+  it("should replace import.meta.env via rolldown.config.ts define", async () => {
+    const response = await fetch(`${BASE_URL}/`);
+    const html = await response.text();
+    const pkg = JSON.parse(await readFile(join(BASIC_EXAMPLE_DIR, "package.json"), "utf-8"));
+    assert.ok(
+      html.includes(`content="${pkg.version}"`),
+      `Expected solarflare-version meta to contain "${pkg.version}"`,
+    );
   });
 
   it("should return streaming headers", async () => {

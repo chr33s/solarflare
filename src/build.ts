@@ -7,6 +7,7 @@ import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
 import { buildClient } from "./build.bundle-client.ts";
 import { buildServer } from "./build.bundle-server.ts";
+import { loadUserConfig } from "./build.bundle.ts";
 import { exists } from "./fs.ts";
 
 /** Resolve paths relative to the current working directory. */
@@ -110,6 +111,9 @@ async function build() {
 
   await scaffoldTemplates();
 
+  const userConfig = await loadUserConfig(ROOT_DIR);
+  if (userConfig) console.log("📋 Loaded rolldown.config.ts");
+
   await buildClient({
     args,
     rootDir: ROOT_DIR,
@@ -118,6 +122,7 @@ async function build() {
     distClient: DIST_CLIENT,
     publicDir: PUBLIC_DIR,
     chunksPath: CHUNKS_PATH,
+    userConfig,
   });
 
   await buildServer({
@@ -128,6 +133,7 @@ async function build() {
     modulesPath: MODULES_PATH,
     chunksPath: CHUNKS_PATH,
     routesTypePath: ROUTES_TYPE_PATH,
+    userConfig,
   });
 
   const duration = ((performance.now() - startTime) / 1000).toFixed(2);

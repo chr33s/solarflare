@@ -9,6 +9,7 @@ export default function Layout({ children }: { children: VNode }) {
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="description" content="Solarflare Example App" />
+        <meta name="solarflare-version" content={import.meta.env.SOLARFLARE_VERSION} />
         <title>Solarflare</title>
         <Head />
       </head>
