@@ -1,4 +1,8 @@
-import { stylesheets, supportsConstructableStylesheets } from "./stylesheets.ts";
+import {
+  safeAdoptStylesheets,
+  stylesheets,
+  supportsConstructableStylesheets,
+} from "./stylesheets.ts";
 
 /** Style loading state for a component. */
 interface StyleState {
@@ -51,12 +55,11 @@ export function applyStyles(element: HTMLElement, sheets: CSSStyleSheet[]) {
   const shadowRoot = element.shadowRoot;
 
   if (shadowRoot) {
-    shadowRoot.adoptedStyleSheets = [...shadowRoot.adoptedStyleSheets, ...sheets];
+    safeAdoptStylesheets(shadowRoot, [...shadowRoot.adoptedStyleSheets, ...sheets]);
   } else {
-    for (const sheet of sheets) {
-      if (!document.adoptedStyleSheets.includes(sheet)) {
-        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
-      }
+    const toAdd = sheets.filter((s) => !document.adoptedStyleSheets.includes(s));
+    if (toAdd.length) {
+      safeAdoptStylesheets(document, [...document.adoptedStyleSheets, ...toAdd]);
     }
   }
 }

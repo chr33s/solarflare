@@ -9,6 +9,29 @@ export const supportsConstructableStylesheets = () => {
   }
 };
 
+/** Recreates a stylesheet in the current document context. */
+function cloneSheet(sheet: CSSStyleSheet): CSSStyleSheet {
+  const fresh = new CSSStyleSheet();
+  fresh.replaceSync([...sheet.cssRules].map((r) => r.cssText).join(""));
+  return fresh;
+}
+
+/** Safely adopts stylesheets, recreating them if cross-document sharing fails. */
+export function safeAdoptStylesheets(
+  target: Document | ShadowRoot,
+  sheets: CSSStyleSheet[],
+): CSSStyleSheet[] {
+  try {
+    target.adoptedStyleSheets = sheets;
+    return sheets;
+  } catch {
+    // Stylesheet was created in a different document context - recreate
+    const cloned = sheets.map(cloneSheet);
+    target.adoptedStyleSheets = cloned;
+    return cloned;
+  }
+}
+
 /** Stylesheet entry with metadata. */
 interface StylesheetEntry {
   sheet: CSSStyleSheet;
@@ -143,7 +166,7 @@ class StylesheetManager {
     // Include global sheets
     const globalSheets = [...this.#sheets.values()].filter((e) => e.isGlobal).map((e) => e.sheet);
 
-    shadowRoot.adoptedStyleSheets = [...globalSheets, ...sheets];
+    safeAdoptStylesheets(shadowRoot, [...globalSheets, ...sheets]);
   }
 
   /** Removes a consumer from all its stylesheets. */
@@ -171,7 +194,7 @@ class StylesheetManager {
   #adoptToDocument(sheet: CSSStyleSheet) {
     if (!this.#documentSheets.includes(sheet)) {
       this.#documentSheets.push(sheet);
-      document.adoptedStyleSheets = [...this.#documentSheets];
+      safeAdoptStylesheets(document, [...this.#documentSheets]);
     }
   }
 

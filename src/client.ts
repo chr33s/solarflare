@@ -3,7 +3,11 @@ import { parsePath } from "./paths.ts";
 import { hydrateStore, initHydrationCoordinator } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 import { getRuntime } from "./runtime.ts";
-import { stylesheets, supportsConstructableStylesheets } from "./stylesheets.ts";
+import {
+  safeAdoptStylesheets,
+  stylesheets,
+  supportsConstructableStylesheets,
+} from "./stylesheets.ts";
 import { getPreloadedStylesheet } from "./server.styles.ts";
 
 export { initHmrEntry, reloadAllStylesheets } from "./hmr.ts";
@@ -51,15 +55,15 @@ export function registerInlineStyles(tag: string, styles: InlineStyleEntry[]) {
   const sheets = stylesheets.getForConsumer(tag);
   const shadowRoot = el?.shadowRoot;
   if (shadowRoot) {
-    shadowRoot.adoptedStyleSheets = [
+    safeAdoptStylesheets(shadowRoot, [
       ...shadowRoot.adoptedStyleSheets.filter((s) => !sheets.includes(s)),
       ...sheets,
-    ];
+    ]);
   } else {
-    document.adoptedStyleSheets = [
+    safeAdoptStylesheets(document, [
       ...document.adoptedStyleSheets.filter((s) => !sheets.includes(s)),
       ...sheets,
-    ];
+    ]);
   }
 }
 
