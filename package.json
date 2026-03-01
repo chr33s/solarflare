@@ -38,19 +38,19 @@
     "preact": "11.0.0-beta.1",
     "preact-custom-element": "4.6.0",
     "preact-render-to-string": "6.6.6",
-    "rolldown": "1.0.0-rc.5",
+    "rolldown": "1.0.0-rc.6",
     "tsx": "4.21.0",
-    "turbo-stream": "3.1.0"
+    "turbo-stream": "3.2.0"
   },
   "devDependencies": {
     "@preact/signals-debug": "1.4.2",
-    "@types/node": "25.3.0",
+    "@types/node": "25.3.3",
     "oxfmt": "0.35.0",
     "oxlint": "1.50.0",
-    "oxlint-tsgolint": "0.14.2",
+    "oxlint-tsgolint": "0.15.0",
     "playwright": "1.58.2",
     "typescript": "5.9.3",
-    "wrangler": "4.68.0"
+    "wrangler": "4.69.0"
   },
   "optionalDependencies": {
     "ts-morph": "27.0.2"

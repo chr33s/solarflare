@@ -12,9 +12,9 @@
     "@chr33s/solarflare": "file:../../"
   },
   "devDependencies": {
-    "@shopify/app-bridge-types": "^0.5.3",
+    "@shopify/app-bridge-types": "^0.7.0",
     "@shopify/app-bridge-ui-types": "^0.3.3",
-    "@shopify/cli": "3.89.0",
+    "@shopify/cli": "3.91.0",
     "@shopify/polaris-types": "^1.0.1"
   },
   "engines": {
