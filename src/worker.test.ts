@@ -242,13 +242,11 @@ describe("integration", () => {
   });
 
   it("should return turbo-stream patch for valid route", async () => {
-    const response = await fetch(`${BASE_URL}/_sf/patch`, {
-      method: "POST",
+    const response = await fetch(`${BASE_URL}/`, {
       headers: {
-        "Content-Type": "application/json",
         Accept: "application/x-turbo-stream",
+        "x-solarflare-patch": "#app",
       },
-      body: JSON.stringify({ url: "/", outlet: "#app" }),
     });
 
     assert.strictEqual(response.status, 200);
@@ -287,41 +285,17 @@ describe("integration", () => {
     assert.ok(htmlChunks.length > 0);
   });
 
-  it("should return 400 for patch request missing url", async () => {
-    const response = await fetch(`${BASE_URL}/_sf/patch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-
-    assert.strictEqual(response.status, 400);
-  });
-
-  it("should return 400 for patch request with cross-origin url", async () => {
-    const response = await fetch(`${BASE_URL}/_sf/patch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "https://example.com/" }),
-    });
-
-    assert.strictEqual(response.status, 400);
-  });
-
   it("should return 404 for patch request to unknown route", async () => {
-    const response = await fetch(`${BASE_URL}/_sf/patch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "/unknown-route-xyz" }),
+    const response = await fetch(`${BASE_URL}/unknown-route-xyz`, {
+      headers: { "x-solarflare-patch": "#app" },
     });
 
     assert.strictEqual(response.status, 404);
   });
 
   it("should return 400 for patch request to API route", async () => {
-    const response = await fetch(`${BASE_URL}/_sf/patch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: "/api" }),
+    const response = await fetch(`${BASE_URL}/api`, {
+      headers: { "x-solarflare-patch": "#app" },
     });
 
     assert.strictEqual(response.status, 400);

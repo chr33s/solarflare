@@ -226,17 +226,13 @@ export class Router {
     const abortController = new AbortController();
     this.#inflightAbort = abortController;
 
-    const patchUrl = new URL("/_sf/patch", location.origin);
-
     const response = await fetchWithRetry(
-      patchUrl.href,
+      url.href,
       {
-        method: "POST",
         headers: {
           Accept: "application/x-turbo-stream",
-          "Content-Type": "application/json",
+          "x-solarflare-patch": "#app",
         },
-        body: JSON.stringify({ url: url.pathname + url.search + url.hash, outlet: "#app" }),
         signal: abortController.signal,
       },
       { maxRetries: 0 },

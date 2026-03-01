@@ -28,7 +28,7 @@ const responseCache = new ResponseCache(100);
 
 const staticShellCache = new Map<string, StreamingShell>();
 
-const PATCH_ENDPOINT = "/_sf/patch";
+const PATCH_HEADER = "x-solarflare-patch";
 
 /** Gets or creates a static shell. */
 function getStaticShell(lang: string) {
@@ -437,27 +437,13 @@ async function applyPerfFeatures(plan: RenderPlan) {
 }
 
 async function handlePatchRequest(request: Request) {
-  const url = new URL(request.url);
-  if (!(request.method === "POST" && url.pathname === PATCH_ENDPOINT)) return;
+  const outlet = request.headers.get(PATCH_HEADER);
+  if (!outlet) return;
 
+  const url = new URL(request.url);
   const headers = getDefaultHeaders();
   try {
-    const body = (await request.json()) as { url?: string; outlet?: string };
-    if (!body?.url) {
-      return new Response("Missing url", { status: 400, headers });
-    }
-
-    const targetUrl = new URL(body.url, url.origin);
-    if (targetUrl.origin !== url.origin) {
-      return new Response("Invalid url", { status: 400, headers });
-    }
-
-    const targetRequest = new Request(targetUrl, {
-      method: "GET",
-      headers: request.headers,
-    });
-
-    const result = await matchAndLoad(targetRequest, targetUrl);
+    const result = await matchAndLoad(request, url);
 
     if (result.kind === "not-found") {
       return new Response("Not Found", { status: 404, headers });
@@ -467,7 +453,6 @@ async function handlePatchRequest(request: Request) {
       return new Response("Invalid patch target", { status: 400, headers });
     }
 
-    const outlet = body.outlet ?? "#app";
     return renderPatchResponse(result.context, headers, outlet);
   } catch (error) {
     const serverError = error instanceof Error ? error : new Error(String(error));
