@@ -78,6 +78,21 @@ export function htmlReplacePlugin(replacements: Record<string, string>): Plugin 
   };
 }
 
+/** Strip bare `.css` imports (CSS is handled externally by lightningcss). */
+export const cssStripPlugin: Plugin = {
+  name: "css-strip",
+  resolveId(source: string) {
+    if (source.endsWith(".css") && !source.endsWith("?raw")) {
+      return { id: "\0css-stub", external: false };
+    }
+    return null;
+  },
+  load(id: string) {
+    if (id === "\0css-stub") return { code: "", moduleType: "js" };
+    return null;
+  },
+};
+
 export const assetUrlPrefixPlugin = {
   name: "asset-url-prefix",
   generateBundle(_options: NormalizedOutputOptions, bundle: OutputBundle) {

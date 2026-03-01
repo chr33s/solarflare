@@ -11,6 +11,7 @@ import { exists } from "./fs.ts";
 import {
   assetUrlPrefixPlugin,
   type BuildArgs,
+  cssStripPlugin,
   mergeInputOptions,
   mergeOutputOptions,
   moduleTypes,
@@ -271,6 +272,7 @@ export async function buildClient(options: BuildClientOptions) {
         tsconfig: true,
         moduleTypes,
         plugins: [
+          cssStripPlugin,
           replacePlugin({
             "globalThis.__SF_DEV__": JSON.stringify(!args.production),
           }),

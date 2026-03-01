@@ -7,6 +7,7 @@ import { createProgram } from "./ast.ts";
 import {
   assetUrlPrefixPlugin,
   type BuildArgs,
+  cssStripPlugin,
   mergeInputOptions,
   mergeOutputOptions,
   moduleTypes,
@@ -111,7 +112,7 @@ export async function buildServer(options: BuildServerOptions) {
             ".chunks.generated.json": chunksPath,
           },
         },
-        plugins: [assetUrlPrefixPlugin],
+        plugins: [cssStripPlugin, assetUrlPrefixPlugin],
         transform: {
           jsx: {
             runtime: "automatic",
