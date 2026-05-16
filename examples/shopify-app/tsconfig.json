@@ -4,9 +4,10 @@
       "@chr33s/solarflare",
       "@shopify/app-bridge-types",
       "@shopify/app-bridge-ui-types",
-      "@shopify/polaris-types"
+      "@shopify/polaris-types",
+      "node"
     ]
   },
   "extends": "@chr33s/solarflare/tsconfig.json",
-  "include": ["./src", "./worker-configuration.d.ts"]
+  "include": ["./rolldown.config.ts", "./src", "./worker-configuration.d.ts"]
 }
