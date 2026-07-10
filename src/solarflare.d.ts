@@ -86,6 +86,22 @@ declare module "@chr33s/solarflare/client" {
   }
 
   export function navigate(to: string | URL, options?: NavigateOptions): Promise<void>;
+
+  export function useHead(input: unknown, options?: unknown): unknown;
+  export function Head(): VNode<any>;
+
+  export type SpeculationEagerness = "conservative" | "moderate" | "eager" | "immediate";
+
+  export function workerConfigMeta(config: {
+    preconnect?: string[];
+    cacheMaxAge?: number;
+    cacheSwr?: number;
+    earlyFlush?: boolean;
+    prefetch?: string[];
+    prerender?: string[];
+    prefetchSelector?: string;
+    speculationEagerness?: SpeculationEagerness;
+  }): Array<{ name: string; content: string }>;
 }
 
 declare module "@chr33s/solarflare/server" {
@@ -93,6 +109,7 @@ declare module "@chr33s/solarflare/server" {
 
   export function Body(): VNode<any>;
   export function Head(): VNode<any>;
+  export function useHead(input: unknown, options?: unknown): unknown;
 }
 
 declare module "@chr33s/solarflare" {

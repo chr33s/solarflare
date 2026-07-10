@@ -3,7 +3,11 @@ import { signal, type Signal, useSignal, useSignalEffect } from "@preact/signals
 import { useMemo } from "preact/hooks";
 import register from "preact-custom-element";
 import { initRouter, getRouter } from "./router.ts";
-import { extractDataIsland, initHydrationCoordinator } from "./hydration.ts";
+import {
+  extractDataIsland,
+  getDeferredIslandPrefix,
+  initHydrationCoordinator,
+} from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
 import { getRuntime } from "./runtime.ts";
 import type { RoutesManifest } from "./manifest.ts";
@@ -570,7 +574,7 @@ function createHmrEntryComponent(options: HmrEntryOptions) {
         }
 
         const scripts = document.querySelectorAll(
-          `script[type="application/json"][data-island^="${tag}-deferred"]`,
+          `script[type="application/json"][data-island^="${getDeferredIslandPrefix(tag)}"]`,
         );
         if (!scripts.length) return;
 

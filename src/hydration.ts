@@ -1,4 +1,4 @@
-import { serializeToString, parseFromString } from "./serialize.ts";
+import { serializeToString, parseFromString, escapeScriptText } from "./serialize.ts";
 import { serializeHeadState, hydrateHeadState } from "./head.ts";
 import { initStore, setPathname, params, serverData, pathname } from "./store.ts";
 
@@ -38,7 +38,7 @@ export function getHydrateScriptPrefix(tag: string) {
  * Includes a stable id attribute for diff-dom-streaming replacements.
  */
 export async function serializeDataIsland(id: string, data: unknown) {
-  const serialized = await serializeToString(data);
+  const serialized = escapeScriptText(await serializeToString(data));
   return /* html */ `<script type="application/json" id="${id}" data-island="${id}">${serialized}</script>`;
 }
 
@@ -70,7 +70,9 @@ export async function serializeStoreForHydration() {
 
 /** Serializes head state for client hydration. */
 export async function serializeHeadForHydration() {
-  return /* html */ `<script type="application/json" data-island="${HEAD_ISLAND_ID}">${serializeHeadState()}</script>`;
+  return /* html */ `<script type="application/json" data-island="${HEAD_ISLAND_ID}">${escapeScriptText(
+    serializeHeadState(),
+  )}</script>`;
 }
 
 /** Hydrates store from serialized state (client-side). */

@@ -112,8 +112,7 @@ export function parseMetaConfig(html: string) {
  *
  * @example
  * ```tsx
- * import { useHead } from "solarflare";
- * import { workerConfigMeta } from "solarflare/client";
+ * import { useHead, workerConfigMeta } from "@chr33s/solarflare/client";
  *
  * export default function BlogLayout({ children }) {
  *   useHead({

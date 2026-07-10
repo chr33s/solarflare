@@ -77,18 +77,12 @@ export function transformSource(source: string, filePath = "test.tsx") {
 
   transformReactToPreact(sourceFile);
 
-  if (!filePath.includes("/routes/") && !filePath.includes("/app/")) {
-    return sourceFile.getFullText();
-  }
-
-  const routeModule = analyzeRouteModule(sourceFile);
-
-  if (filePath.endsWith("routes.ts") || filePath.endsWith("routes.tsx")) {
-    return transformRoutesConfig(sourceFile);
-  }
-
-  if (routeModule.loader || routeModule.action || routeModule.component) {
-    return sourceFile.getFullText();
+  if (filePath.includes("/routes/") || filePath.includes("/app/")) {
+    if (filePath.endsWith("routes.ts") || filePath.endsWith("routes.tsx")) {
+      return transformRoutesConfig(sourceFile);
+    }
+    // Note: transformSource (used in tests) applies import/JSX transforms only;
+    // route-module file splitting happens in transformer() which reads from disk.
   }
 
   return sourceFile.getFullText();
@@ -367,8 +361,12 @@ function transformLoaderToServerHandler(loaderCode: string) {
 
   body = body
     .replace(/import\s+{\s*json\s*}/g, "// json() not needed in Solarflare")
-    .replace(/return\s+json\(/g, "return ")
-    .replace(/\);\s*$/gm, ";")
+    // Unwrap json()/defer() by turning the call into a parenthesized expression
+    // (`return json({...})` -> `return ({...})`), which stays valid without the
+    // trailing `)` being stripped. A blanket `/\);\s*$/gm` replace mangled every
+    // unrelated line that happened to end in `);`.
+    .replace(/return\s+json\(/g, "return (")
+    .replace(/return\s+defer\(/g, "return (")
     // React Router v7 patterns
     .replace(
       /{\s*params\s*}:\s*Route\.LoaderArgs/g,
@@ -390,9 +388,7 @@ function transformLoaderToServerHandler(loaderCode: string) {
     .replace(
       /{\s*params,?\s*request\s*}:\s*LoaderFunctionArgs/g,
       "request: Request, params: Record<string, string>",
-    )
-    // Handle defer() -> streaming props
-    .replace(/return\s+defer\(/g, "return ");
+    );
 
   return body;
 }
@@ -405,20 +401,15 @@ function transformActionToServerHandler(actionCode: string) {
     .trim();
 
   body = body
+    .replace(/return\s+json\(/g, "return (")
+    // Rewrite redirect("/x") / redirectDocument("/x") to a 302 Response in a
+    // single balanced match, rather than opening the expression here and closing
+    // it with a blanket `/\);\s*$/gm` replace that corrupted every other line
+    // ending in `);`.
     .replace(
-      /const\s+formData\s*=\s*await\s+request\.formData\(\)/g,
-      "const formData = await request.formData()",
-    )
-    .replace(/return\s+json\(/g, "return ")
-    .replace(
-      /return\s+redirect\(/g,
-      "return new Response(null, { status: 302, headers: { Location: ",
-    )
-    .replace(
-      /return\s+redirectDocument\(/g,
-      "return new Response(null, { status: 302, headers: { Location: ",
-    )
-    .replace(/\);\s*$/gm, " } });");
+      /return\s+redirect(?:Document)?\(([^;]*?)\);/g,
+      "return new Response(null, { status: 302, headers: { Location: $1 } });",
+    );
 
   return body;
 }

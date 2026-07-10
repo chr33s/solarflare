@@ -4,12 +4,7 @@ import type { Route, SolarflareStream } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
 import { isDevToolsRequest, handleDevToolsRequest } from "./devtools-json.ts";
 import { isHmrRequest, handleHmrRequest } from "./server.hmr.ts";
-import {
-  generateStaticShell,
-  createEarlyFlushStream,
-  generateResourceHints,
-  type StreamingShell,
-} from "./early-flush.ts";
+import { generateResourceHints } from "./early-flush.ts";
 import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
 import { ResponseCache, withCache } from "./route-cache.ts";
 import { parseMetaConfig } from "./worker.config.ts";
@@ -20,25 +15,14 @@ import {
   getStylesheets,
   getDevScripts,
   isShadowTag,
+  isDev,
 } from "./manifest.runtime.ts";
 import { findPairedModulePath } from "./paths.ts";
 import { encode } from "turbo-stream";
 
 const responseCache = new ResponseCache(100);
 
-const staticShellCache = new Map<string, StreamingShell>();
-
 const PATCH_HEADER = "x-solarflare-patch";
-
-/** Gets or creates a static shell. */
-function getStaticShell(lang: string) {
-  let shell = staticShellCache.get(lang);
-  if (!shell) {
-    shell = generateStaticShell({ lang });
-    staticShellCache.set(lang, shell);
-  }
-  return shell;
-}
 
 /** Worker optimization options. */
 export interface WorkerOptimizations {
@@ -81,9 +65,6 @@ interface RenderPlan {
   finalHeaders: Record<string, string>;
   status: number;
   statusText?: string;
-  metaConfig: ReturnType<typeof parseMetaConfig>;
-  resourceHints: string;
-  useEarlyFlush: boolean;
 }
 
 type MatchAndLoadResult =
@@ -103,6 +84,10 @@ function getDefaultHeaders() {
 }
 
 async function handleDevEndpoints(request: Request, env?: WorkerEnv) {
+  // Dev-only endpoints (/_hmr SSE, /_console log sink, devtools JSON) must never
+  // be reachable in production — they leak internals and accept arbitrary input.
+  if (!isDev()) return null;
+
   if (isHmrRequest(request)) {
     return handleHmrRequest();
   }
@@ -273,6 +258,10 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
   let responseStatus: number | undefined;
   let responseStatusText: string | undefined;
 
+  // The client component module doesn't depend on the loader's data, so start
+  // importing it now and let it evaluate concurrently with the loader I/O.
+  const clientModPromise = typedModules.client[clientPath]();
+
   if (serverPath && serverPath in typedModules.server) {
     const serverMod = await typedModules.server[serverPath]();
     const loader = serverMod.default as ServerLoader;
@@ -312,7 +301,7 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
 
   const props: Record<string, unknown> = { ...params, ...shellData };
 
-  const clientMod = await typedModules.client[clientPath]();
+  const clientMod = await clientModPromise;
   const Component = clientMod.default as FunctionComponent<any>;
 
   let content = server.renderComponent(Component, route.tag, props, {
@@ -328,8 +317,14 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
   const stylesheets = getStylesheets(route.parsedPattern.pathname);
   const devScripts = getDevScripts();
 
-  const headCtx = getHeadContext();
-  const headHtml = headCtx.renderToString();
+  // Populate THIS request's head by rendering the tree, then derive meta config
+  // from it. Reading the global head context without rendering would return the
+  // previous request's head (wrong cache/lang/early-flush config per request).
+  const headHtml = server.renderHeadForConfig(content, {
+    params,
+    serverData: shellData,
+    pathname: url.pathname,
+  });
   const metaConfig = parseMetaConfig(headHtml);
 
   return {
@@ -378,8 +373,12 @@ async function renderStream(
     serverData: shellData,
     pathname: url.pathname,
     script: scriptPath,
-    styles: useEarlyFlush ? [] : stylesheets,
+    styles: stylesheets,
     devScripts,
+    // Early flush: inject the resource hints into <head> so the browser starts
+    // fetching assets as the head streams, while still rendering one valid,
+    // fully-styled document.
+    preloadHints: useEarlyFlush ? resourceHints : undefined,
     deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
     _headers: context.responseHeaders,
     _status: context.responseStatus,
@@ -402,33 +401,15 @@ async function renderStream(
     finalHeaders,
     status: ssrStream.status ?? 200,
     statusText: ssrStream.statusText,
-    metaConfig,
-    resourceHints,
-    useEarlyFlush,
   };
 }
 
-async function applyPerfFeatures(plan: RenderPlan) {
-  const { ssrStream, finalHeaders, status, statusText, resourceHints, useEarlyFlush, metaConfig } =
-    plan;
+function applyPerfFeatures(plan: RenderPlan) {
+  const { ssrStream, finalHeaders, status, statusText } = plan;
 
-  if (useEarlyFlush) {
-    const staticShell = getStaticShell(metaConfig.lang);
-
-    const optimizedStream = createEarlyFlushStream(staticShell, {
-      preloadHints: resourceHints,
-      contentStream: ssrStream,
-      headTags: "",
-      bodyTags: "",
-    });
-
-    return new Response(optimizedStream, {
-      headers: finalHeaders,
-      status,
-      statusText,
-    });
-  }
-
+  // Early-flush resource hints are injected directly into the streamed document
+  // head (see renderStream), so there is no separate shell to wrap here — doing
+  // so previously nested a second <html> document and dropped stylesheets.
   return new Response(ssrStream, {
     headers: finalHeaders,
     status,

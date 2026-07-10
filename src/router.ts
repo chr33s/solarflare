@@ -1,5 +1,5 @@
 import { signal, computed, effect, type ReadonlySignal } from "@preact/signals";
-import { resetHeadContext, applyHeadTags, type HeadTag } from "./head.ts";
+import { resetHeadContext, applyHeadTags, escapeHtml, type HeadTag } from "./head.ts";
 import { setNavigationMode } from "./hydration.ts";
 import type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
 export type { RouteManifestEntry, RoutesManifest } from "./manifest.ts";
@@ -144,19 +144,6 @@ export class Router {
 
     const app = document.querySelector("#app");
     if (app) {
-      const escapeHtml = (str: string) =>
-        str.replace(
-          /[&<>"']/g,
-          (c) =>
-            ({
-              "&": "&amp;",
-              "<": "&lt;",
-              ">": "&gt;",
-              '"': "&quot;",
-              "'": "&#39;",
-            })[c] || c,
-        );
-
       app.innerHTML = /* html */ `<div><h1>Error</h1><p>${escapeHtml(error.message)}</p></div>`;
     }
   }
@@ -203,6 +190,11 @@ export class Router {
       // Dispatch navigation event for components to re-extract deferred data
       window.dispatchEvent(new CustomEvent("sf:navigate", { detail: { url, match } }));
     } catch (error) {
+      // A superseded navigation aborts its in-flight fetch, which rejects with
+      // AbortError. That is not a real failure — the newer navigation is now in
+      // control — so swallow it instead of clobbering the new page with an error.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (error instanceof Error && error.name === "AbortError") return;
       this.#handleError(error instanceof Error ? error : new Error(String(error)), url);
     }
   }
@@ -211,14 +203,13 @@ export class Router {
   async #loadRoute(match: RouteMatch, url: URL) {
     const { entry } = match;
 
-    // Preload the route chunk *before* DOM diffing so any custom elements for the
-    // incoming HTML are already defined when inserted.
-    // This avoids edge-cases where upgraded callbacks/hydration don't run reliably
-    // when elements are inserted first and defined later.
-    if (entry.chunk) {
-      const absoluteChunk = new URL(entry.chunk, location.origin).href;
-      await import(absoluteChunk);
-    }
+    // Kick off the route chunk download and the patch fetch concurrently — they
+    // are independent network round-trips. The chunk must be evaluated *before*
+    // DOM diffing (so custom elements are defined when inserted), but not before
+    // the fetch starts, so we only await it just below.
+    const modPromise = entry.chunk
+      ? import(new URL(entry.chunk, location.origin).href)
+      : Promise.resolve();
 
     if (this.#inflightAbort) {
       this.#inflightAbort.abort();
@@ -226,7 +217,7 @@ export class Router {
     const abortController = new AbortController();
     this.#inflightAbort = abortController;
 
-    const response = await fetchWithRetry(
+    const responsePromise = fetchWithRetry(
       url.href,
       {
         headers: {
@@ -237,6 +228,10 @@ export class Router {
       },
       { maxRetries: 0 },
     );
+
+    // Ensure custom elements are defined before we apply the streamed HTML.
+    await modPromise;
+    const response = await responsePromise;
 
     if (!response.ok || !response.body) {
       throw new Error(`Failed to fetch patch for ${url.href}: ${response.status}`);

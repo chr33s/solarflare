@@ -65,5 +65,5 @@ export const SKELETON_CSS = /* css */ `
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-. sf-loading { min-height: 100px; }
+.sf-loading { min-height: 100px; }
 `;

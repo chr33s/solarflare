@@ -1,40 +1,65 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import { API, SignatureKind, SymbolFlags } from "typescript/unstable/sync";
+import type { Checker, Project, Signature, Type } from "typescript/unstable/sync";
+import type { Node, SourceFile } from "typescript/unstable/ast";
 import { parsePath, type ParsedPath, type ModuleKind } from "./paths.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_TSCONFIG = join(__dirname, "..", "tsconfig.json");
 
-export function readCompilerOptions(
-  configPath = join(__dirname, "..", "tsconfig.json"),
-  sys: ts.ParseConfigHost = ts.sys,
-) {
-  const configFile = ts.readConfigFile(configPath, (path) => sys.readFile(path));
-
-  if (configFile.error) {
-    console.warn("Failed to read tsconfig.json, using defaults");
-    return {};
-  }
-
-  const parsed = ts.parseJsonConfigFileContent(configFile.config, sys, dirname(configPath));
-
-  if (parsed.errors.length > 0) {
-    console.warn("Errors parsing tsconfig.json, using defaults");
-    return {};
-  }
-
-  return parsed.options;
+/**
+ * A minimal view over a tsgo {@link Project} that mirrors the subset of the
+ * classic `ts.Program` surface the build tooling relies on. TypeScript 7 no
+ * longer exposes an in-process program built from an arbitrary file list; the
+ * native compiler is driven through {@link API}, whose projects are discovered
+ * from a `tsconfig.json`. This facade keeps `createProgram`'s call sites
+ * unchanged.
+ */
+export interface Program {
+  getTypeChecker(): Checker;
+  getSourceFile(fileName: string): SourceFile | undefined;
 }
 
-const COMPILER_OPTIONS: ts.CompilerOptions = readCompilerOptions();
+let api: API | undefined;
 
+function getApi() {
+  api ??= new API({ cwd: process.cwd() });
+  return api;
+}
+
+function toProgram(project: Project | undefined): Program {
+  return {
+    getTypeChecker: () => {
+      if (!project) throw new Error("No TypeScript project available");
+      return project.checker;
+    },
+    getSourceFile: (fileName) => project?.program.getSourceFile(fileName),
+  };
+}
+
+/**
+ * Loads the TypeScript project covering `files` and returns a {@link Program}
+ * facade over it. When called with no files (e.g. in tests), the framework's
+ * own `tsconfig.json` project is loaded instead. The files' own `tsconfig.json`
+ * is discovered from their location, so its `compilerOptions` (jsx, lib, …) are
+ * honoured — replacing the previously hand-passed compiler options.
+ */
 export function createProgram(files: string[]) {
-  return ts.createProgram(files, COMPILER_OPTIONS);
+  const client = getApi();
+
+  if (files.length === 0) {
+    const snapshot = client.updateSnapshot({ openProjects: [DEFAULT_TSCONFIG] });
+    return toProgram(snapshot.getProject(DEFAULT_TSCONFIG) ?? snapshot.getProjects()[0]);
+  }
+
+  const snapshot = client.updateSnapshot({ openFiles: files });
+  return toProgram(snapshot.getDefaultProjectForFile(files[0]) ?? snapshot.getProjects()[0]);
 }
 
 export interface ExportInfo {
-  type: ts.Type;
-  signatures: readonly ts.Signature[];
+  type: Type;
+  signatures: readonly Signature[];
   typeString: string;
   isFunction: boolean;
   parameters: ParameterInfo[];
@@ -48,38 +73,31 @@ export interface ParameterInfo {
   properties: string[];
 }
 
-function getFirstCallSignature(type: ts.Type) {
-  const signatures = type.getCallSignatures();
-  return signatures.length > 0 ? signatures[0] : null;
-}
-
-function getSignatureParameterInfo(
-  checker: ts.TypeChecker,
-  signature: ts.Signature,
-  sourceFile: ts.SourceFile,
-) {
+function getSignatureParameterInfo(checker: Checker, signature: Signature, location: Node) {
   const parameters: ParameterInfo[] = [];
 
   for (const param of signature.getParameters()) {
-    const paramType = checker.getTypeOfSymbolAtLocation(param, sourceFile);
-    const properties = paramType.getProperties().map((p) => p.getName());
+    const paramType = checker.getTypeOfSymbolAtLocation(param, location);
+    const properties = checker.getPropertiesOfType(paramType).map((p) => p.name);
 
     parameters.push({
-      name: param.getName(),
+      name: param.name,
       type: checker.typeToString(paramType),
-      optional: !!(param.flags & ts.SymbolFlags.Optional),
+      optional: !!(param.flags & SymbolFlags.Optional),
       properties,
     });
   }
 
+  const returnType = checker.getReturnTypeOfSignature(signature);
+
   return {
     parameters,
-    returnType: checker.typeToString(signature.getReturnType()),
+    returnType: returnType ? checker.typeToString(returnType) : "",
   };
 }
 
 /** Gets detailed information about a module's default export. */
-export function getDefaultExportInfo(checker: ts.TypeChecker, sourceFile: ts.SourceFile) {
+export function getDefaultExportInfo(checker: Checker, sourceFile: SourceFile) {
   const symbol = checker.getSymbolAtLocation(sourceFile);
   if (!symbol) return null;
 
@@ -88,9 +106,9 @@ export function getDefaultExportInfo(checker: ts.TypeChecker, sourceFile: ts.Sou
   if (!defaultExport) return null;
 
   const type = checker.getTypeOfSymbolAtLocation(defaultExport, sourceFile);
-  const signatures = type.getCallSignatures();
+  const signatures = checker.getSignaturesOfType(type, SignatureKind.Call);
   const typeString = checker.typeToString(type);
-  const signature = getFirstCallSignature(type);
+  const signature = signatures.length > 0 ? signatures[0] : null;
   const isFunction = !!signature;
 
   const parameters: ParameterInfo[] = [];
@@ -121,7 +139,7 @@ export interface ValidationResult {
   exportInfo: ExportInfo | null;
 }
 
-export function validateModule(program: ts.Program, filePath: string, baseDir: string = "./src") {
+export function validateModule(program: Program, filePath: string, baseDir: string = "./src") {
   const fullPath = join(baseDir, filePath);
   const sourceFile = program.getSourceFile(fullPath);
   const checker = program.getTypeChecker();

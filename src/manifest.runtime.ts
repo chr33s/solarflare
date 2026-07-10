@@ -28,3 +28,8 @@ export function isShadowTag(tag: string) {
 export function getDevScripts() {
   return manifest.devScripts;
 }
+
+/** Whether this is a development build (gates dev-only worker endpoints). */
+export function isDev() {
+  return manifest.dev ?? false;
+}

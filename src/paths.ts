@@ -26,7 +26,10 @@ function getModuleKind(filePath: string): ModuleKind {
 
 /** Parses a file path into structured metadata. */
 export function parsePath(filePath: string): ParsedPath {
-  const normalized = filePath.replace(/^\.\//, "").replace(/^.*\/app\//, "");
+  // Strip a leading project source-dir prefix ("app/" or "src/app/") only. The
+  // previous greedy `/^.*\/app\//` deleted everything up to the LAST "app/"
+  // segment, corrupting any route whose own path contained an "app" directory.
+  const normalized = filePath.replace(/^\.\//, "").replace(/^(?:src\/)?app\//, "");
   const kind = getModuleKind(normalized);
   const isPrivate = normalized.includes("/_") || normalized.startsWith("_");
 

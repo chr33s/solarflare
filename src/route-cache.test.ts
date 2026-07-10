@@ -181,6 +181,24 @@ describe("ResponseCache.generateKey", () => {
 
     assert.strictEqual(key1, key2);
   });
+
+  it("should distinguish requests by query string", () => {
+    const a = ResponseCache.generateKey(new Request("http://localhost/search?q=alice"), {});
+    const b = ResponseCache.generateKey(new Request("http://localhost/search?q=bob"), {});
+    assert.notStrictEqual(a, b);
+  });
+
+  it("should be query-order independent", () => {
+    const a = ResponseCache.generateKey(new Request("http://localhost/s?a=1&b=2"), {});
+    const b = ResponseCache.generateKey(new Request("http://localhost/s?b=2&a=1"), {});
+    assert.strictEqual(a, b);
+  });
+
+  it("should distinguish requests by host", () => {
+    const a = ResponseCache.generateKey(new Request("http://one.example/p"), {});
+    const b = ResponseCache.generateKey(new Request("http://two.example/p"), {});
+    assert.notStrictEqual(a, b);
+  });
 });
 
 describe("withCache", () => {

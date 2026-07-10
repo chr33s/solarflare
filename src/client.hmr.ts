@@ -72,7 +72,17 @@ function createDevHmr() {
   };
 }
 
+declare global {
+  /**
+   * Build-time define, substituted by the bundler's replace plugin
+   * (key: `globalThis.__SF_DEV__`). Must be referenced textually as
+   * `globalThis.__SF_DEV__` so the substitution matches — a type-cast form like
+   * `(globalThis as ...).__SF_DEV__` does not contain that literal and is left
+   * as `undefined`, which silently disabled HMR in dev.
+   */
+  // eslint-disable-next-line no-var
+  var __SF_DEV__: boolean | undefined;
+}
+
 /** HMR instance - dev in dev mode, no-op in production. */
-export const hmr: HmrApi = (globalThis as unknown as { __SF_DEV__?: boolean }).__SF_DEV__
-  ? createDevHmr()
-  : noopHmr;
+export const hmr: HmrApi = globalThis.__SF_DEV__ ? createDevHmr() : noopHmr;

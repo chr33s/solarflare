@@ -1,5 +1,6 @@
 import { type FunctionComponent, type VNode, h } from "preact";
 import { renderToReadableStream, type RenderStream } from "preact-render-to-string/stream";
+import { renderToString } from "preact-render-to-string";
 import { parsePath } from "./paths.ts";
 import { escapeJsonForHtml } from "./serialize.ts";
 import { initStore, setPathname, resetStore } from "./store.ts";
@@ -16,6 +17,7 @@ import {
   resetHeadContext,
   installHeadHoisting,
   resetHeadElementTracking,
+  getHeadContext,
 } from "./head.ts";
 
 export { Head, useHead } from "./head.ts";
@@ -303,6 +305,8 @@ export interface StreamRenderOptions {
   devScripts?: string[];
   /** Deferred data to stream after shell. */
   deferred?: DeferredData;
+  /** Resource-hint markup (e.g. <link rel="preload">) to inject early into <head>. */
+  preloadHints?: string;
   /** HTTP status code to return. */
   _status?: number;
   /** HTTP status text to return. */
@@ -334,6 +338,23 @@ export function initServerContext(options: StreamRenderOptions) {
   }
 }
 
+/**
+ * Renders the component tree once to populate THIS request's head context and
+ * returns the resolved head HTML. The worker needs a route's head (meta tags) to
+ * derive its cache/lang/early-flush config before the streaming render, but the
+ * head is only populated by executing the components. Reading the module-global
+ * head context without rendering returned the *previous* request's head, so a
+ * route could be served with another request's cache config. This performs a
+ * throwaway synchronous render against this request's own store so the extracted
+ * config is correct and request-isolated.
+ */
+export function renderHeadForConfig(vnode: VNode<any>, options: StreamRenderOptions = {}) {
+  initServerContext(options);
+  // Discard the HTML — we only need the side effect of populating the head.
+  renderToString(vnode);
+  return getHeadContext().renderToString();
+}
+
 /** Extended stream interface with allReady promise. */
 export interface SolarflareStream extends ReadableStream<Uint8Array> {
   /** Resolves when all content has been rendered. */
@@ -350,14 +371,21 @@ export interface SolarflareStream extends ReadableStream<Uint8Array> {
 export async function renderToStream(vnode: VNode<any>, options: StreamRenderOptions = {}) {
   initServerContext(options);
 
-  const storeScript = await serializeStoreForHydration();
+  // preact-render-to-string renders the synchronous shell inside the
+  // ReadableStream constructor, so it reads the module-global store/head context
+  // synchronously here. Construct the stream (and snapshot the store) BEFORE any
+  // await: on Cloudflare Workers, concurrent requests share one isolate, and an
+  // await between initServerContext() and the render would let another request's
+  // initServerContext() overwrite this request's store — leaking data across users.
   const stream = renderToReadableStream(vnode) as RenderStream;
+  const storeScript = await serializeStoreForHydration();
 
   const transformer = createAssetInjectionTransformer(
     storeScript,
     options.script,
     options.styles,
     options.devScripts,
+    options.preloadHints,
   );
 
   const transformedStream = stream.pipeThrough(transformer);
@@ -389,7 +417,10 @@ function createDeferredStream(inputStream: ReadableStream<Uint8Array>, deferred:
 
   let inputDone = false;
   let pendingDeferred = 0;
-  let allowDeferredFlush = true;
+  // Hold deferred data-island chunks until the shell (input stream) has been
+  // fully sent, so islands are appended after the document rather than injected
+  // between arbitrary shell chunks (which would corrupt the streamed HTML).
+  let allowDeferredFlush = false;
   let closed = false;
   const pendingChunks: Uint8Array[] = [];
   const emittedDeferred = new Set<string>();
@@ -450,6 +481,7 @@ function createDeferredStream(inputStream: ReadableStream<Uint8Array>, deferred:
         }
 
         inputDone = true;
+        allowDeferredFlush = true;
         flushPendingChunks();
         maybeClose();
       })();
@@ -470,7 +502,9 @@ function createDeferredStream(inputStream: ReadableStream<Uint8Array>, deferred:
             enqueueDeferredChunk(html);
           })
           .catch((err) => {
-            const errorScript = /* html */ `<script>console.error("[solarflare] Deferred error (${escapeJsonForHtml(key)}):", ${escapeJsonForHtml((err as Error).message)})</script>`;
+            const label = escapeJsonForHtml(`[solarflare] Deferred error (${key}):`);
+            const message = escapeJsonForHtml((err as Error).message);
+            const errorScript = /* html */ `<script>console.error(${label}, ${message})</script>`;
             enqueueDeferredChunk(errorScript);
           })
           .finally(() => {

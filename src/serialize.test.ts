@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert/strict";
-import { serializeToString, parseFromString } from "./serialize.ts";
+import {
+  serializeToString,
+  parseFromString,
+  escapeScriptText,
+  escapeJsonForHtml,
+  hashString,
+} from "./serialize.ts";
+import { serializeDataIsland, extractDataIsland } from "./hydration.ts";
 
 describe("serializeToString", () => {
   it("should serialize primitive string", async () => {
@@ -220,5 +227,60 @@ describe("roundtrip", () => {
     const serialized = await serializeToString(original);
     const parsed = await parseFromString<bigint>(serialized);
     assert.strictEqual(parsed, original);
+  });
+});
+
+describe("escapeScriptText", () => {
+  const LS = String.fromCharCode(0x2028);
+  const PS = String.fromCharCode(0x2029);
+
+  it("neutralizes the </script> breakout sequence", () => {
+    const escaped = escapeScriptText("</script><script>alert(1)</script>");
+    assert.ok(!escaped.includes("<"));
+    assert.ok(!escaped.includes(">"));
+    assert.ok(escaped.includes("\\u003c"));
+  });
+
+  it("escapes U+2028 and U+2029", () => {
+    const escaped = escapeScriptText(`a${LS}b${PS}c`);
+    assert.ok(!escaped.includes(LS));
+    assert.ok(!escaped.includes(PS));
+    assert.ok(escaped.includes("\\u2028"));
+    assert.ok(escaped.includes("\\u2029"));
+  });
+
+  it("escapeJsonForHtml escapes < > & and line separators", () => {
+    const escaped = escapeJsonForHtml({ x: `</script>${LS}` });
+    assert.ok(!escaped.includes("</script>"));
+    assert.ok(!escaped.includes(LS));
+  });
+});
+
+describe("serializeDataIsland XSS safety", () => {
+  it("does not emit a raw </script> from hostile data, and still round-trips", async () => {
+    const hostile = { title: "</script><script>alert(document.cookie)</script>", n: 0 };
+    const island = await serializeDataIsland("sf-test", hostile);
+
+    // The payload must not contain a literal closing script tag that would break
+    // out of the <script type="application/json"> element.
+    const body = island.slice(island.indexOf(">") + 1, island.lastIndexOf("</script>"));
+    assert.ok(!body.includes("</script>"));
+    assert.ok(!body.includes("<script>"));
+
+    // And the escaped payload still decodes back to the original data.
+    const parsed = await parseFromString<typeof hostile>(body);
+    assert.deepStrictEqual(parsed, hostile);
+  });
+
+  it("extractDataIsland returns null when document is undefined (server)", async () => {
+    assert.strictEqual(await extractDataIsland("nope"), null);
+  });
+});
+
+describe("hashString", () => {
+  it("is stable and returns base36", () => {
+    assert.strictEqual(hashString("hello"), hashString("hello"));
+    assert.notStrictEqual(hashString("hello"), hashString("world"));
+    assert.match(hashString("some-css-content"), /^[0-9a-z-]+$/);
   });
 });

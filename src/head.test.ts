@@ -71,6 +71,25 @@ describe("createHeadContext", () => {
     assert.strictEqual(titleTag?.textContent, "About - Custom Site");
   });
 
+  it("applies the title template to the surviving (last) title", () => {
+    const ctx = createHeadContext();
+    ctx.push({ title: "Home", titleTemplate: "%s | Site" });
+    ctx.push({ title: "About" });
+
+    const tags = ctx.resolveTags();
+    const titles = tags.filter((t) => t.tag === "title");
+    assert.strictEqual(titles.length, 1);
+    assert.strictEqual(titles[0].textContent, "About | Site");
+  });
+
+  it("does not serialize a function title template (would corrupt on the client)", () => {
+    const ctx = createHeadContext();
+    setHeadContext(ctx);
+    ctx.push({ titleTemplate: (t) => `${t} | X` });
+    const state = JSON.parse(serializeHeadState());
+    assert.strictEqual(state.titleTemplate, undefined);
+  });
+
   it("should merge htmlAttrs and bodyAttrs", () => {
     const ctx = createHeadContext();
     ctx.push({ htmlAttrs: { lang: "en" } });

@@ -1,9 +1,8 @@
-import ts from "typescript";
 import { parsePath } from "./paths.ts";
-import { generateTypedModulesFile, validateModule, type ModuleEntry } from "./ast.ts";
+import { generateTypedModulesFile, validateModule, type ModuleEntry, type Program } from "./ast.ts";
 
 export function generateModulesFile(
-  program: ts.Program,
+  program: Program,
   routeFiles: string[],
   layoutFiles: string[],
   errorFile: string | null,

@@ -103,11 +103,19 @@ export class ResponseCache {
 
   static generateKey(request: Request, params: Record<string, string>) {
     const url = new URL(request.url);
+    // Include host and the (sorted) query string so distinct URLs don't collide
+    // in the shared cache — omitting them serves one request's response for
+    // another (cross-user data leak / cache poisoning) on query-scoped or
+    // multi-domain routes.
+    const sortedQuery = [...url.searchParams.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("&");
     const sortedParams = Object.entries(params)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([k, v]) => `${k}=${v}`)
       .join("&");
-    return `${url.pathname}?${sortedParams}`;
+    return `${url.host}${url.pathname}?${sortedQuery}|${sortedParams}`;
   }
 }
 

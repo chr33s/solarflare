@@ -14,6 +14,8 @@ export { initHmrEntry, reloadAllStylesheets } from "./hmr.ts";
 export { hmr } from "./client.hmr.ts";
 export { Deferred } from "./render-priority.ts";
 export { navigate } from "./router.ts";
+export { useHead, Head } from "./head.ts";
+export { workerConfigMeta } from "./worker.config.ts";
 
 /** Initializes client-side store from SSR hydration data. */
 export async function initClient() {

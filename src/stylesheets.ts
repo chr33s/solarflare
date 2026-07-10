@@ -1,3 +1,5 @@
+import { hashString } from "./serialize.ts";
+
 /** Feature detection for Constructable Stylesheets. */
 export const supportsConstructableStylesheets = () => {
   if (typeof window === "undefined") return false;
@@ -54,7 +56,7 @@ class StylesheetManager {
     }
 
     const existing = this.#sheets.get(id);
-    const hash = this.#hash(css);
+    const hash = hashString(css);
 
     if (existing) {
       if (existing.hash !== hash) {
@@ -111,7 +113,7 @@ class StylesheetManager {
     const entry = this.#sheets.get(id);
     if (!entry) return false;
 
-    const hash = this.#hash(css);
+    const hash = hashString(css);
     if (entry.hash === hash) return false; // No change
 
     // For small changes, try incremental update
@@ -161,7 +163,9 @@ class StylesheetManager {
 
     const sheets = stylesheetIds
       .map((id) => this.#sheets.get(id)?.sheet)
-      .filter((s): s is CSSStyleSheet => s !== null);
+      // Unregistered ids yield `undefined` (not `null`); assigning one into
+      // adoptedStyleSheets throws, so filter on truthiness instead of `!== null`.
+      .filter((s): s is CSSStyleSheet => s != null);
 
     // Include global sheets
     const globalSheets = [...this.#sheets.values()].filter((e) => e.isGlobal).map((e) => e.sheet);
@@ -200,15 +204,6 @@ class StylesheetManager {
 
   #isSupported() {
     return supportsConstructableStylesheets();
-  }
-
-  #hash(css: string) {
-    let hash = 0;
-    for (let i = 0; i < css.length; i++) {
-      const char = css.charCodeAt(i);
-      hash = ((hash << 5) - hash + char) | 0;
-    }
-    return hash.toString(36);
   }
 
   #canIncrementalUpdate(oldCss: string, newCss: string) {

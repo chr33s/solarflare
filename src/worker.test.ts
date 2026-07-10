@@ -985,13 +985,8 @@ describe("e2e", () => {
 });
 
 describe("Early flush streaming integration", () => {
-  it("should generate static shell for immediate flushing", async () => {
-    const { generateStaticShell, generateResourceHints } = await import("./early-flush.ts");
-
-    const shell = generateStaticShell({ lang: "en" });
-    assert.ok(shell.preHead.includes("<!DOCTYPE html>"));
-    assert.ok(shell.preHead.includes('<html lang="en">'));
-    assert.ok(shell.preBody.includes("<body>"));
+  it("should generate resource hints for early flush", async () => {
+    const { generateResourceHints } = await import("./early-flush.ts");
 
     const hints = generateResourceHints({
       preconnect: ["https://fonts.googleapis.com"],
@@ -1004,38 +999,43 @@ describe("Early flush streaming integration", () => {
     assert.ok(hints.includes('rel="preload"'));
   });
 
-  it("should create streaming response with early flush", async () => {
-    const { generateStaticShell, createEarlyFlushStream } = await import("./early-flush.ts");
+  it("should inject preload hints into the document head without wrapping a second document", async () => {
+    const { createAssetInjectionTransformer, BODY_MARKER } = await import("./stream-assets.ts");
+    const { HEAD_MARKER, createHeadContext, setHeadContext } = await import("./head.ts");
 
-    const shell = generateStaticShell({});
-    const contentStream = new ReadableStream<Uint8Array>({
+    // A single valid SSR document with head/body markers, as the renderer emits.
+    setHeadContext(createHeadContext());
+    const doc =
+      `<html><head>${HEAD_MARKER}</head><body>` +
+      `<solarflare-body>${BODY_MARKER}</solarflare-body></body></html>`;
+
+    const input = new ReadableStream<Uint8Array>({
       start(controller) {
-        controller.enqueue(new TextEncoder().encode("<main>Content</main>"));
+        controller.enqueue(new TextEncoder().encode(doc));
         controller.close();
       },
     });
 
-    const stream = createEarlyFlushStream(shell, {
-      contentStream,
-      headTags: "<title>Test</title>",
-      bodyTags: '<script src="/app.js"></script>',
-    });
+    const preloadHints = '<link rel="preload" href="/main.css" as="style">';
+    const transformed = input.pipeThrough(
+      createAssetInjectionTransformer("", "/app.js", ["/main.css"], undefined, preloadHints),
+    );
 
-    const reader = stream.getReader();
+    const reader = transformed.getReader();
     const chunks: string[] = [];
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(new TextDecoder().decode(value));
     }
-
     const html = chunks.join("");
-    assert.ok(html.includes("<!DOCTYPE html>"));
-    assert.ok(html.includes("<title>Test</title>"));
-    assert.ok(html.includes("<main>Content</main>"));
-    assert.ok(html.includes('src="/app.js"'));
-    assert.ok(html.includes("</body></html>"));
+
+    // Preload hint injected into the head, stylesheet still applied, and exactly
+    // one document (no nested <html> from a wrapping shell).
+    assert.ok(html.includes(preloadHints));
+    assert.ok(html.includes('<link rel="stylesheet" href="/main.css">'));
+    assert.strictEqual(html.split("<html").length - 1, 1);
+    assert.strictEqual(html.split("<body").length - 1, 1);
   });
 });
 

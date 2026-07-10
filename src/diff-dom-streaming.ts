@@ -138,7 +138,7 @@ function setAttributes(oldAttributes: NamedNodeMap, newAttributes: NamedNodeMap)
   let i, oldAttribute, newAttribute, namespace, name;
 
   // Remove old attributes.
-  for (i = oldAttributes.length; i--; ) {
+  for (i = oldAttributes.length; i--;) {
     oldAttribute = oldAttributes[i];
     namespace = oldAttribute.namespaceURI;
     name = oldAttribute.localName;
@@ -148,7 +148,7 @@ function setAttributes(oldAttributes: NamedNodeMap, newAttributes: NamedNodeMap)
   }
 
   // Set new attributes.
-  for (i = newAttributes.length; i--; ) {
+  for (i = newAttributes.length; i--;) {
     oldAttribute = newAttributes[i];
     namespace = oldAttribute.namespaceURI;
     name = oldAttribute.localName;
@@ -361,10 +361,7 @@ async function htmlStreamWalker(stream: ReadableStream, options: Options = {}) {
     try {
       while (true) {
         const { done, value } = await decoderStreamReader.read();
-        if (done) {
-          streamInProgress = false;
-          break;
-        }
+        if (done) break;
 
         doc.write(value);
 
@@ -372,6 +369,10 @@ async function htmlStreamWalker(stream: ReadableStream, options: Options = {}) {
         options.onChunkProcessed?.();
       }
     } finally {
+      // Always clear the in-progress flag — even if read() rejects mid-stream —
+      // so the isLastNodeOfChunk() wait loops can terminate instead of spinning
+      // forever in requestAnimationFrame and hanging the navigation.
+      streamInProgress = false;
       doc.close();
     }
   }

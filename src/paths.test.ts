@@ -46,6 +46,13 @@ describe("parsePath", () => {
       const result = parsePath(original);
       assert.strictEqual(result.original, original);
     });
+
+    it("should not strip a route directory named 'app'", () => {
+      // Only a leading project source prefix is stripped, not any "/app/" segment.
+      const result = parsePath("./admin/app/index.client.tsx");
+      assert.strictEqual(result.normalized, "admin/app/index.client.tsx");
+      assert.strictEqual(result.pattern, "/admin/app");
+    });
   });
 
   describe("dynamic parameters", () => {

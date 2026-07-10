@@ -74,18 +74,29 @@ function getLevelColor(level: string) {
   }
 }
 
+// C0/C1 control characters (ESC etc.), excluding tab and newline. Client-supplied
+// log text is printed to the developer terminal, so these are stripped to prevent
+// terminal-escape injection (cursor moves, screen clears, title/OSC sequences).
+// eslint-disable-next-line no-control-regex -- intentionally matches control chars to strip them
+const TERMINAL_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+
+/** Removes terminal control/escape characters from untrusted client log text. */
+function sanitizeForTerminal(text: string) {
+  return text.replace(TERMINAL_CONTROL_CHARS, "");
+}
+
 /** Formats log message for terminal output. */
 function formatLogMessage(log: LogEntry) {
   const color = getLevelColor(log.level);
   const prefix = `${color}[browser:${log.level}]${colors.reset}`;
-  let message = `${prefix} ${log.message}`;
+  let message = `${prefix} ${sanitizeForTerminal(log.message)}`;
 
   if (log.stacks && log.stacks.length > 0) {
     message +=
       "\n" +
       log.stacks
         .map((stack) =>
-          stack
+          sanitizeForTerminal(stack)
             .split("\n")
             .map((line) => `${colors.dim}    ${line}${colors.reset}`)
             .join("\n"),
@@ -94,7 +105,7 @@ function formatLogMessage(log: LogEntry) {
   }
 
   if (log.extra && log.extra.length > 0) {
-    const extraStr = JSON.stringify(log.extra, null, 2);
+    const extraStr = sanitizeForTerminal(JSON.stringify(log.extra, null, 2));
     message +=
       "\n" +
       extraStr

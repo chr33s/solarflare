@@ -3,7 +3,6 @@ import * as assert from "node:assert/strict";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import ts from "typescript";
 import {
   createProgram,
   getDefaultExportInfo,
@@ -45,13 +44,8 @@ describe("getDefaultExportInfo", () => {
   });
 
   it("should return export info for file with default export", () => {
-    // Create an inline source file for testing
-    const code = `export default function test() { return 42; }`;
-    // TypeScript can parse the file, but we need a full program for type checking
-    ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
-
-    // We can't easily test this without a full program context
-    // but we can verify the function exists and returns the right type
+    // Exercising the full type-checking path requires a program bound to a real
+    // project; here we only assert the function is wired up and callable.
     assert.strictEqual(typeof getDefaultExportInfo, "function");
   });
 });

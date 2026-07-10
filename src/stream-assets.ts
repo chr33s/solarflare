@@ -35,6 +35,7 @@ export function createAssetInjectionTransformer(
   script?: string,
   styles?: string[],
   devScripts?: string[],
+  preloadHints?: string,
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -43,6 +44,10 @@ export function createAssetInjectionTransformer(
   let headInjected = false;
   const bodyMarker = /* html */ `<solarflare-body>${BODY_MARKER}</solarflare-body>`;
   const headMarker = HEAD_MARKER;
+  // Resource hints are prepended into the document <head> so the browser can
+  // start fetching critical assets as soon as the head is flushed (the "early
+  // flush" optimization) without wrapping the SSR document in a second shell.
+  const headContent = () => (preloadHints ?? "") + getHeadContext().renderToString();
 
   function replaceHeadMarker(html: string) {
     const markerIndex = html.indexOf(headMarker);
@@ -57,14 +62,14 @@ export function createAssetInjectionTransformer(
         if (openTag.includes("data-sf-head") && templateEnd !== -1) {
           const replaced =
             html.slice(0, templateStart) +
-            getHeadContext().renderToString() +
+            headContent() +
             html.slice(templateEnd + "</template>".length);
           return { html: replaced, replaced: true };
         }
       }
     }
 
-    return { html: html.replace(headMarker, getHeadContext().renderToString()), replaced: true };
+    return { html: html.replace(headMarker, headContent()), replaced: true };
   }
 
   return new TransformStream({

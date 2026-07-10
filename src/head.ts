@@ -1,5 +1,6 @@
 import { type VNode, h, type ComponentChildren, options } from "preact";
 import { signal, type Signal } from "@preact/signals";
+import { hashString } from "./serialize.ts";
 
 /** Supported head tag names. */
 export type HeadTagName = "title" | "meta" | "link" | "script" | "base" | "style" | "noscript";
@@ -101,9 +102,6 @@ const TAGS_WITH_CONTENT = new Set(["title", "script", "style", "noscript"]);
 
 /** Self-closing tags. */
 const SELF_CLOSING_TAGS = new Set(["meta", "link", "base"]);
-
-/** Standard meta tags that should always deduplicate (not allow multiples). */
-const SINGLE_VALUE_META = new Set(["viewport", "description", "keywords", "robots", "charset"]);
 
 /** Tag weight map for sorting (lower = earlier in head). */
 const TAG_WEIGHTS: Record<string, number> = {
@@ -346,15 +344,21 @@ export function createHeadContext() {
       // Flatten all tags
       const allTags = entries.flatMap((e) => e._tags || []);
 
-      // Apply title template
+      // Apply title template to the LAST title tag — dedupe (title is a unique
+      // tag) keeps the last one, so templating the first would be discarded.
       if (context.titleTemplate) {
-        const titleTag = allTags.find((t) => t.tag === "title");
+        let titleTag: HeadTag | undefined;
+        for (const t of allTags) {
+          if (t.tag === "title") titleTag = t;
+        }
         if (titleTag?.textContent) {
           const template = context.titleTemplate;
           titleTag.textContent =
             typeof template === "function"
               ? template(titleTag.textContent)
-              : template.replace("%s", titleTag.textContent);
+              : template.includes("%s")
+                ? template.replace("%s", titleTag.textContent)
+                : titleTag.textContent;
         }
       }
 
@@ -443,18 +447,13 @@ export function dedupeKey(tag: HeadTag) {
     return "charset";
   }
 
-  // Meta tags dedupe by name/property/http-equiv
+  // Meta tags dedupe by name/property/http-equiv. (Keyed metas already returned
+  // above, so metas reaching here always dedupe by their attribute value.)
   if (name === "meta") {
     for (const attr of ["name", "property", "http-equiv"]) {
       const value = props[attr];
       if (value !== undefined) {
-        // Structured properties (og:image:width) or standard single-value metas dedupe
-        const isStructured = typeof value === "string" && value.includes(":");
-        const isSingleValue = SINGLE_VALUE_META.has(String(value));
-        if (isStructured || isSingleValue || !tag.key) {
-          return `meta:${value}`;
-        }
-        return `meta:${value}:key:${tag.key}`;
+        return `meta:${value}`;
       }
     }
   }
@@ -470,17 +469,6 @@ export function dedupeKey(tag: HeadTag) {
   }
 
   return undefined;
-}
-
-/** Simple string hash for content-based deduplication. */
-function hashString(str: string) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return hash.toString(36);
 }
 
 /** Calculates tag weight for sorting (lower = earlier in head). */
@@ -604,8 +592,8 @@ function escapeAttr(str: string) {
     .replace(/>/g, "&gt;");
 }
 
-/** Escapes HTML content. */
-function escapeHtml(str: string) {
+/** Escapes HTML content (text-node context: `&`, `<`, `>`). */
+export function escapeHtml(str: string) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
@@ -764,6 +752,19 @@ function findMatchingSSRElement(head: HTMLHeadElement, tag: HeadTag) {
         return el;
     }
 
+    // For script tags, match external scripts by src and inline scripts by
+    // content — otherwise hydration inserts a duplicate and the script runs twice.
+    if (tag.tag === "script") {
+      const src = tag.props.src;
+      if (src && el.getAttribute("src") === src) return el;
+      if (!src && tag.textContent && el.textContent === tag.textContent) return el;
+    }
+
+    // For style/noscript, match by content to adopt the SSR-rendered element.
+    if ((tag.tag === "style" || tag.tag === "noscript") && tag.textContent) {
+      if (el.textContent === tag.textContent) return el;
+    }
+
     // For base tag, there should only be one
     if (tag.tag === "base") return el;
   }
@@ -842,11 +843,10 @@ export function serializeHeadState() {
   const ctx = getHeadContext();
   const state = {
     entries: ctx.entries.map((e) => ({ input: e.input, options: e.options })),
-    titleTemplate: ctx.titleTemplate
-      ? typeof ctx.titleTemplate === "function"
-        ? ctx.titleTemplate.toString()
-        : ctx.titleTemplate
-      : undefined,
+    // Only string templates survive serialization. A function template's source
+    // (.toString()) is not a usable "%s" template on the client — it would be
+    // written verbatim as the document title — so drop it rather than corrupt.
+    titleTemplate: typeof ctx.titleTemplate === "string" ? ctx.titleTemplate : undefined,
     htmlAttrs: ctx.htmlAttrs,
     bodyAttrs: ctx.bodyAttrs,
   };

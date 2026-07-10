@@ -22,4 +22,6 @@ export interface ChunkManifest {
   /** Tags that use Shadow DOM (DSD). */
   shadow?: Record<string, boolean>;
   devScripts?: string[];
+  /** True for a development build; gates dev-only worker endpoints (/_hmr, /_console, devtools). */
+  dev?: boolean;
 }

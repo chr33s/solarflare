@@ -1,12 +1,11 @@
 import { createHash } from "node:crypto";
-import { readFile, unlink, mkdir, writeFile } from "node:fs/promises";
+import { readFile, unlink, mkdir, writeFile, copyFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import ts from "typescript";
 import { rolldown } from "rolldown";
 import type { RolldownOptions } from "rolldown";
 import { replacePlugin } from "rolldown/plugins";
 import { transform } from "lightningcss";
-import { createProgram, getDefaultExportInfo } from "./ast.ts";
+import { createProgram, getDefaultExportInfo, type Program } from "./ast.ts";
 import { exists } from "./fs.ts";
 import {
   assetUrlPrefixPlugin,
@@ -61,7 +60,7 @@ export function getChunkName(file: string, contentHash?: string) {
   return contentHash ? `${base}-${contentHash}.js` : `${base}.js`;
 }
 
-function extractPropsFromProgram(program: ts.Program, filePath: string) {
+function extractPropsFromProgram(program: Program, filePath: string) {
   const checker = program.getTypeChecker();
   const sourceFile = program.getSourceFile(filePath);
   if (!sourceFile) return [];
@@ -73,12 +72,12 @@ function extractPropsFromProgram(program: ts.Program, filePath: string) {
   if (!firstParam) return [];
 
   const paramType = checker.getTypeOfSymbolAtLocation(firstParam, sourceFile);
-  const properties = paramType.getProperties();
+  const properties = checker.getPropertiesOfType(paramType);
 
-  return properties.map((p) => p.getName());
+  return properties.map((p) => p.name);
 }
 
-async function getComponentMeta(program: ts.Program, appDir: string, file: string) {
+async function getComponentMeta(program: Program, appDir: string, file: string) {
   const filePath = join(appDir, file);
   const props = extractPropsFromProgram(program, filePath);
   const parsed = parsePath(file);
@@ -188,11 +187,15 @@ export async function buildClient(options: BuildClientOptions) {
       const src = join(publicDir, file);
       const dest = join(distClient, file);
 
+      // Glob yields directory entries too; skip them so copyFile doesn't EISDIR.
+      if (!(await stat(src)).isFile()) continue;
+
       const destDir = dirname(dest);
       await mkdir(destDir, { recursive: true });
 
-      const content = await readFile(src, "utf-8");
-      await writeFile(dest, content);
+      // Copy bytes verbatim — reading as utf-8 and re-writing corrupts binary
+      // assets (images, fonts) by replacing invalid sequences with U+FFFD.
+      await copyFile(src, dest);
     }
   }
 
@@ -355,12 +358,16 @@ export async function buildClient(options: BuildClientOptions) {
     const cssFiles = await scanner.scanFiles("**/*.css", distClientAssets);
 
     for (const cssFile of cssFiles) {
+      // Current outputs are kept; everything else is a candidate for cleanup.
+      if (emittedCss.has(cssFile)) continue;
+      // Emitted names are `${base}-${hash}.css`; recover the base by stripping
+      // the hash after the last '-' (the previous code split on '.', which never
+      // matched, so stale hashed CSS accumulated forever in watch mode).
       const withoutExt = cssFile.replace(/\.css$/, "");
-      const lastDot = withoutExt.lastIndexOf(".");
-      if (lastDot === -1) continue;
-      const base = withoutExt.slice(0, lastDot);
-      const expected = cssOutputsByBase.get(base);
-      if (expected && cssFile !== expected && !emittedCss.has(cssFile)) {
+      const lastDash = withoutExt.lastIndexOf("-");
+      if (lastDash === -1) continue;
+      const base = withoutExt.slice(0, lastDash);
+      if (cssOutputsByBase.has(base)) {
         await remove(join(distClientAssets, cssFile));
       }
     }
@@ -391,14 +398,16 @@ export async function buildClient(options: BuildClientOptions) {
     styles: {},
     shadow: {},
     devScripts: args.production ? undefined : ["/assets/console-forward.js"],
+    dev: !args.production,
   };
 
   for (const meta of metas) {
     manifest.chunks[meta.parsed.pattern] = `/assets/${meta.chunk}`;
     manifest.tags[meta.tag] = `/assets/${meta.chunk}`;
 
-    const filePath = join(appDir, meta.file);
-    if (await scanner.detectShadowOption(filePath)) {
+    // Reuse the shadow flag detected earlier (line ~231) instead of re-reading
+    // and re-scanning the same source file.
+    if (meta.shadow) {
       manifest.shadow![meta.tag] = true;
     }
   }
@@ -407,7 +416,14 @@ export async function buildClient(options: BuildClientOptions) {
     const routeStyles: string[] = [];
 
     for (const [layoutPattern, cssFiles] of Object.entries(layoutCssMap)) {
-      if (layoutPattern === "/" || meta.parsed.pattern.startsWith(layoutPattern)) {
+      // Match the layout's own route and its descendants, but not sibling routes
+      // that merely share a string prefix (e.g. "/blog" must not match "/blogging").
+      const pattern = meta.parsed.pattern;
+      if (
+        layoutPattern === "/" ||
+        pattern === layoutPattern ||
+        pattern.startsWith(`${layoutPattern}/`)
+      ) {
         routeStyles.push(...cssFiles);
       }
     }
