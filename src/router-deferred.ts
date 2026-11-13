@@ -17,18 +17,49 @@ export function handleDeferredHydrationNode(
     if (processedScripts.has(scriptId)) return;
     processedScripts.add(scriptId);
 
-    // Parse the hydration detail from the script content
-    // Format: detail:{"tag":"sf-root","id":"sf-root-deferred-defer-xxx"}
+    // Prefer durable data-* attributes shared with the server serializer.
+    const dataTag = script.getAttribute("data-tag");
+    const dataId = script.getAttribute("data-id");
+    if (dataTag && dataId) {
+      document.dispatchEvent(
+        new CustomEvent("sf:queue-hydrate", { detail: { tag: dataTag, id: dataId } }),
+      );
+      return;
+    }
+
+    // Legacy fallback: scrape detail:{...} from inline script text
     const scriptContent = script.textContent;
     if (scriptContent) {
-      const match = scriptContent.match(/detail:(\{[^}]+\})/);
-      if (match) {
-        try {
-          const detail = JSON.parse(match[1]) as { tag: string; id: string };
-          document.dispatchEvent(new CustomEvent("sf:queue-hydrate", { detail }));
-          return;
-        } catch {
-          // Fallback: script will execute naturally when inserted
+      const marker = "detail:";
+      const start = scriptContent.indexOf(marker);
+      if (start !== -1) {
+        const jsonStart = start + marker.length;
+        if (scriptContent[jsonStart] === "{") {
+          let depth = 0;
+          let end = -1;
+          for (let i = jsonStart; i < scriptContent.length; i++) {
+            const ch = scriptContent[i];
+            if (ch === "{") depth++;
+            else if (ch === "}") {
+              depth--;
+              if (depth === 0) {
+                end = i + 1;
+                break;
+              }
+            }
+          }
+          if (end !== -1) {
+            try {
+              const detail = JSON.parse(scriptContent.slice(jsonStart, end)) as {
+                tag: string;
+                id: string;
+              };
+              document.dispatchEvent(new CustomEvent("sf:queue-hydrate", { detail }));
+              return;
+            } catch {
+              // Fallback: script will execute naturally when inserted
+            }
+          }
         }
       }
     }

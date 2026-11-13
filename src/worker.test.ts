@@ -360,17 +360,21 @@ describe("e2e", () => {
 
   it("should hydrate client components", async () => {
     const page = await browser.newPage();
-    await page.goto(BASE_URL);
+    // Capture SSR HTML before client JS removes the consumed sf-store island
+    const response = await page.goto(BASE_URL, { waitUntil: "commit" });
+    const ssrHtml = (await response?.text()) ?? "";
+    assert.ok(
+      ssrHtml.includes('data-island="sf-store"') || ssrHtml.includes("data-island="),
+      "SSR should emit store/data islands",
+    );
 
-    // Wait for hydration to complete
-    await page.waitForFunction(() => {
-      return document.querySelector("[data-island]") !== null;
+    await page.waitForLoadState("domcontentloaded");
+    // Custom elements from the client entry should be defined after boot
+    const defined = await page.waitForFunction(() => {
+      const el = document.querySelector("#app > *");
+      return el != null && customElements.get(el.tagName.toLowerCase()) != null;
     });
-
-    const dataIslandExists = await page.evaluate(() => {
-      return document.querySelector("[data-island]") !== null;
-    });
-    assert.strictEqual(dataIslandExists, true);
+    assert.ok(defined);
   });
 
   it("should handle navigation to dynamic routes", async () => {
@@ -768,20 +772,13 @@ describe("e2e", () => {
 
   it("should inject serialized data for hydration", async () => {
     const page = await browser.newPage();
-    await page.goto(BASE_URL);
-
-    // Check for serialized data in script tags
-    const hasSerializedData = await page.evaluate(() => {
-      const scripts = document.querySelectorAll("script");
-      return Array.from(scripts).some(
-        (script) =>
-          script.textContent?.includes("data-island") ||
-          script.type === "application/json" ||
-          script.dataset.island !== undefined,
-      );
-    });
-
-    assert.strictEqual(hasSerializedData, true);
+    // Assert on the SSR payload — hydrateStore() removes sf-store after consume
+    const response = await page.goto(BASE_URL, { waitUntil: "commit" });
+    const ssrHtml = (await response?.text()) ?? "";
+    assert.ok(
+      ssrHtml.includes('data-island="sf-store"') || ssrHtml.includes('type="application/json"'),
+      "SSR HTML should include serialized hydration data",
+    );
   });
 
   it("should merge deferred props correctly", async () => {
@@ -1088,8 +1085,9 @@ describe("Render priority integration", () => {
     const children = h("div", null, "Content");
     const deferred = Deferred({ priority: "high", children });
     const deferredHtml = render(deferred);
-    assert.ok(deferredHtml.includes('data-priority="high"'));
-    assert.ok(deferredHtml.includes("sf-deferred"));
+    // Deferred is a passthrough — real deferred UX is server promise props
+    assert.ok(deferredHtml.includes("Content"));
+    assert.ok(!deferredHtml.includes("sf-deferred"));
   });
 });
 
@@ -1160,7 +1158,6 @@ describe("optimization headers unit tests", () => {
       "Content-Encoding": "identity",
       "Content-Security-Policy": "frame-ancestors 'self'",
       "Referrer-Policy": "strict-origin-when-cross-origin",
-      "Transfer-Encoding": "chunked",
       "X-Content-Type-Options": "nosniff",
     };
 
@@ -1168,8 +1165,12 @@ describe("optimization headers unit tests", () => {
     assert.strictEqual(headers["Content-Encoding"], "identity");
     assert.strictEqual(headers["Content-Security-Policy"], "frame-ancestors 'self'");
     assert.strictEqual(headers["X-Content-Type-Options"], "nosniff");
-    assert.strictEqual(headers["Transfer-Encoding"], "chunked");
     assert.strictEqual(headers["Referrer-Policy"], "strict-origin-when-cross-origin");
+    assert.strictEqual(
+      (headers as Record<string, string>)["Transfer-Encoding"],
+      undefined,
+      "platform owns framing; do not set Transfer-Encoding manually",
+    );
   });
 
   it("should create Response with proper security headers", () => {

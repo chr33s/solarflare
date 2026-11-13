@@ -41,7 +41,7 @@ export function collectEarlyHints(options: {
       rel: "preload",
       as: "font",
       crossorigin: "anonymous",
-      type: font.endsWith(". woff2") ? "font/woff2" : undefined,
+      type: font.endsWith(".woff2") ? "font/woff2" : undefined,
     });
   }
 

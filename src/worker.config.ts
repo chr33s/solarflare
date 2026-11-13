@@ -7,6 +7,7 @@ import {
   createDocumentRule,
   createSelectorRule,
 } from "./speculation-rules.ts";
+import type { HeadTag } from "./head.ts";
 
 /** Configuration extracted from meta tags. */
 export interface WorkerMetaConfig {
@@ -32,7 +33,7 @@ export interface WorkerMetaConfig {
 /** Default configuration values. */
 const DEFAULTS: WorkerMetaConfig = {
   lang: "en",
-  preconnectOrigins: ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
+  preconnectOrigins: [],
   earlyFlush: false,
   prefetch: [],
   prerender: [],
@@ -41,7 +42,12 @@ const DEFAULTS: WorkerMetaConfig = {
 
 /** Parses worker configuration from HTML meta tags. */
 export function parseMetaConfig(html: string) {
-  const config: WorkerMetaConfig = { ...DEFAULTS };
+  const config: WorkerMetaConfig = {
+    ...DEFAULTS,
+    preconnectOrigins: [],
+    prefetch: [],
+    prerender: [],
+  };
 
   const langMatch = html.match(/<html[^>]*\slang=["']([^"']+)["']/i);
   if (langMatch) {
@@ -102,6 +108,78 @@ export function parseMetaConfig(html: string) {
   const eagerness = matchMeta("sf:speculation-eagerness");
   if (eagerness) {
     config.speculationEagerness = eagerness as SpeculationEagerness;
+  }
+
+  return config;
+}
+
+/** Parses worker configuration from head tags + html attrs (preferred over HTML regex). */
+export function parseMetaConfigFromHead(input: {
+  tags: HeadTag[];
+  htmlAttrs?: Record<string, string>;
+}) {
+  const config: WorkerMetaConfig = {
+    ...DEFAULTS,
+    preconnectOrigins: [],
+    prefetch: [],
+    prerender: [],
+  };
+
+  if (input.htmlAttrs?.lang) {
+    config.lang = input.htmlAttrs.lang;
+  }
+
+  let maxAge: string | null = null;
+  let swr: string | null = null;
+
+  for (const tag of input.tags) {
+    if (tag.tag !== "meta") continue;
+    const name = typeof tag.props.name === "string" ? tag.props.name : null;
+    const content = typeof tag.props.content === "string" ? tag.props.content : null;
+    if (!name || content == null) continue;
+
+    switch (name) {
+      case "sf:preconnect":
+        config.preconnectOrigins = content
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        break;
+      case "sf:cache-max-age":
+        maxAge = content;
+        break;
+      case "sf:cache-swr":
+        swr = content;
+        break;
+      case "sf:early-flush":
+        config.earlyFlush = content === "true";
+        break;
+      case "sf:prefetch":
+        config.prefetch = content
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        break;
+      case "sf:prerender":
+        config.prerender = content
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        break;
+      case "sf:prefetch-selector":
+        config.prefetchSelector = content;
+        break;
+      case "sf:speculation-eagerness":
+        config.speculationEagerness = content as SpeculationEagerness;
+        break;
+    }
+  }
+
+  if (maxAge) {
+    config.cacheConfig = {
+      maxAge: parseInt(maxAge, 10),
+      staleWhileRevalidate: swr ? parseInt(swr, 10) : undefined,
+    };
   }
 
   return config;

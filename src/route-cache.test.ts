@@ -60,11 +60,23 @@ describe("generateCacheControl", () => {
     assert.ok(!result.includes("max-age=0"));
   });
 
-  it("should be private when cacheAuthenticated is false", () => {
+  it("should be public by default for anonymous traffic", () => {
     const config: RouteCacheConfig = { maxAge: 3600, cacheAuthenticated: false };
     const result = generateCacheControl(config, false);
 
+    assert.ok(result.includes("public"));
+  });
+
+  it("should be private when config.public is false", () => {
+    const config: RouteCacheConfig = { maxAge: 3600, public: false };
+    const result = generateCacheControl(config, false);
+
     assert.ok(result.includes("private"));
+  });
+
+  it("should mark DEFAULT_CACHE_CONFIGS.static as public", () => {
+    const result = generateCacheControl(DEFAULT_CACHE_CONFIGS.static, false);
+    assert.ok(result.includes("public"));
   });
 });
 

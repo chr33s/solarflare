@@ -165,11 +165,29 @@ describe("matchRoute", () => {
     assert.strictEqual(match, null);
   });
 
-  it("should set complete flag for fully matched params", () => {
+  it("should return paramDefs for matched dynamic routes", () => {
     routes = createRouter(mockModules);
     const url = new URL("http://localhost/blog/test");
     const match = matchRoute(routes, url);
-    assert.strictEqual(match?.complete, true);
+    assert.ok(match?.paramDefs.some((p) => p.name === "slug"));
+  });
+
+  it("should dedupe paired client+server modules to one route", () => {
+    const paired: ModuleMap = {
+      server: {
+        "./index.server.tsx": async () => ({ default: () => {} }),
+      },
+      client: {
+        "./index.client.tsx": async () => ({ default: () => {} }),
+      },
+      layout: {},
+    };
+    const pairedRoutes = createRouter(paired);
+    const rootRoutes = pairedRoutes.filter((r) => r.parsedPattern.pathname === "/");
+    assert.strictEqual(rootRoutes.length, 1);
+    assert.strictEqual(rootRoutes[0].type, "client");
+    assert.ok(rootRoutes[0].clientPath);
+    assert.ok(rootRoutes[0].serverPath);
   });
 });
 

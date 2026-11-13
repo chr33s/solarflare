@@ -1,14 +1,19 @@
 import { type FunctionComponent } from "preact";
 import * as server from "./server";
-import type { Route, SolarflareStream } from "./server";
+import type { Route, SolarflareStream, HeadSnapshot } from "./server";
 import { isConsoleRequest, processConsoleLogs, type LogLevel } from "./console-forward.ts";
 import { isDevToolsRequest, handleDevToolsRequest } from "./devtools-json.ts";
 import { isHmrRequest, handleHmrRequest } from "./server.hmr.ts";
 import { generateResourceHints } from "./early-flush.ts";
 import { collectEarlyHints, generateEarlyHintsHeader } from "./early-hints.ts";
-import { ResponseCache, withCache } from "./route-cache.ts";
-import { parseMetaConfig } from "./worker.config.ts";
-import { getHeadContext, type HeadTag } from "./head.ts";
+import { ResponseCache, withDeferredCache } from "./route-cache.ts";
+import {
+  parseMetaConfigFromHead,
+  buildSpeculationRulesFromConfig,
+  type WorkerMetaConfig,
+} from "./worker.config.ts";
+import { renderSpeculationRulesTag } from "./speculation-rules.ts";
+import { type HeadTag } from "./head.ts";
 import {
   typedModules,
   getScriptPath,
@@ -17,7 +22,6 @@ import {
   isShadowTag,
   isDev,
 } from "./manifest.runtime.ts";
-import { findPairedModulePath } from "./paths.ts";
 import { encode } from "turbo-stream";
 
 const responseCache = new ResponseCache(100);
@@ -44,6 +48,11 @@ interface WorkerEnv {
   [key: string]: unknown;
 }
 
+/** Cloudflare ExecutionContext subset used for background cache writes. */
+interface WorkerExecutionContext {
+  waitUntil?(promise: Promise<unknown>): void;
+}
+
 interface SsrContext {
   url: URL;
   route: Route;
@@ -57,7 +66,6 @@ interface SsrContext {
   scriptPath?: string;
   stylesheets: string[];
   devScripts?: string[];
-  metaConfig: ReturnType<typeof parseMetaConfig>;
 }
 
 interface RenderPlan {
@@ -65,6 +73,8 @@ interface RenderPlan {
   finalHeaders: Record<string, string>;
   status: number;
   statusText?: string;
+  metaConfig: WorkerMetaConfig;
+  headSnapshot?: HeadSnapshot;
 }
 
 type MatchAndLoadResult =
@@ -78,7 +88,6 @@ function getDefaultHeaders() {
     "Content-Encoding": "identity",
     "Content-Security-Policy": "frame-ancestors 'self'",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Transfer-Encoding": "chunked",
     "X-Content-Type-Options": "nosniff",
   };
 }
@@ -156,19 +165,18 @@ async function* htmlChunkGenerator(htmlStream: ReadableStream<Uint8Array>): Asyn
   }
 }
 
-/** Creates a turbo-stream encoded patch response. */
+/** Creates a turbo-stream encoded patch response from a request-scoped head snapshot. */
 function createPatchStream(
   htmlStream: ReadableStream<Uint8Array>,
   outlet: string,
+  headSnapshot: HeadSnapshot,
 ): ReadableStream<Uint8Array> {
-  const headCtx = getHeadContext();
-
   const payload: PatchPayload = {
     meta: {
       outlet,
-      head: headCtx.resolveTags(),
-      htmlAttrs: headCtx.htmlAttrs,
-      bodyAttrs: headCtx.bodyAttrs,
+      head: headSnapshot.tags,
+      htmlAttrs: headSnapshot.htmlAttrs,
+      bodyAttrs: headSnapshot.bodyAttrs,
     },
     html: htmlChunkGenerator(htmlStream),
   };
@@ -213,7 +221,13 @@ async function renderPatchResponse(
     _statusText: context.responseStatusText,
   });
 
-  const patchStream = createPatchStream(ssrStream, outlet);
+  const headSnapshot = ssrStream.headSnapshot ?? {
+    html: "",
+    tags: [],
+    htmlAttrs: {},
+    bodyAttrs: {},
+  };
+  const patchStream = createPatchStream(ssrStream, outlet, headSnapshot);
   const finalHeaders = getPatchHeaders(headers, ssrStream.headers);
 
   return new Response(patchStream, {
@@ -232,25 +246,15 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
 
   const { route, params } = match;
 
-  if (route.type === "server") {
-    const pairedClientPath = findPairedModulePath(route.path, typedModules);
-    if (!pairedClientPath) {
-      const mod = await route.loader();
-      const handler = mod.default as (request: Request) => Response | Promise<Response>;
-      return { kind: "api", response: await handler(request) };
-    }
+  // Server-only route with no client pair → API handler
+  if (route.type === "server" && !route.clientPath) {
+    const mod = await route.loader();
+    const handler = mod.default as (request: Request) => Response | Promise<Response>;
+    return { kind: "api", response: await handler(request) };
   }
 
-  let serverPath: string | null = null;
-  let clientPath: string;
-
-  if (route.type === "server") {
-    serverPath = route.path;
-    clientPath = route.path.replace(".server.", ".client.");
-  } else {
-    clientPath = route.path;
-    serverPath = findPairedModulePath(route.path, typedModules);
-  }
+  const clientPath = route.clientPath ?? route.path;
+  const serverPath = route.serverPath ?? null;
 
   let shellData: Record<string, unknown> = {};
   let deferredData: Record<string, Promise<unknown>> | null = null;
@@ -317,16 +321,6 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
   const stylesheets = getStylesheets(route.parsedPattern.pathname);
   const devScripts = getDevScripts();
 
-  // Populate THIS request's head by rendering the tree, then derive meta config
-  // from it. Reading the global head context without rendering would return the
-  // previous request's head (wrong cache/lang/early-flush config per request).
-  const headHtml = server.renderHeadForConfig(content, {
-    params,
-    serverData: shellData,
-    pathname: url.pathname,
-  });
-  const metaConfig = parseMetaConfig(headHtml);
-
   return {
     kind: "ssr",
     context: {
@@ -342,7 +336,6 @@ async function matchAndLoad(request: Request, url: URL): Promise<MatchAndLoadRes
       scriptPath,
       stylesheets,
       devScripts,
-      metaConfig,
     },
   };
 }
@@ -352,21 +345,13 @@ async function renderStream(
   headers: Record<string, string>,
   envOptimizations: WorkerOptimizations,
 ) {
-  const { url, route, params, content, shellData, deferredData, metaConfig } = context;
+  const { url, route, params, content, shellData, deferredData } = context;
   const { scriptPath, stylesheets, devScripts } = context;
-
-  const earlyHints = collectEarlyHints({
-    scriptPath,
-    stylesheets,
-    preconnectOrigins: metaConfig.preconnectOrigins,
-  });
 
   const resourceHints = generateResourceHints({
     scripts: scriptPath ? [scriptPath] : [],
     stylesheets,
   });
-
-  const useEarlyFlush = envOptimizations.earlyFlush ?? metaConfig.earlyFlush;
 
   const ssrStream = await server.renderToStream(content, {
     params,
@@ -375,14 +360,31 @@ async function renderStream(
     script: scriptPath,
     styles: stylesheets,
     devScripts,
-    // Early flush: inject the resource hints into <head> so the browser starts
-    // fetching assets as the head streams, while still rendering one valid,
-    // fully-styled document.
-    preloadHints: useEarlyFlush ? resourceHints : undefined,
+    // Resolve early-flush after the sync shell populates this request's head —
+    // no separate throwaway render for meta.
+    resolvePreloadHints: (snapshot) => {
+      const meta = parseMetaConfigFromHead(snapshot);
+      const useEarlyFlush = envOptimizations.earlyFlush ?? meta.earlyFlush;
+      return useEarlyFlush ? resourceHints : undefined;
+    },
     deferred: deferredData ? { tag: route.tag, promises: deferredData } : undefined,
     _headers: context.responseHeaders,
     _status: context.responseStatus,
     _statusText: context.responseStatusText,
+  });
+
+  const headSnapshot = ssrStream.headSnapshot ?? {
+    html: "",
+    tags: [],
+    htmlAttrs: {},
+    bodyAttrs: {},
+  };
+  const metaConfig = parseMetaConfigFromHead(headSnapshot);
+
+  const earlyHints = collectEarlyHints({
+    scriptPath,
+    stylesheets,
+    preconnectOrigins: metaConfig.preconnectOrigins,
   });
 
   const finalHeaders: Record<string, string> = { ...headers };
@@ -396,11 +398,33 @@ async function renderStream(
     finalHeaders["Link"] = generateEarlyHintsHeader(earlyHints);
   }
 
+  // Speculation rules from meta: append as a trailer script (browsers accept
+  // speculationrules outside <head>). Lang is applied via htmlAttrs in the SSR
+  // document / patch meta from the head snapshot.
+  const speculationRules = buildSpeculationRulesFromConfig(metaConfig);
+  let body: ReadableStream<Uint8Array> = ssrStream;
+  if (speculationRules) {
+    const tag = renderSpeculationRulesTag(speculationRules);
+    const encoder = new TextEncoder();
+    body = ssrStream.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        flush(controller) {
+          controller.enqueue(encoder.encode(tag));
+        },
+        transform(chunk, controller) {
+          controller.enqueue(chunk);
+        },
+      }),
+    );
+  }
+
   return {
-    ssrStream,
+    ssrStream: body as SolarflareStream,
     finalHeaders,
     status: ssrStream.status ?? 200,
     statusText: ssrStream.statusText,
+    metaConfig,
+    headSnapshot,
   };
 }
 
@@ -443,7 +467,7 @@ async function handlePatchRequest(request: Request) {
 }
 
 /** Cloudflare Worker fetch handler with auto-discovered routes and streaming SSR. */
-async function worker(request: Request, env?: WorkerEnv) {
+async function worker(request: Request, env?: WorkerEnv, ctx?: WorkerExecutionContext) {
   const url = new URL(request.url);
   const devResponse = await handleDevEndpoints(request, env);
   if (devResponse) return devResponse;
@@ -467,23 +491,21 @@ async function worker(request: Request, env?: WorkerEnv) {
 
     const { context } = result;
     const envOptimizations = env?.SF_OPTIMIZATIONS ?? {};
+    const waitUntil = ctx?.waitUntil?.bind(ctx);
 
-    const render = async () => {
-      const plan = await renderStream(context, headers, envOptimizations);
-      return applyPerfFeatures(plan);
-    };
-
-    if (context.metaConfig.cacheConfig) {
-      return withCache(
-        request,
-        context.params,
-        context.metaConfig.cacheConfig,
-        render,
-        responseCache,
-      );
-    }
-
-    return render();
+    return withDeferredCache(
+      request,
+      context.params,
+      async () => {
+        const plan = await renderStream(context, headers, envOptimizations);
+        return {
+          response: applyPerfFeatures(plan),
+          cacheConfig: plan.metaConfig.cacheConfig,
+        };
+      },
+      responseCache,
+      { waitUntil },
+    );
   } catch (error) {
     const serverError = error instanceof Error ? error : new Error(String(error));
     console.error("[solarflare] Server error:", serverError);

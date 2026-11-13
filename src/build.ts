@@ -7,7 +7,7 @@ import { argv, env } from "node:process";
 import { parseArgs } from "node:util";
 import { buildClient } from "./build.bundle-client.ts";
 import { buildServer } from "./build.bundle-server.ts";
-import { loadUserConfig } from "./build.bundle.ts";
+import { loadUserConfig, type BuildArgs } from "./build.bundle.ts";
 import { exists } from "./fs.ts";
 
 /** Resolve paths relative to the current working directory. */
@@ -23,25 +23,65 @@ const MODULES_PATH = join(DIST_DIR, ".modules.generated.ts");
 const CHUNKS_PATH = join(DIST_DIR, ".chunks.generated.json");
 const ROUTES_TYPE_PATH = join(DIST_DIR, "routes.d.ts");
 
-/** CLI entry point: parse args early so they're available. */
-const { values: args, positionals } = parseArgs({
-  allowPositionals: true,
-  args: argv.slice(2),
-  options: {
-    production: {
-      type: "boolean",
-      short: "p",
-      default: env.NODE_ENV === "production",
+export type BuildCliArgs = Partial<BuildArgs> & {
+  production?: boolean;
+  sourcemap?: boolean;
+  debug?: boolean;
+};
+
+function toBuildArgs(args: BuildCliArgs): BuildArgs {
+  return {
+    production: Boolean(args.production),
+    sourcemap: Boolean(args.sourcemap),
+    debug: Boolean(args.debug),
+    clean: args.clean,
+    serve: args.serve,
+    watch: args.watch,
+    codemod: args.codemod,
+    dry: args.dry,
+  };
+}
+
+/** Parses CLI argv into build options. Call from main() only — not at import time. */
+export function parseCliArgs(args = argv.slice(2)) {
+  return parseArgs({
+    allowPositionals: true,
+    args,
+    options: {
+      production: {
+        type: "boolean",
+        short: "p",
+        default: env.NODE_ENV === "production",
+      },
+      serve: { type: "boolean", short: "s", default: false },
+      watch: { type: "boolean", short: "w", default: false },
+      clean: { type: "boolean", short: "c", default: false },
+      debug: { type: "boolean", short: "d", default: false },
+      sourcemap: { type: "boolean", default: false },
+      codemod: { type: "boolean", default: false },
+      dry: { type: "boolean", default: false },
     },
-    serve: { type: "boolean", short: "s", default: false },
-    watch: { type: "boolean", short: "w", default: false },
-    clean: { type: "boolean", short: "c", default: false },
-    debug: { type: "boolean", short: "d", default: false },
-    sourcemap: { type: "boolean", default: false },
-    codemod: { type: "boolean", default: false },
-    dry: { type: "boolean", default: false },
-  },
-});
+  });
+}
+
+/** Canonical root layout snippet shared by README and scaffold. */
+export const LAYOUT_TEMPLATE = /* tsx */ `import type { VNode } from "preact";
+import { Head, Body } from "@chr33s/solarflare/server";
+
+export default function Layout({ children }: { children: VNode }) {
+  return (
+    <html>
+      <head>
+        <Head />
+      </head>
+      <body>
+        {children}
+        <Body />
+      </body>
+    </html>
+  );
+}
+`;
 
 /** Auto-scaffolds missing template files. */
 async function scaffoldTemplates() {
@@ -53,13 +93,7 @@ export default { fetch: worker };
   return <div><h1>Error</h1><p>{error.message}</p></div>;
 }
 `,
-    "_layout.tsx": /* tsx */ `import type { VNode } from "preact";
-import { Head, Body } from "@chr33s/solarflare/server";
-
-export default function Layout({ children }: { children: VNode }) {
-  return <html><head><Head /></head><body>{children}<Body /></body></html>;
-}
-`,
+    "_layout.tsx": LAYOUT_TEMPLATE,
   };
 
   const rootTemplates: Record<string, string> = {
@@ -100,7 +134,7 @@ async function clean() {
 }
 
 /** Main build function. */
-async function build() {
+export async function build(args: BuildCliArgs = {}) {
   const startTime = performance.now();
 
   console.log("\n⚡ Solarflare Build\n");
@@ -114,8 +148,10 @@ async function build() {
   const userConfig = await loadUserConfig(ROOT_DIR);
   if (userConfig) console.log("📋 Loaded rolldown.config.ts");
 
+  const buildArgs = toBuildArgs(args);
+
   await buildClient({
-    args,
+    args: buildArgs,
     rootDir: ROOT_DIR,
     appDir: APP_DIR,
     distDir: DIST_DIR,
@@ -126,7 +162,7 @@ async function build() {
   });
 
   await buildServer({
-    args,
+    args: buildArgs,
     rootDir: ROOT_DIR,
     appDir: APP_DIR,
     distServer: DIST_SERVER,
@@ -141,11 +177,11 @@ async function build() {
 }
 
 /** Watch mode - rebuilds on file changes and optionally starts dev server. */
-async function watchBuild() {
+export async function watchBuild(args: BuildCliArgs = {}) {
   console.log("\n⚡ Solarflare Dev Mode\n");
 
   try {
-    await build();
+    await build(args);
   } catch (err) {
     console.error("❌ Initial build failed:", err);
   }
@@ -176,7 +212,7 @@ async function watchBuild() {
     isBuilding = true;
     console.log(`\n🔄 Change detected: ${filename}\n`);
     try {
-      await build();
+      await build(args);
       console.log("\n👀 Watching for changes...\n");
     } catch (err) {
       console.error("❌ Build failed:", err);
@@ -221,13 +257,20 @@ async function watchBuild() {
   await new Promise(() => {});
 }
 
-if (import.meta.main) {
+/** CLI entry — argv is parsed here, not at module import time. */
+export async function main(argvInput = argv.slice(2)) {
+  const { values: args, positionals } = parseCliArgs(argvInput);
+
   if (args.codemod) {
     const { codemod } = await import("./codemod.ts");
     codemod(positionals, args);
   } else if (args.watch) {
-    void watchBuild();
+    await watchBuild(args);
   } else {
-    void build();
+    await build(args);
   }
+}
+
+if (import.meta.main) {
+  void main();
 }

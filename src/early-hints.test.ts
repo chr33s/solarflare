@@ -103,6 +103,8 @@ describe("collectEarlyHints", () => {
     assert.strictEqual(hints[0].rel, "preload");
     assert.strictEqual(hints[0].as, "font");
     assert.strictEqual(hints[0].crossorigin, "anonymous");
+    assert.strictEqual(hints[0].type, "font/woff2");
+    assert.strictEqual(hints[1].type, undefined);
   });
 
   it("should collect stylesheet preloads", () => {

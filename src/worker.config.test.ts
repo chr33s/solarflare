@@ -10,10 +10,7 @@ describe("parseMetaConfig", () => {
   it("should return defaults for empty HTML", () => {
     const config = parseMetaConfig("");
     strictEqual(config.lang, "en");
-    deepStrictEqual(config.preconnectOrigins, [
-      "https://fonts.googleapis.com",
-      "https://fonts.gstatic.com",
-    ]);
+    deepStrictEqual(config.preconnectOrigins, []);
     strictEqual(config.earlyFlush, false);
     strictEqual(config.cacheConfig, undefined);
     deepStrictEqual(config.prefetch, []);

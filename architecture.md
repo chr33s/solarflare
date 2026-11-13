@@ -49,31 +49,32 @@ flowchart TB
   - Implements routing, streaming SSR, caching, and dev endpoints (`/_hmr`, `/_console`, devtools JSON).
 
 - **SSR renderer**: `src/server.ts`
-  - Creates a per-request store/head context.
+  - Creates a per-request store/head context and snapshots head synchronously after the shell render (avoids cross-request races on Workers isolates).
   - Renders Preact VNodes to a `ReadableStream`.
-  - Injects `<head>` and asset tags during streaming.
+  - Injects `<head>` and asset tags during streaming from the request-scoped snapshot.
   - Streams _deferred promise props_ as independent “data islands”.
-  - Uses `src/runtime.ts` for shared global state.
 
 - **Client runtime**: `src/client.ts`, `src/router.ts`, `src/store.ts`, `src/hydration.ts`
-  - `initClient()` hydrates store + head state and sets up hydration coordination.
-  - SPA router fetches HTML, DOM-diffs it in, then hydrates deferred islands.
-  - APIs: `Deferred` (`src/render-priority.ts`) for priority-based rendering holes, `define()` for custom elements.
+  - Generated entries call `initHmrEntry` → `initClientRuntime()`, which hydrates the `sf-store` island and sets up hydration coordination (`initClient()` remains a manual alternative).
+  - SPA router uses the Navigation API when available, otherwise History API (`pushState` / `popstate` / link clicks).
+  - Deferred UX is server-loader promise props → data islands (not a Suspense-like `Deferred` component).
 
 - **Styles & CSS**:
   - `src/stylesheets.ts` & `src/client.styles.ts`: Manage Constructable Stylesheets.
   - `src/hmr.ts`: Handles CSS HMR updates (granular + full replacement).
-  - `src/critical-css.ts`: Extracts critical CSS for inlining.
+  - `src/server.styles.ts`: Optional constructable-sheet preload helpers.
 
 - **Speculation Rules**: `src/speculation-rules.ts`
   - Prefetch/prerender via Speculation Rules API.
   - Helpers: `injectSpeculationRules`, `buildRouteSpeculationRules`, `renderSpeculationRulesTag`.
-  - Meta tag integration via `buildSpeculationRulesFromConfig` in `worker-config.ts`.
+  - Meta tag integration via `buildSpeculationRulesFromConfig` in `worker.config.ts`; worker appends the rules script when configured.
 
 - **Performance Features**:
-  - `src/early-flush.ts`: Sends initial HTML shell immediately.
-  - `src/early-hints.ts`: Sends 103 Early Hints headers.
-  - `src/route-cache.ts`: Edge caching logic for server routes.
+  - `src/early-flush.ts`: Builds `<link rel=preload|modulepreload|preconnect>` markup for early head injection (does not wrap a second HTML shell).
+  - `src/early-hints.ts`: Builds a final-response `Link` header (not HTTP 103).
+  - `src/route-cache.ts`: Edge caching; Cache API `put` is scheduled via `waitUntil` so streaming TTFB is preserved.
+
+- **Client globals**: `src/runtime.ts` holds `globalThis.__solarflare__` for client HMR/styles — SSR state lives in `store.ts` / `head.ts`, not here.
 
 - **DX / Dev mode**
   - HMR client: `src/client.hmr.ts` (EventSource → `/_hmr`)
@@ -168,7 +169,7 @@ Named pipeline stages (inputs → outputs):
 2. **Routing**: `(Request, URL)` → `(RouteMatch | null)` using `URLPattern` + manifest.
 3. **Loader**: `(Request, params)` → `(props + response metadata)` from `*.server.tsx`.
 4. **Render**: `(VNode + layouts + props)` → `(ReadableStream + headers/status)` via `renderToStream`.
-5. **Perf features**: `(Response)` → `(Response)` early hints / early flush / critical CSS / route cache / speculation rules.
+5. **Perf features**: `(Response)` → `(Response)` Link header hints / early head flush / route cache / speculation rules.
 6. **Response**: `(ReadableStream + headers/status)` → `(Response)` returned to client.
 
 Key steps (simplified):
@@ -194,11 +195,10 @@ Key steps (simplified):
      - script/style tags + store hydration data at the `<Body />` marker
 
 5. **Performance features (optional)**
-   - **Early hints**: `Link:` header from meta-driven resource hints.
-   - **Early flush**: send a static shell immediately and stream content after.
-   - **Critical CSS**: inline a size-bounded subset of CSS when enabled.
-   - **Route cache**: `withCache(...)` caches rendered responses based on meta config.
-   - **Speculation rules**: prefetch/prerender via `<script type="speculationrules">`.
+   - **Early hints**: `Link:` header from meta-driven resource hints (final response, not HTTP 103).
+   - **Early flush**: inject resource-hint markup into `<head>` as the document streams.
+   - **Route cache**: `withDeferredCache(...)` caches after a single SSR pass; `put` uses `waitUntil`.
+   - **Speculation rules**: prefetch/prerender via `<script type="speculationrules">` when meta configures them.
 
 ```mermaid
 sequenceDiagram
@@ -283,10 +283,11 @@ flowchart LR
 
 ### Initial load
 
-- `initClient()` (from `src/client.ts`) sets up:
+- Generated client entries call `initHmrEntry` → `initClientRuntime()`, which sets up:
   - head context + head hoisting
-  - store hydration (`sf-store` data island)
+  - store hydration (`sf-store` data island via `hydrateStore()`)
   - hydration coordinator for deferred islands
+- `initClient()` in `src/client.ts` remains available for manual bootstrapping.
 
 ### Web component registration
 

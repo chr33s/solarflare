@@ -44,17 +44,21 @@ export async function applyPatchStream(response: Response, options: ApplyPatchSt
   // Apply meta immediately
   options.applyMeta(payload.meta);
 
-  // Consume html async iterable, forwarding chunks to diff-dom-streaming
+  // Consume html async iterable, forwarding chunks to diff-dom-streaming.
+  // Close OR error the controller — never both (InvalidStateError).
   const consumeHtml = (async () => {
     try {
       for await (const chunk of payload.html) {
         controller?.enqueue(encoder.encode(chunk));
       }
-    } catch (err) {
-      controller?.error(err as Error);
-      throw err;
-    } finally {
       controller?.close();
+    } catch (err) {
+      try {
+        controller?.error(err as Error);
+      } catch {
+        // Controller may already be closed/errored
+      }
+      throw err;
     }
   })();
 

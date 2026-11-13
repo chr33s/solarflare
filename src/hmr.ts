@@ -6,6 +6,7 @@ import { initRouter, getRouter } from "./router.ts";
 import {
   extractDataIsland,
   getDeferredIslandPrefix,
+  hydrateStore,
   initHydrationCoordinator,
 } from "./hydration.ts";
 import { installHeadHoisting, createHeadContext, setHeadContext } from "./head.ts";
@@ -455,6 +456,9 @@ function initClientRuntime() {
     runtime.headContext ??= createHeadContext();
     setHeadContext(runtime.headContext);
     installHeadHoisting();
+    // Hydrate public store signals (params / serverData / pathname) from the
+    // SSR sf-store island — generated entries call initHmrEntry → here, not initClient.
+    void hydrateStore();
   }
   initHydrationCoordinator();
 }
@@ -501,8 +505,16 @@ function createHmrEntryComponent(options: HmrEntryOptions) {
     });
   };
 
+  hmr.dispose(() => {
+    console.log(`[HMR] Disposing <${tag}>`);
+    saveScrollPosition(tag);
+    const el = document.querySelector(tag) as any;
+    captureHookState(el);
+  });
+
   hmr.on<{ default?: FunctionComponent<any> }>(`sf:module:${tag}`, (newModule) => {
     if (newModule?.default) {
+      // dispose() callbacks run inside client.hmr before module listeners fire
       saveScrollPosition(tag);
 
       const el = document.querySelector(tag) as any;
@@ -520,13 +532,6 @@ function createHmrEntryComponent(options: HmrEntryOptions) {
 
       dispatchHMREvent("update", { tag });
     }
-  });
-
-  hmr.dispose(() => {
-    console.log(`[HMR] Disposing <${tag}>`);
-    saveScrollPosition(tag);
-    const el = document.querySelector(tag) as any;
-    captureHookState(el);
   });
 
   let routerInitialized = false;

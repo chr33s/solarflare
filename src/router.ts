@@ -173,7 +173,17 @@ export class Router {
         history: options.replace ? "replace" : "auto",
         state: options.state,
       });
+      return;
     }
+
+    // History API fallback (Safari and other browsers without Navigation API)
+    if (options.replace) {
+      history.replaceState(options.state ?? null, "", url.href);
+    } else {
+      history.pushState(options.state ?? null, "", url.href);
+    }
+    const match = this.match(url);
+    await this.#executeNavigation(url, match);
   }
 
   /** Executes navigation with optional view transition. */
@@ -309,105 +319,107 @@ export class Router {
     };
 
     try {
-      await applyPatchStream(response, {
-        useTransition,
-        applyMeta,
-        shouldReplaceNode: this.#config.shouldReplaceNode,
-        onChunkProcessed: () => {
-          if (didScroll) return;
-          didScroll = true;
-          // Scroll after the first chunk has been applied so we don't
-          // jump to top when deferred content resolves later.
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => this.#handleScroll(url));
-          });
-        },
-      });
-    } catch (diffError) {
-      abortController.abort();
-      // diff-dom-streaming can fail with "insertBefore" errors when the DOM was mutated
-      // by external factors (Preact custom elements, HMR, extensions). Fallback to a
-      // full navigation which lets the browser handle parsing.
-      observer?.disconnect();
-      setNavigationMode(false);
-      console.warn("[solarflare] DOM diff failed, falling back to full navigation:", diffError);
-      location.href = url.href;
-      return;
-    } finally {
-      observer?.disconnect();
-      if (this.#inflightAbort === abortController) {
-        this.#inflightAbort = null;
-      }
-    }
-
-    // Fix for broken interactivity + flicker:
-    // If navigating to a different component tag, replace the host immediately
-    // to ensure a fresh hydration without stale properties from previous component.
-    // Doing this BEFORE the settlement delay prevents visual flicker (replacement happens in same frame).
-    const host = document.querySelector(entry.tag) as HTMLElement | null;
-    const sameTag = previousTag && previousTag === entry.tag;
-
-    if (host && previousTag && !sameTag && previousHost && host === previousHost) {
-      const replacement = host.cloneNode(true) as HTMLElement;
-      host.replaceWith(replacement);
-    }
-
-    // Wait for any pending DOM work to settle before element replacement.
-    // With view transitions, wait for ALL transitions to complete (not just the last one).
-    // Without them, mutations are flushed synchronously via FLUSH_SYNC, but wait two frames
-    // to ensure custom elements have mounted.
-    if (useTransition) {
-      const transitions: ViewTransition[] | undefined = (window as any).lastDiffTransitions;
-      if (transitions?.length) {
-        await Promise.all(transitions.map((t) => t.finished.catch(() => {})));
-        // Clear for next navigation
-        (window as any).lastDiffTransitions = [];
-      }
-    } else {
-      // First frame: batched mutations apply
-      await new Promise((r) => requestAnimationFrame(r));
-      // Second frame: custom element connectedCallbacks complete
-      await new Promise((r) => requestAnimationFrame(r));
-    }
-
-    // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree,
-    // which can desync event delegation/handlers. When the route tag is the same,
-    // trigger a rerender to re-bind events without losing local state (e.g. counters).
-    if (sameTag) {
-      const currentHost = document.querySelector(entry.tag) as HTMLElement;
-      if (currentHost) {
-        currentHost.dispatchEvent(new CustomEvent("sf:rerender"));
-        await new Promise((r) => requestAnimationFrame(r));
-      }
-    }
-
-    // Clean up any duplicate deferred islands or hydrate scripts introduced by
-    // streaming diffs while navigation mode preserved previous scripts.
-    dedupeDeferredScripts(entry.tag);
-
-    // Exit navigation mode - allow normal script cleanup going forward
-    setNavigationMode(false);
-
-    // Reset head context after navigation - the new HTML has fresh head tags
-    // and any new useHead calls from hydrated components will be fresh
-    resetHeadContext();
-
-    if (entry.styles?.length) {
-      const fragment = document.createDocumentFragment();
-      let hasNew = false;
-      for (const href of entry.styles) {
-        const absoluteHref = new URL(href, location.origin).href;
-        if (!document.querySelector(`link[href="${absoluteHref}"], link[href="${href}"]`)) {
-          const link = document.createElement("link");
-          link.rel = "stylesheet";
-          link.href = absoluteHref;
-          fragment.appendChild(link);
-          hasNew = true;
+      try {
+        await applyPatchStream(response, {
+          useTransition,
+          applyMeta,
+          shouldReplaceNode: this.#config.shouldReplaceNode,
+          onChunkProcessed: () => {
+            if (didScroll) return;
+            didScroll = true;
+            // Scroll after the first chunk has been applied so we don't
+            // jump to top when deferred content resolves later.
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => this.#handleScroll(url));
+            });
+          },
+        });
+      } catch (diffError) {
+        abortController.abort();
+        // diff-dom-streaming can fail with "insertBefore" errors when the DOM was mutated
+        // by external factors (Preact custom elements, HMR, extensions). Fallback to a
+        // full navigation which lets the browser handle parsing.
+        observer?.disconnect();
+        console.warn("[solarflare] DOM diff failed, falling back to full navigation:", diffError);
+        location.href = url.href;
+        return;
+      } finally {
+        observer?.disconnect();
+        if (this.#inflightAbort === abortController) {
+          this.#inflightAbort = null;
         }
       }
-      if (hasNew) {
-        document.head.appendChild(fragment);
+
+      // Fix for broken interactivity + flicker:
+      // If navigating to a different component tag, replace the host immediately
+      // to ensure a fresh hydration without stale properties from previous component.
+      // Doing this BEFORE the settlement delay prevents visual flicker (replacement happens in same frame).
+      const host = document.querySelector(entry.tag) as HTMLElement | null;
+      const sameTag = previousTag && previousTag === entry.tag;
+
+      if (host && previousTag && !sameTag && previousHost && host === previousHost) {
+        const replacement = host.cloneNode(true) as HTMLElement;
+        host.replaceWith(replacement);
       }
+
+      // Wait for any pending DOM work to settle before element replacement.
+      // With view transitions, wait for ALL transitions to complete (not just the last one).
+      // Without them, mutations are flushed synchronously via FLUSH_SYNC, but wait two frames
+      // to ensure custom elements have mounted.
+      if (useTransition) {
+        const transitions: ViewTransition[] | undefined = (window as any).lastDiffTransitions;
+        if (transitions?.length) {
+          await Promise.all(transitions.map((t) => t.finished.catch(() => {})));
+          // Clear for next navigation
+          (window as any).lastDiffTransitions = [];
+        }
+      } else {
+        // First frame: batched mutations apply
+        await new Promise((r) => requestAnimationFrame(r));
+        // Second frame: custom element connectedCallbacks complete
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+
+      // IMPORTANT: diff-dom-streaming may patch inside an existing custom element subtree,
+      // which can desync event delegation/handlers. When the route tag is the same,
+      // trigger a rerender to re-bind events without losing local state (e.g. counters).
+      if (sameTag) {
+        const currentHost = document.querySelector(entry.tag) as HTMLElement;
+        if (currentHost) {
+          currentHost.dispatchEvent(new CustomEvent("sf:rerender"));
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+      }
+
+      // Clean up any duplicate deferred islands or hydrate scripts introduced by
+      // streaming diffs while navigation mode preserved previous scripts.
+      dedupeDeferredScripts(entry.tag);
+
+      // Reset head context after navigation - the new HTML has fresh head tags
+      // and any new useHead calls from hydrated components will be fresh
+      resetHeadContext();
+
+      if (entry.styles?.length) {
+        const fragment = document.createDocumentFragment();
+        let hasNew = false;
+        for (const href of entry.styles) {
+          const absoluteHref = new URL(href, location.origin).href;
+          if (!document.querySelector(`link[href="${absoluteHref}"], link[href="${href}"]`)) {
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = absoluteHref;
+            fragment.appendChild(link);
+            hasNew = true;
+          }
+        }
+        if (hasNew) {
+          document.head.appendChild(fragment);
+        }
+      }
+    } finally {
+      // Always clear navigation mode — a throw during settlement must not leave
+      // deferred island scripts permanently preserved.
+      setNavigationMode(false);
     }
   }
 
@@ -455,28 +467,66 @@ export class Router {
     return this;
   }
 
-  /** Sets up Navigation API interception. */
+  /** Sets up Navigation API interception, with History API fallback. */
   #setupNavigationAPI() {
     const nav = (window as any).navigation;
-    if (!nav) return; // Navigation API not supported (e.g., Safari)
+    if (nav) {
+      const handler = (event: any) => {
+        if (!event.canIntercept || event.downloadRequest) return;
 
-    const handler = (event: any) => {
-      if (!event.canIntercept || event.downloadRequest) return;
+        const url = new URL(event.destination.url);
+        if (url.origin !== location.origin) return;
 
-      const url = new URL(event.destination.url);
+        const match = this.match(url);
+        if (!match) return;
+
+        event.intercept({
+          scroll: "manual",
+          handler: () => this.#executeNavigation(url, match),
+        });
+      };
+
+      nav.addEventListener("navigate", handler);
+      this.#cleanupFns.push(() => nav.removeEventListener("navigate", handler));
+      return;
+    }
+
+    // History API fallback for browsers without Navigation API (e.g. Safari)
+    const onPopState = () => {
+      const url = new URL(location.href);
+      const match = this.match(url);
+      void this.#executeNavigation(url, match);
+    };
+
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = (event.target as Element | null)?.closest?.(
+        "a[href]",
+      ) as HTMLAnchorElement | null;
+      if (!target) return;
+      if (target.target && target.target !== "_self") return;
+      if (target.hasAttribute("download")) return;
+
+      const url = new URL(target.href, location.origin);
       if (url.origin !== location.origin) return;
+      if (url.href === location.href) return;
 
       const match = this.match(url);
       if (!match) return;
 
-      event.intercept({
-        scroll: "manual",
-        handler: () => this.#executeNavigation(url, match),
-      });
+      event.preventDefault();
+      history.pushState(null, "", url.href);
+      void this.#executeNavigation(url, match);
     };
 
-    nav.addEventListener("navigate", handler);
-    this.#cleanupFns.push(() => nav.removeEventListener("navigate", handler));
+    window.addEventListener("popstate", onPopState);
+    document.addEventListener("click", onClick);
+    this.#cleanupFns.push(() => {
+      window.removeEventListener("popstate", onPopState);
+      document.removeEventListener("click", onClick);
+    });
   }
 
   /** Subscribes to route changes. Returns unsubscribe function. */

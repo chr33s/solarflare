@@ -1,6 +1,7 @@
 {
   "name": "@chr33s/solarflare",
   "version": "0.1.0",
+  "description": "Cloudflare-optimized streaming SSR meta-framework. Publishes TypeScript sources; requires Node ≥24.12 (type-stripping) or tsx.",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -1,12 +1,8 @@
 import { serializeToString, parseFromString, escapeScriptText } from "./serialize.ts";
-import { serializeHeadState, hydrateHeadState } from "./head.ts";
 import { initStore, setPathname, params, serverData, pathname } from "./store.ts";
 
 /** Store island ID. */
 const STORE_ISLAND_ID = "sf-store";
-
-/** Head island ID. */
-const HEAD_ISLAND_ID = "sf-head";
 
 /** Gets the default data island ID for a component tag. */
 export function getComponentDataIslandId(tag: string) {
@@ -68,13 +64,6 @@ export async function serializeStoreForHydration() {
   return serializeDataIsland(STORE_ISLAND_ID, state);
 }
 
-/** Serializes head state for client hydration. */
-export async function serializeHeadForHydration() {
-  return /* html */ `<script type="application/json" data-island="${HEAD_ISLAND_ID}">${escapeScriptText(
-    serializeHeadState(),
-  )}</script>`;
-}
-
 /** Hydrates store from serialized state (client-side). */
 export async function hydrateStore() {
   if (typeof document === "undefined") return;
@@ -96,18 +85,6 @@ export async function hydrateStore() {
 
   const script = document.querySelector(`script[data-island="${CSS.escape(STORE_ISLAND_ID)}"]`);
   script?.remove();
-}
-
-/** Hydrates head state from serialized data island (client-side). */
-export async function hydrateHead() {
-  if (typeof document === "undefined") return;
-
-  const script = document.querySelector(`script[data-island="${CSS.escape(HEAD_ISLAND_ID)}"]`);
-  if (!script?.textContent) return;
-
-  hydrateHeadState(script.textContent);
-
-  script.remove();
 }
 
 /** Navigation mode flag - when true, don't remove data island scripts during hydration. */
@@ -166,31 +143,41 @@ function handleQueueHydrateEvent(e: Event) {
   queueHydration(tag, id);
 }
 
-/** Processes the hydration queue sequentially. */
+/** Processes ready hydration items without blocking siblings on missing tags. */
 async function processHydrationQueue() {
   if (processingQueue) return;
   processingQueue = true;
 
   while (hydrationQueue.length > 0) {
-    const item = hydrationQueue.shift();
-    if (!item) continue;
+    const ready: Array<{ tag: string; id: string; attempts: number }> = [];
+    const deferred: Array<{ tag: string; id: string; attempts: number }> = [];
 
-    const { tag, id: dataIslandId, attempts } = item;
-    // Skip stale entries for elements no longer in the DOM
-    if (!document.querySelector(tag)) {
-      if (attempts < MAX_HYDRATION_RETRIES) {
-        hydrationQueue.push({ tag, id: dataIslandId, attempts: attempts + 1 });
+    while (hydrationQueue.length > 0) {
+      const item = hydrationQueue.shift();
+      if (!item) continue;
+      if (document.querySelector(item.tag)) {
+        ready.push(item);
+      } else if (item.attempts < MAX_HYDRATION_RETRIES) {
+        deferred.push({ ...item, attempts: item.attempts + 1 });
       }
-      await new Promise((resolve) => setTimeout(resolve, HYDRATION_RETRY_DELAY_MS));
-      continue;
     }
 
-    try {
-      await hydrateComponent(tag, dataIslandId);
-    } catch (err) {
-      console.error("[solarflare] hydrateComponent error:", err);
+    for (const item of ready) {
+      try {
+        await hydrateComponent(item.tag, item.id);
+      } catch (err) {
+        console.error("[solarflare] hydrateComponent error:", err);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
-    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    if (deferred.length === 0) break;
+
+    // Re-queue missing tags after a short delay without stalling ready siblings
+    await new Promise((resolve) => setTimeout(resolve, HYDRATION_RETRY_DELAY_MS));
+    for (const item of deferred) {
+      hydrationQueue.push(item);
+    }
   }
 
   processingQueue = false;

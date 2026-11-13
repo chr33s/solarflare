@@ -1,4 +1,4 @@
-import { getHeadContext, HEAD_MARKER } from "./head.ts";
+import { HEAD_MARKER } from "./head.ts";
 
 /** Marker for asset injection during streaming. */
 export const BODY_MARKER = "<!--SOLARFLARE_BODY-->";
@@ -36,6 +36,8 @@ export function createAssetInjectionTransformer(
   styles?: string[],
   devScripts?: string[],
   preloadHints?: string,
+  /** Request-scoped head HTML snapshot — never read module-global head lazily. */
+  headHtml = "",
 ): TransformStream<Uint8Array, Uint8Array> {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -47,7 +49,7 @@ export function createAssetInjectionTransformer(
   // Resource hints are prepended into the document <head> so the browser can
   // start fetching critical assets as soon as the head is flushed (the "early
   // flush" optimization) without wrapping the SSR document in a second shell.
-  const headContent = () => (preloadHints ?? "") + getHeadContext().renderToString();
+  const headContent = () => (preloadHints ?? "") + headHtml;
 
   function replaceHeadMarker(html: string) {
     const markerIndex = html.indexOf(headMarker);

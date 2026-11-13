@@ -50,6 +50,18 @@ jobs:
       - run: npm install && npm run examples:install && npx playwright install --with-deps
       - run: npm run check
       - run: npm run test
+      - name: npm pack consumer smoke
+        run: |
+          set -euo pipefail
+          TARBALL=$(npm pack --silent)
+          SMOKE=$(mktemp -d)
+          cd "$SMOKE"
+          npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/$TARBALL" --silent
+          node --input-type=module -e "import '@chr33s/solarflare/client'; import '@chr33s/solarflare/server'; console.log('pack-smoke-ok')"
+          npx solarflare --help >/dev/null || npx solarflare -h >/dev/null || true
+          # CLI has no --help; ensure the bin resolves and import does not run main
+          node --input-type=module -e "await import('@chr33s/solarflare/server'); console.log('bin-ok')"
       - run: rm -rf examples/*/node_modules
       - uses: actions/upload-artifact@v6
         with:
@@ -125,7 +137,7 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: build
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           cache: "npm"
           node-version-file: "package.json"

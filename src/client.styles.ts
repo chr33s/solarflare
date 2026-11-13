@@ -21,6 +21,7 @@ export async function loadComponentStyles(tag: string, cssUrls: string[]) {
   }
 
   const sheets: CSSStyleSheet[] = [];
+  let allLoaded = true;
 
   for (const url of cssUrls) {
     let sheet = stylesheets.get(url);
@@ -28,10 +29,14 @@ export async function loadComponentStyles(tag: string, cssUrls: string[]) {
     if (!sheet) {
       try {
         const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
         const css = await response.text();
         sheet = stylesheets.register(url, css, { consumer: tag });
       } catch (e) {
         console.warn(`[styles] Failed to load ${url}:`, e);
+        allLoaded = false;
         continue;
       }
     }
@@ -39,9 +44,12 @@ export async function loadComponentStyles(tag: string, cssUrls: string[]) {
     if (sheet) {
       sheets.push(sheet);
     }
+    // A null sheet after a successful fetch means constructable sheets are
+    // unsupported — still treat the URL as loaded so we don't refetch forever.
   }
 
-  componentStyles.set(tag, { loaded: true, sheets });
+  // Only mark loaded when every required URL fetch succeeded.
+  componentStyles.set(tag, { loaded: allLoaded, sheets });
   return sheets;
 }
 
@@ -55,7 +63,10 @@ export function applyStyles(element: HTMLElement, sheets: CSSStyleSheet[]) {
   const shadowRoot = element.shadowRoot;
 
   if (shadowRoot) {
-    safeAdoptStylesheets(shadowRoot, [...shadowRoot.adoptedStyleSheets, ...sheets]);
+    const toAdd = sheets.filter((s) => !shadowRoot.adoptedStyleSheets.includes(s));
+    if (toAdd.length) {
+      safeAdoptStylesheets(shadowRoot, [...shadowRoot.adoptedStyleSheets, ...toAdd]);
+    }
   } else {
     const toAdd = sheets.filter((s) => !document.adoptedStyleSheets.includes(s));
     if (toAdd.length) {

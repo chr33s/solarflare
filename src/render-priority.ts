@@ -1,38 +1,20 @@
 import { type VNode, h, Fragment } from "preact";
 
-/** Priority levels for content rendering. */
+/** Priority levels for content rendering (reserved for future scheduling). */
 export type RenderPriority = "critical" | "high" | "normal" | "low" | "idle";
 
-/** Creates a deferred rendering boundary. */
+/**
+ * @deprecated Prefer server-loader promise props for deferred streaming.
+ * This stub previously emitted unused SF:DEFERRED markers. It now simply
+ * renders children (or the fallback when children are missing).
+ */
 export function Deferred(props: {
   priority?: RenderPriority;
   fallback?: VNode;
-  children: VNode;
+  children?: VNode;
 }): VNode {
-  const { priority = "normal", fallback, children } = props;
-
-  // On server, we render a placeholder that gets replaced
-  if (typeof window === "undefined") {
-    const id = `sf-deferred-${Math.random().toString(36).slice(2, 9)}`;
-
-    return h(Fragment, null, [
-      h(
-        "sf-deferred",
-        {
-          id,
-          "data-priority": priority,
-          style: { display: "contents" },
-        },
-        fallback ?? h("div", { class: "sf-loading" }),
-      ),
-      h("template", {
-        "data-sf-deferred": id,
-        dangerouslySetInnerHTML: { __html: `<!--SF: DEFERRED:${id}-->` },
-      }),
-    ]);
-  }
-
-  return children;
+  const { fallback, children } = props;
+  return children ?? fallback ?? h(Fragment, null);
 }
 
 /** Skeleton loader component. */

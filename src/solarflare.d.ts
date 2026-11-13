@@ -61,10 +61,11 @@ declare module "@chr33s/solarflare/client" {
 
   export type RenderPriority = "critical" | "high" | "normal" | "low" | "idle";
 
+  /** @deprecated Prefer server-loader promise props for deferred streaming. */
   export function Deferred(props: {
     priority?: RenderPriority;
     fallback?: VNode;
-    children: VNode;
+    children?: VNode;
   }): VNode;
 
   export interface DefineOptions {

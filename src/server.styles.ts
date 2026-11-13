@@ -32,11 +32,21 @@ export function getPreloadedStylesheet(id: string) {
 }
 
 /** Hydrates preloaded stylesheets into the manager. */
-export function hydratePreloadedStyles(_manager: {
+export function hydratePreloadedStyles(manager: {
   register: (id: string, css: string, opts?: any) => CSSStyleSheet | null;
 }) {
   const preloaded = peekRuntime()?.preloadedStyles;
   if (!preloaded) return;
 
-  console.log(`[styles] Hydrated ${preloaded.size} preloaded stylesheets`);
+  for (const [id, sheet] of preloaded) {
+    // Prefer the live CSS text when available; otherwise register an empty
+    // placeholder so the manager knows the id was preloaded.
+    const css =
+      typeof (sheet as CSSStyleSheet).cssRules !== "undefined"
+        ? Array.from((sheet as CSSStyleSheet).cssRules)
+            .map((r) => r.cssText)
+            .join("\n")
+        : "";
+    manager.register(id, css);
+  }
 }

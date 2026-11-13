@@ -3,7 +3,8 @@
 ## Status
 
 - [x] Implemented (uncommitted): fetch retry extracted to `fetch.ts` with new tests; router NDJSON streaming moved to `router-stream.ts`; asset injection moved to `stream-assets.ts`; deferred island id helpers centralized; manifest/runtime helpers consolidated; paired module helper moved to `paths.ts`; CLI fs helper moved to `fs.ts` and call sites updated; compiler options injectable + AST helpers extracted; store cloning simplified.
-- [ ] Pending: Phase 0 side-effect isolation items and Phase 5 containment items not yet started.
+- [x] Phase 0 item 0: CLI argv/env parsing moved out of module scope into `main()` / `parseCliArgs()`.
+- [ ] Pending: remaining Phase 0 side-effect isolation items and Phase 5 containment items (critical-css module dropped — retarget to `server.styles.ts`).
 - [ ] Review untracked/aux changes: docs updates and example public file.
 
 ## Concise actionable plan
@@ -46,9 +47,9 @@
 
 14. Build effects: wrap FS/process/signal handling in IO and keep imports side‑effect free. (src/build.ts, src/fs.ts)
 15. Worker caches: inject `responseCache`/`staticShellCache` per worker instance. (src/worker.ts)
-16. Critical CSS cache: make cache injectable/resettable. (src/critical-css.ts)
+16. ~~Critical CSS cache~~ — module removed; use `server.styles.ts` preload helpers if revived.
 17. Component style cache + CSS fetch: abstract cache + fetch behind a client env. (src/client.styles.ts)
 18. DevTools UUID cache: allow injection/reset for deterministic tests. (src/devtools-json.ts)
 19. DOM platform: centralize DOM/RAF/scroll/custom element hooks behind a platform interface. (src/client.ts, src/stylesheets.ts, src/hmr.ts, src/diff-dom-streaming.ts)
-20. Inline script injection: separate script generation from DOM insertion. (src/critical-css.ts, src/server.styles.ts, src/server.ts)
+20. Inline script injection: separate script generation from DOM insertion. (src/server.styles.ts, src/server.ts)
 21. Early flush streaming: add a pure chunk generator and adapt to `ReadableStream`. (src/early-flush.ts)

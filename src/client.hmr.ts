@@ -37,6 +37,20 @@ function createDevHmr() {
     es.onmessage = (e) => {
       try {
         const { type, ...payload } = JSON.parse(e.data);
+
+        // Run dispose hooks before module-swap listeners so components can
+        // capture hook state / scroll before the replacement lands.
+        // Keep registrations — the HMR entry wrapper persists across swaps.
+        if (typeof type === "string" && type.startsWith("sf:module:")) {
+          for (const cb of disposeCallbacks) {
+            try {
+              cb();
+            } catch (err) {
+              console.error("[HMR] Error in dispose callback:", err);
+            }
+          }
+        }
+
         const cbs = listeners.get(type);
         if (cbs) {
           for (const cb of cbs) {
@@ -84,5 +98,28 @@ declare global {
   var __SF_DEV__: boolean | undefined;
 }
 
-/** HMR instance - dev in dev mode, no-op in production. */
-export const hmr: HmrApi = globalThis.__SF_DEV__ ? createDevHmr() : noopHmr;
+let hmrInstance: HmrApi | null = null;
+
+/** Lazily creates the HMR client on first use (avoids EventSource at import time). */
+function getHmrInstance() {
+  if (!hmrInstance) {
+    hmrInstance = globalThis.__SF_DEV__ ? createDevHmr() : noopHmr;
+  }
+  return hmrInstance;
+}
+
+/** HMR instance - lazy; opens EventSource only when first method is called in dev. */
+export const hmr: HmrApi = {
+  on(event, cb) {
+    return getHmrInstance().on(event, cb);
+  },
+  off(event, cb) {
+    return getHmrInstance().off(event, cb);
+  },
+  dispose(cb) {
+    return getHmrInstance().dispose(cb);
+  },
+  get data() {
+    return getHmrInstance().data;
+  },
+};

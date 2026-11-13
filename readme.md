@@ -11,15 +11,15 @@ Cloudflare-optimized streaming SSR/CSR meta-framework built on web platform APIs
 - **Web Components** — Hydration via `preact-custom-element`
 - **SPA Navigation** — Navigation API + View Transitions
 - **HMR** — Hot module replacement with scroll restoration
-- **Styles** — Constructable Stylesheets, critical CSS extraction
-- **Performance** — Early hints, route caching, preconnect hints, speculation rules
+- **Styles** — Constructable Stylesheets
+- **Performance** — Link preload hints, route caching, optional preconnect, speculation rules
 - **Cloudflare** — Workers-optimized with edge caching
-- **TypeScript** — Full type safety
+- **TypeScript** — Ships as TypeScript sources (Node ≥24 type-stripping / `tsx`)
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) ≥v24.12.0
-- Modern browser (Chrome 102+, Edge 102+, Safari 15.4+)
+- [Node.js](https://nodejs.org) ≥v24.12.0 (native TypeScript type-stripping)
+- Modern browser (Chrome 102+, Edge 102+, Safari 15.4+). SPA navigation uses the Navigation API when available, with a History API fallback.
 
 ## CLI
 
@@ -101,7 +101,7 @@ export default function Layout({ children }: { children: VNode }) {
     <html>
       <head>
         <Head />
-      </html>
+      </head>
       <body>
         {children}
         <Body />
@@ -111,14 +111,16 @@ export default function Layout({ children }: { children: VNode }) {
 }
 ```
 
-### Deferred (Suspense like deferred renderer)
+### Deferred streaming
+
+Return unresolved promises from the server loader — each streams as its own data island:
 
 ```tsx
-import { Deferred } from "@chr33s/solarflare/client";
-
-<Deferred priority="high" fallback={<div>Loading additional content...</div>}>
-  ...
-</Deferred>;
+export default async function server() {
+  const user = await fetchUser(); // blocking shell
+  const analytics = fetchAnalytics(); // deferred
+  return { user, analytics };
+}
 ```
 
 ### Configuration using meta tags

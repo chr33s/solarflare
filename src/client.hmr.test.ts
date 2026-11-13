@@ -53,12 +53,14 @@ it("dispatches parsed SSE messages in dev mode", async () => {
   (globalThis as any).EventSource = MockEventSource;
 
   const { hmr } = await importWithFreshCache("./client.hmr.ts");
-  assert.strictEqual(instances.length, 1);
-  assert.strictEqual(instances[0].url, "http://localhost:1234/_hmr");
+  // EventSource is lazy — not opened until first API use
+  assert.strictEqual(instances.length, 0);
 
   const received: any[] = [];
   const handler = (payload: any) => received.push(payload);
   hmr.on("sf:css-update", handler);
+  assert.strictEqual(instances.length, 1);
+  assert.strictEqual(instances[0].url, "http://localhost:1234/_hmr");
 
   instances[0].onmessage?.({
     data: JSON.stringify({
@@ -70,6 +72,34 @@ it("dispatches parsed SSE messages in dev mode", async () => {
 
   assert.deepStrictEqual(received, [{ id: "x.css", css: ".a { color: red; }" }]);
   hmr.off("sf:css-update", handler);
+});
+
+it("invokes dispose callbacks before module-swap listeners", async () => {
+  (globalThis as any).__SF_DEV__ = true;
+  (globalThis as any).location = { origin: "http://localhost:1234" };
+
+  const instances: any[] = [];
+  class MockEventSource {
+    url: string;
+    onmessage: null | ((e: { data: string }) => void) = null;
+    constructor(url: string) {
+      this.url = url;
+      instances.push(this);
+    }
+  }
+
+  (globalThis as any).EventSource = MockEventSource;
+  const { hmr } = await importWithFreshCache("./client.hmr.ts");
+
+  const order: string[] = [];
+  hmr.dispose(() => order.push("dispose"));
+  hmr.on("sf:module:sf-root", () => order.push("module"));
+
+  instances[0].onmessage?.({
+    data: JSON.stringify({ type: "sf:module:sf-root", default: {} }),
+  });
+
+  assert.deepStrictEqual(order, ["dispose", "module"]);
 });
 
 it("isolates handler errors so other handlers still run", async () => {
@@ -88,11 +118,13 @@ it("isolates handler errors so other handlers still run", async () => {
 
   (globalThis as any).EventSource = MockEventSource;
   const { hmr } = await importWithFreshCache("./client.hmr.ts");
+  assert.strictEqual(instances.length, 0);
 
   const ran: string[] = [];
   hmr.on("sf:test", () => {
     ran.push("first");
   });
+  assert.strictEqual(instances.length, 1);
   hmr.on("sf:test", () => {
     throw new Error("boom");
   });

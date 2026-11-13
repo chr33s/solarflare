@@ -18,6 +18,7 @@ import {
   installHeadHoisting,
   resetHeadElementTracking,
   getHeadContext,
+  type HeadTag,
 } from "./head.ts";
 
 export { Head, useHead } from "./head.ts";
@@ -45,21 +46,23 @@ export interface ParsedPattern {
   specificity: number;
 }
 
-/** Route definition. */
+/** Route definition — one entry per URL pattern. */
 export interface Route {
   pattern: URLPattern;
   parsedPattern: ParsedPattern;
+  /** Primary module path (client when both exist, else server). */
   path: string;
   tag: string;
   loader: () => Promise<{ default: unknown }>;
   type: "client" | "server";
+  clientPath?: string;
+  serverPath?: string;
 }
 
 /** Converts file path to URLPattern with parsed metadata. */
 export function parsePattern(filePath: string) {
   const parsed = parsePath(filePath);
 
-  // Transform params from string[] to RouteParamDef[]
   const params: RouteParamDef[] = parsed.params.map((name) => ({
     name,
     optional: false,
@@ -83,31 +86,82 @@ export interface ModuleMap {
   error?: () => Promise<{ default: unknown }>;
 }
 
-/** Creates router from module map, returning sorted routes array. */
+/** Creates router from module map — one route per pathname pattern. */
 export function createRouter(modules: ModuleMap) {
-  const routeModules = { ...modules.server, ...modules.client };
+  type Acc = {
+    parsedPattern: ParsedPattern;
+    tag: string;
+    clientPath?: string;
+    clientLoader?: () => Promise<{ default: unknown }>;
+    serverPath?: string;
+    serverLoader?: () => Promise<{ default: unknown }>;
+  };
 
-  const routes = Object.entries(routeModules)
-    .filter(([path]) => !path.includes("/_"))
-    .map(([path, loader]) => {
-      const parsedPattern = parsePattern(path);
-      return {
-        pattern: new URLPattern({ pathname: parsedPattern.pathname }),
-        parsedPattern,
-        path,
-        tag: parsePath(path).tag,
-        loader,
-        type: path.includes(".server.") ? ("server" as const) : ("client" as const),
-      };
-    })
-    .sort((a, b) => {
-      if (a.parsedPattern.isStatic !== b.parsedPattern.isStatic) {
-        return a.parsedPattern.isStatic ? -1 : 1;
+  const byPattern = new Map<string, Acc>();
+
+  const ingest = (
+    path: string,
+    loader: () => Promise<{ default: unknown }>,
+    kind: "client" | "server",
+  ) => {
+    const parsed = parsePath(path);
+    if (parsed.isPrivate) return;
+
+    const parsedPattern = parsePattern(path);
+    const existing = byPattern.get(parsedPattern.pathname);
+    if (existing) {
+      if (kind === "client") {
+        existing.clientPath = path;
+        existing.clientLoader = loader;
+        existing.tag = parsed.tag;
+      } else {
+        existing.serverPath = path;
+        existing.serverLoader = loader;
       }
-      return b.parsedPattern.specificity - a.parsedPattern.specificity;
-    });
+      return;
+    }
 
-  return routes;
+    byPattern.set(parsedPattern.pathname, {
+      parsedPattern,
+      tag: parsed.tag,
+      ...(kind === "client"
+        ? { clientPath: path, clientLoader: loader }
+        : { serverPath: path, serverLoader: loader }),
+    });
+  };
+
+  for (const [path, loader] of Object.entries(modules.client)) {
+    ingest(path, loader, "client");
+  }
+  for (const [path, loader] of Object.entries(modules.server)) {
+    ingest(path, loader, "server");
+  }
+
+  const routes: Route[] = [];
+  for (const entry of byPattern.values()) {
+    const hasClient = Boolean(entry.clientPath && entry.clientLoader);
+    const path = hasClient ? entry.clientPath! : entry.serverPath!;
+    const loader = hasClient ? entry.clientLoader! : entry.serverLoader!;
+    const type: "client" | "server" = hasClient ? "client" : "server";
+
+    routes.push({
+      pattern: new URLPattern({ pathname: entry.parsedPattern.pathname }),
+      parsedPattern: entry.parsedPattern,
+      path,
+      tag: entry.tag,
+      loader,
+      type,
+      clientPath: entry.clientPath,
+      serverPath: entry.serverPath,
+    });
+  }
+
+  return routes.sort((a, b) => {
+    if (a.parsedPattern.isStatic !== b.parsedPattern.isStatic) {
+      return a.parsedPattern.isStatic ? -1 : 1;
+    }
+    return b.parsedPattern.specificity - a.parsedPattern.specificity;
+  });
 }
 
 /** Layout definition. */
@@ -174,7 +228,6 @@ export interface RouteMatch {
   route: Route;
   params: Record<string, string>;
   paramDefs: RouteParamDef[];
-  complete: boolean;
 }
 
 /** Matches URL against routes using URLPattern. */
@@ -185,15 +238,10 @@ export function matchRoute(routes: Route[], url: URL) {
       const params = (result.pathname.groups as Record<string, string>) ?? {};
       const paramDefs = route.parsedPattern.params;
 
-      const complete = paramDefs
-        .filter((p) => !p.optional)
-        .every((p) => p.name in params && params[p.name] !== undefined);
-
       return {
         route,
         params,
         paramDefs,
-        complete,
       };
     }
   }
@@ -289,6 +337,14 @@ export interface DeferredData {
   promises: Record<string, Promise<unknown>>;
 }
 
+/** Request-scoped head snapshot captured synchronously after the SSR shell render. */
+export interface HeadSnapshot {
+  html: string;
+  tags: HeadTag[];
+  htmlAttrs: Record<string, string>;
+  bodyAttrs: Record<string, string>;
+}
+
 /** Streaming render options. */
 export interface StreamRenderOptions {
   /** Route parameters. */
@@ -307,6 +363,11 @@ export interface StreamRenderOptions {
   deferred?: DeferredData;
   /** Resource-hint markup (e.g. <link rel="preload">) to inject early into <head>. */
   preloadHints?: string;
+  /**
+   * Optional resource-hint markup computed after the sync shell populates head.
+   * Used when early-flush depends on meta parsed from this request's head.
+   */
+  resolvePreloadHints?: (snapshot: HeadSnapshot) => string | undefined;
   /** HTTP status code to return. */
   _status?: number;
   /** HTTP status text to return. */
@@ -338,21 +399,27 @@ export function initServerContext(options: StreamRenderOptions) {
   }
 }
 
+/** Captures a deep-enough snapshot of the current head context. */
+export function snapshotHeadContext(): HeadSnapshot {
+  const headCtx = getHeadContext();
+  return {
+    html: headCtx.renderToString(),
+    tags: headCtx.resolveTags(),
+    htmlAttrs: { ...headCtx.htmlAttrs },
+    bodyAttrs: { ...headCtx.bodyAttrs },
+  };
+}
+
 /**
  * Renders the component tree once to populate THIS request's head context and
- * returns the resolved head HTML. The worker needs a route's head (meta tags) to
- * derive its cache/lang/early-flush config before the streaming render, but the
- * head is only populated by executing the components. Reading the module-global
- * head context without rendering returned the *previous* request's head, so a
- * route could be served with another request's cache config. This performs a
- * throwaway synchronous render against this request's own store so the extracted
- * config is correct and request-isolated.
+ * returns a request-scoped head snapshot. Prefer `renderToStream`, which
+ * snapshots head synchronously after the streaming shell — this helper remains
+ * for tests and tooling that only need head/meta without a stream.
  */
 export function renderHeadForConfig(vnode: VNode<any>, options: StreamRenderOptions = {}) {
   initServerContext(options);
-  // Discard the HTML — we only need the side effect of populating the head.
   renderToString(vnode);
-  return getHeadContext().renderToString();
+  return snapshotHeadContext();
 }
 
 /** Extended stream interface with allReady promise. */
@@ -365,6 +432,8 @@ export interface SolarflareStream extends ReadableStream<Uint8Array> {
   statusText?: string;
   /** Custom HTTP headers. */
   headers?: Record<string, string>;
+  /** Request-scoped head snapshot from the sync shell render. */
+  headSnapshot?: HeadSnapshot;
 }
 
 /** Renders a VNode to a streaming response with asset injection. */
@@ -373,11 +442,15 @@ export async function renderToStream(vnode: VNode<any>, options: StreamRenderOpt
 
   // preact-render-to-string renders the synchronous shell inside the
   // ReadableStream constructor, so it reads the module-global store/head context
-  // synchronously here. Construct the stream (and snapshot the store) BEFORE any
+  // synchronously here. Construct the stream AND snapshot head BEFORE any
   // await: on Cloudflare Workers, concurrent requests share one isolate, and an
-  // await between initServerContext() and the render would let another request's
-  // initServerContext() overwrite this request's store — leaking data across users.
+  // await between initServerContext() and the render/snapshot would let another
+  // request's initServerContext() overwrite this request's store/head.
   const stream = renderToReadableStream(vnode) as RenderStream;
+  const headSnapshot = snapshotHeadContext();
+  const preloadHints =
+    options.preloadHints ?? options.resolvePreloadHints?.(headSnapshot) ?? undefined;
+
   const storeScript = await serializeStoreForHydration();
 
   const transformer = createAssetInjectionTransformer(
@@ -385,7 +458,8 @@ export async function renderToStream(vnode: VNode<any>, options: StreamRenderOpt
     options.script,
     options.styles,
     options.devScripts,
-    options.preloadHints,
+    preloadHints,
+    headSnapshot.html,
   );
 
   const transformedStream = stream.pipeThrough(transformer);
@@ -396,6 +470,7 @@ export async function renderToStream(vnode: VNode<any>, options: StreamRenderOpt
     (resultStream as SolarflareStream).status = options._status ?? 200;
     (resultStream as SolarflareStream).statusText = options._statusText;
     (resultStream as SolarflareStream).headers = options._headers;
+    (resultStream as SolarflareStream).headSnapshot = headSnapshot;
     return resultStream as SolarflareStream;
   }
 
@@ -404,6 +479,7 @@ export async function renderToStream(vnode: VNode<any>, options: StreamRenderOpt
   resultStream.status = options._status ?? 200;
   resultStream.statusText = options._statusText;
   resultStream.headers = options._headers;
+  resultStream.headSnapshot = headSnapshot;
   return resultStream;
 }
 
@@ -458,7 +534,9 @@ function createDeferredStream(inputStream: ReadableStream<Uint8Array>, deferred:
   async function buildDeferredHtml(dataIslandId: string, data: unknown, hydrateScriptId: string) {
     const dataIsland = await serializeDataIsland(dataIslandId, data);
     const hydrationDetail = escapeJsonForHtml({ tag, id: dataIslandId });
-    const hydrationScript = /* html */ `<script id="${hydrateScriptId}">(function(){var s=document.currentScript;setTimeout(()=>{document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}}));s?.remove();},0);})()</script>`;
+    // data-sf-hydrate + data-tag/data-id are the durable contract for SPA patch
+    // parsing; the inline script remains for first-load progressive hydration.
+    const hydrationScript = /* html */ `<script id="${hydrateScriptId}" data-sf-hydrate data-tag="${tag}" data-id="${dataIslandId}">(function(){var s=document.currentScript;setTimeout(()=>{document.dispatchEvent(new CustomEvent("sf:queue-hydrate",{detail:${hydrationDetail}}));s?.remove();},0);})()</script>`;
     return dataIsland + hydrationScript;
   }
 
