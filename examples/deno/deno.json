@@ -5,13 +5,13 @@
   },
   "imports": {
     "@chr33s/solarflare": "file:../../",
-    "@preact/signals": "npm:@preact/signals@^2.8.1",
-    "@std/http": "jsr:@std/http@^1.0.25",
-    "preact": "npm:preact@11.0.0-experimental.1",
-    "preact/jsx-runtime": "npm:preact@11.0.0-experimental.1",
+    "@preact/signals": "npm:@preact/signals@^2.11.4",
+    "@std/http": "jsr:@std/http@^1.1.4",
+    "preact": "npm:preact@11.2.0",
+    "preact/jsx-runtime": "npm:preact@11.2.0",
     "preact-custom-element": "npm:preact-custom-element@^4.6.0",
-    "preact-render-to-string": "npm:preact-render-to-string@^6.6.6",
-    "preact-render-to-string/stream": "npm:preact-render-to-string@^6.6.6/stream"
+    "preact-render-to-string": "npm:preact-render-to-string@^6.8.3",
+    "preact-render-to-string/stream": "npm:preact-render-to-string@^6.8.3/stream"
   },
   "nodeModulesDir": "auto",
   "tasks": {
